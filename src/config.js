@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.7.0';
+export const GAME_VERSION = '3.12.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -20,6 +20,7 @@ export const ALL_ITEM_TYPES = [
   BlockType.APPLE, BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
+export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
 
 export const SPRINT_SPEED_MULTIPLIER = 1.3;
 export const SNEAK_SPEED_MULTIPLIER = 0.4;
@@ -72,6 +73,7 @@ export const DEFAULT_SETTINGS = {
   renderDistance: 5,
   uiScale: 1,
   highContrast: false,
+  showDebugInfo: false,
 };
 
 // 食料アイテムのセット（設置不可・右クリックで食べる）
@@ -161,6 +163,7 @@ export function calculateFallDamage(landingSpeed) {
 export function sanitizeSettings(raw) {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS };
   const highContrast = raw.highContrast === true || raw.highContrast === 'true';
+  const showDebugInfo = raw.showDebugInfo === true || raw.showDebugInfo === 'true';
   return {
     sensitivity: clamp(Number(raw.sensitivity) || DEFAULT_SETTINGS.sensitivity, 0.0005, 0.004),
     bgmVolume: clamp(Number(raw.bgmVolume) || 0, 0, 1),
@@ -168,6 +171,7 @@ export function sanitizeSettings(raw) {
     renderDistance: clamp(Math.floor(Number(raw.renderDistance) || DEFAULT_SETTINGS.renderDistance), 2, 8),
     uiScale: clamp(Number(raw.uiScale) || DEFAULT_SETTINGS.uiScale, 0.7, 2),
     highContrast,
+    showDebugInfo,
   };
 }
 

@@ -1,10 +1,11 @@
 import { h } from 'preact';
 import { memo, useMemo, useState } from 'preact/compat';
-import { generateBlockIcon } from '../../blocks.js';
+import { generateBlockIcon, BLOCK_NAMES } from '../../blocks.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';
 import { HOTBAR_SIZE } from '../../config.js';
+import { ITEM_TO_TOOL_TYPE, TOOL_NAMES } from '../../tools.js';
 
 function getIconUrl(type) {
   if (type == null) return null;
@@ -54,8 +55,20 @@ export function Hotbar() {
     window.__invDragFrom = i;
   };
 
+  const selectedSlotData = slots[selectedSlot];
+  const selectedType = selectedSlotData?.type ?? null;
+  const selectedItemName = useMemo(() => {
+    if (selectedType == null) return null;
+    const toolType = ITEM_TO_TOOL_TYPE[selectedType];
+    return toolType ? TOOL_NAMES[toolType] : (BLOCK_NAMES[selectedType] ?? null);
+  }, [selectedType]);
+
   return (
     <div id="hud" style={{ pointerEvents: panelOpen ? 'auto' : 'none' }}>
+      {selectedItemName && (
+        <div id="hotbar-item-name">{selectedItemName}</div>
+      )}
+      <div id="hotbar-slots">
       {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
         const slot = slots[i];
         const type = slot?.type ?? null;
@@ -87,6 +100,7 @@ export function Hotbar() {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }

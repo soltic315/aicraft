@@ -1,5 +1,6 @@
 import { h } from 'preact';
 import { useMemo, useState, useEffect } from 'preact/hooks';
+import { useDraggable } from '../hooks/useDraggable.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
@@ -44,6 +45,7 @@ export function ChestPanel() {
   const openedChestKey = useChestStore((s) => s.openedChestKey);
   const storage        = useChestStore((s) => s.storage);
   const slots          = useInventoryStore((s) => s.slots);
+  const { panelRef, dragStyle, onHeaderMouseDown } = useDraggable();
 
   const [dragFrom,    setDragFrom]    = useState(null);
   const [dragOverKey, setDragOverKey] = useState(null);
@@ -132,8 +134,8 @@ export function ChestPanel() {
   };
 
   return (
-    <div id="chest-panel-modal">
-      <div class="inv-header">
+    <div id="chest-panel-modal" ref={panelRef} style={dragStyle}>
+      <div class="inv-header" onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab' }}>
         <span>チェスト（{chestPos.x}, {chestPos.y}, {chestPos.z}）&nbsp;
           <span style={{ opacity: 0.6, fontSize: '10px' }}>{totalItems} / {CHEST_STORAGE_LIMIT}</span>
         </span>

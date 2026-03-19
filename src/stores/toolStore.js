@@ -9,7 +9,11 @@ export const useToolStore = create((set) => ({
     set({ selectedTool: toolType });
   },
 
+  clearTool() {
+    set({ selectedTool: null });
+  },
+
   reset() {
-    set({ selectedTool: ToolType.PICKAXE });
+    set({ selectedTool: null });
   },
 }));

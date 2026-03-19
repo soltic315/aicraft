@@ -1,5 +1,6 @@
 import { h } from 'preact';
 import { useEffect } from 'preact/hooks';
+import { useDraggable } from '../hooks/useDraggable.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { CRAFT_RECIPES } from '../../config.js';
@@ -7,15 +8,16 @@ import { CRAFT_RECIPES } from '../../config.js';
 export function CraftPanel() {
   const craftOpen = useUIStore((s) => s.craftOpen);
   const slots     = useInventoryStore((s) => s.slots);
+  const { panelRef, dragStyle, onHeaderMouseDown } = useDraggable();
 
   // Tab / ESC で全パネル閉じる
   useEffect(() => {
     if (!craftOpen) return;
     const handleKey = (e) => {
-      if (e.code === 'Escape' || e.code === 'Tab') {
+      if (e.code === 'Escape' || e.code === 'KeyC') {
         e.preventDefault();
         e.stopPropagation();
-        useUIStore.getState().closeInventoryPanels();
+        useUIStore.getState().toggleCraft();
       }
     };
     window.addEventListener('keydown', handleKey, true);
@@ -30,10 +32,10 @@ export function CraftPanel() {
   const available = CRAFT_RECIPES.filter(hasIngredients).length;
 
   return (
-    <div id="craft-panel-window">
-      <div class="inv-header">
+    <div id="craft-panel-window" ref={panelRef} style={dragStyle}>
+      <div class="inv-header" onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab' }}>
         <span>クラフト（作成可能: {available} 件）</span>
-        <button class="inv-close-btn" onClick={() => useUIStore.getState().closeInventoryPanels()}>✕</button>
+        <button class="inv-close-btn" onClick={() => useUIStore.getState().toggleCraft()}>✕</button>
       </div>
       <div class="inv-craft-list">
         {CRAFT_RECIPES.map((recipe) => (
@@ -59,7 +61,7 @@ export function CraftPanel() {
         ))}
       </div>
       <div class="inv-hint-bar">
-        <span>Tab / ESC: 閉じる</span>
+        <span>C / ESC: 閉じる</span>
       </div>
     </div>
   );

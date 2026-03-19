@@ -1,5 +1,6 @@
 import { h } from 'preact';
 import { useMemo, useState, useEffect } from 'preact/hooks';
+import { useDraggable } from '../hooks/useDraggable.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { BLOCK_NAMES, generateBlockIcon } from '../../blocks.js';
@@ -47,6 +48,7 @@ export function InvSlot({ slotData, index, isActive, isDragOver, onDragStart, on
 export function InventoryPanel() {
   const inventoryOpen = useUIStore((s) => s.inventoryOpen);
   const slots         = useInventoryStore((s) => s.slots);
+  const { panelRef, dragStyle, onHeaderMouseDown } = useDraggable();
 
   const [dragFrom,    setDragFrom]    = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
@@ -58,7 +60,7 @@ export function InventoryPanel() {
       if (e.code === 'Escape' || e.code === 'Tab') {
         e.preventDefault();
         e.stopPropagation();
-        useUIStore.getState().closeInventoryPanels();
+        useUIStore.getState().toggleInventory();
       }
     };
     window.addEventListener('keydown', handleKey, true);
@@ -98,10 +100,10 @@ export function InventoryPanel() {
   const backpackSlots = slots.slice(HOTBAR_SIZE, TOTAL_SLOTS);
 
   return (
-    <div id="inventory-panel">
-      <div class="inv-header">
+    <div id="inventory-panel" ref={panelRef} style={dragStyle}>
+      <div class="inv-header" onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab' }}>
         <span>インベントリ</span>
-        <button class="inv-close-btn" onClick={() => useUIStore.getState().closeInventoryPanels()}>✕</button>
+        <button class="inv-close-btn" onClick={() => useUIStore.getState().toggleInventory()}>✕</button>
       </div>
       <div class="inv-section-label">バックパック</div>
       <div id="inventory-grid">

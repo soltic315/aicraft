@@ -1,8 +1,10 @@
 import { h } from 'preact';
 import { useSettingsStore } from '../../stores/settingsStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
+import { useDraggable } from '../hooks/useDraggable.js';
 
 export function SettingsPanel() {
+  const { panelRef, dragStyle, onHeaderMouseDown } = useDraggable();
   const open = useUIStore((s) => s.settingsOpen);
   const sensitivity = useSettingsStore((s) => s.sensitivity);
   const bgmVolume = useSettingsStore((s) => s.bgmVolume);
@@ -10,14 +12,24 @@ export function SettingsPanel() {
   const renderDistance = useSettingsStore((s) => s.renderDistance);
   const uiScale = useSettingsStore((s) => s.uiScale);
   const highContrast = useSettingsStore((s) => s.highContrast);
+  const showDebugInfo = useSettingsStore((s) => s.showDebugInfo);
 
   if (!open) return null;
 
   const displaySens = (sensitivity * 1000).toFixed(1);
 
   return (
-    <div id="settings-panel" style={{ display: 'block' }} aria-label="設定パネル">
-      <h2>設定（P で表示切替）</h2>
+    <div id="settings-panel" ref={panelRef} style={{ display: 'block', ...dragStyle }} aria-label="設定パネル">
+      <div class="panel-drag-header" onMouseDown={onHeaderMouseDown}
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', cursor: 'grab' }}>
+        <h2 style={{ margin: 0 }}>設定（P で表示切替）</h2>
+        <button
+          type="button"
+          onClick={() => useUIStore.getState().toggleSettings()}
+          style={{ background: 'none', border: 'none', color: '#fff', fontSize: '16px', cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+          aria-label="閉じる"
+        >✕</button>
+      </div>
 
       <div class="setting">
         <label for="setting-sensitivity">感度</label>
@@ -124,6 +136,20 @@ export function SettingsPanel() {
             onInput={(e) => {
               useSettingsStore.getState().setHighContrast(e.currentTarget.checked);
               window.__aicraft?.applySettings?.();
+            }}
+          />
+        </div>
+      </div>
+
+      <div class="setting">
+        <label for="setting-debug-info">デバッグ情報表示</label>
+        <div>
+          <input
+            id="setting-debug-info"
+            type="checkbox"
+            checked={showDebugInfo}
+            onInput={(e) => {
+              useSettingsStore.getState().setShowDebugInfo(e.currentTarget.checked);
             }}
           />
         </div>

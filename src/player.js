@@ -9,7 +9,7 @@ const JUMP_FORCE = 8;
 const GRAVITY = 20;
 const WATER_GRAVITY = 5;
 const WATER_SPEED_MULTIPLIER = 0.4;
-const SWIM_FORCE = 4;
+const SWIM_FORCE = 8;
 const PLAYER_HEIGHT = 1.62;
 const PLAYER_RADIUS = 0.3;
 const PLAYER_COLLISION_HEIGHT = 1.8;
@@ -118,12 +118,13 @@ export class Player {
     if (this.isInWater) {
       // 水中: Spaceで浮上、浮力で上昇減速
       if (this.keys['Space']) {
-        this.velocity.y = SWIM_FORCE;
+        // 頭が水面から出ている（水面付近）は通常ジャンプ力で陸地に上がれる
+        this.velocity.y = this.isHeadInWater() ? SWIM_FORCE : JUMP_FORCE;
       }
       // 水中重力（浮力で軽減）
       this.velocity.y -= WATER_GRAVITY * dt;
       // 水中では速度を減衰させる
-      this.velocity.y *= (1 - 3 * dt);
+      this.velocity.y *= (1 - 2 * dt);
     } else {
       // 通常ジャンプ
       if (this.keys['Space'] && this.onGround) {

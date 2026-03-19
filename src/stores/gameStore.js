@@ -11,6 +11,10 @@ export const useGameStore = create((set) => ({
     set({ gameStarted: true });
   },
 
+  returnToTitle() {
+    set({ gameStarted: false, isDead: false });
+  },
+
   setFps(fps) {
     set({ fps });
   },

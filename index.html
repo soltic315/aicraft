@@ -67,8 +67,21 @@
       position: fixed;
       bottom: 20px; left: 50%;
       transform: translateX(-50%);
-      display: flex; gap: 4px;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
       z-index: 10;
+      pointer-events: none;
+    }
+    #hotbar-slots {
+      display: flex; gap: 4px;
+    }
+    #hotbar-item-name {
+      color: #fff;
+      font-family: monospace;
+      font-size: 13px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
+      background: rgba(0,0,0,0.45);
+      padding: 2px 10px;
+      border-radius: 4px;
       pointer-events: none;
     }
     .hotbar-slot {
@@ -104,6 +117,39 @@
       color: #fff;
       font-size: 11px;
       font-family: monospace;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
+    }
+
+    #key-hints {
+      position: fixed;
+      top: 10px; right: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .key-hint-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .key-hint-key {
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 3px;
+      color: #fff;
+      font-family: monospace;
+      font-size: 11px;
+      padding: 1px 5px;
+      min-width: 28px;
+      text-align: center;
+    }
+    .key-hint-label {
+      color: rgba(255,255,255,0.75);
+      font-family: monospace;
+      font-size: 11px;
       text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
     }
 
@@ -183,9 +229,10 @@
 
     #settings-panel {
       position: fixed;
-      top: 10px;
-      right: 10px;
-      width: min(280px, calc(100vw - 20px));
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(320px, calc(100vw - 20px));
       background: rgba(10, 20, 32, 0.76);
       border: 1px solid rgba(255,255,255,0.24);
       border-radius: 8px;

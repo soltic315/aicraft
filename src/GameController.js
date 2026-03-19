@@ -45,6 +45,7 @@ import {
   HUNGER_STARVE_DAMAGE_INTERVAL,
   HUNGER_STARVE_DAMAGE,
   APPLE_HUNGER_RESTORE,
+  CHEST_AUTO_CLOSE_DISTANCE,
 } from './config.js';
 import { useSettingsStore } from './stores/settingsStore.js';
 import { useInventoryStore } from './stores/inventoryStore.js';
@@ -168,9 +169,8 @@ export class GameController {
         this.savedGame.player.inventory,
         this.savedGame.player.selectedSlot,
       );
-      if (isToolType(this.savedGame.player.selectedTool)) {
-        useToolStore.getState().setTool(this.savedGame.player.selectedTool);
-      }
+      // ロード後は選択スロットに基づいてツール状態を初期化
+      this._onSlotChanged();
     }
 
     // Chest storage (restore from save via store)
@@ -247,7 +247,7 @@ export class GameController {
     const tryRelock = () => {
       if (!this.gameStarted || this.player.locked) return;
       const ui = useUIStore.getState();
-      if (ui.inventoryOpen || ui.settingsOpen || ui.chestOpen) return;
+      if (ui.inventoryOpen || ui.craftOpen || ui.settingsOpen || ui.chestOpen) return;
       void this.sound.ensureStarted();
       this.player.lock();
     };
@@ -300,16 +300,17 @@ export class GameController {
 
     this.eventBus.on('toggle-settings', () => {
       const opened = useUIStore.getState().toggleSettings();
-      if (opened && document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
+      if (opened) document.exitPointerLock();
     });
 
     this.eventBus.on('toggle-inventory', () => {
-      const opened = useUIStore.getState().toggleInventoryWithCraft();
-      if (opened && document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
+      const opened = useUIStore.getState().toggleInventory();
+      if (opened) document.exitPointerLock();
+    });
+
+    this.eventBus.on('toggle-craft', () => {
+      const opened = useUIStore.getState().toggleCraft();
+      if (opened) document.exitPointerLock();
     });
 
     this.eventBus.on('close-chest', () => {
@@ -378,7 +379,7 @@ export class GameController {
 
     this.eventBus.on('delete-save-clicked', () => {
       localStorage.removeItem(SAVE_STORAGE_KEY);
-      useUIStore.getState().showFeedback('セーブデータを削除しました', 1200);
+      this._returnToTitle();
     });
 
     this.eventBus.on('respawn-clicked', () => {
@@ -482,6 +483,30 @@ export class GameController {
     }, AUTO_SAVE_INTERVAL_MS);
   }
 
+  _returnToTitle() {
+    // 自動セーブを停止
+    if (this.autoSaveIntervalId) {
+      clearInterval(this.autoSaveIntervalId);
+      this.autoSaveIntervalId = null;
+    }
+    // ポインターロック解除
+    document.exitPointerLock();
+    // 内部状態をリセット
+    this.gameStarted = false;
+    this.savedGame = null;
+    if (window.__aicraft) window.__aicraft.hasSavedGame = false;
+    // ゲームストアをリセット
+    useInventoryStore.getState().reset();
+    useToolStore.getState().clearTool();
+    useHungerStore.getState().reset();
+    useBreakStore.getState().reset();
+    // ストアをタイトル状態へ（設定パネルも閉じる）
+    if (useUIStore.getState().settingsOpen) {
+      useUIStore.getState().toggleSettings();
+    }
+    useGameStore.getState().returnToTitle();
+  }
+
   // ---- Inventory (delegated to store) ----
 
   getInventoryCount(type) {
@@ -517,7 +542,7 @@ export class GameController {
 
   _closeChestPanel(message = null, playError = false) {
     useChestStore.getState().closeChest();
-    useUIStore.getState().closeInventoryPanels();
+    useUIStore.getState().setChestOpen(false);
     if (message) {
       useUIStore.getState().showFeedback(message);
       if (playError) this.sound.playError();
@@ -534,7 +559,7 @@ export class GameController {
     const chestStore = useChestStore.getState();
     chestStore.getChestData(pos, true);
     chestStore.openChest(posKey);
-    useUIStore.getState().openInventoryWithChest();
+    useUIStore.getState().openChestPanel();
     useUIStore.getState().showFeedback('チェストを開きました', 800);
     this.sound.playPlace();
 
@@ -562,6 +587,15 @@ export class GameController {
     const chestPos = parsePosKey(chestStore.openedChestKey);
     if (this.world.getBlock(chestPos.x, chestPos.y, chestPos.z) !== BlockType.CHEST) {
       this._closeChestPanel('チェストが破壊されました');
+      return;
+    }
+
+    // プレイヤーがチェストから離れたら自動で閉じる
+    const dx = this.player.position.x - (chestPos.x + 0.5);
+    const dy = this.player.position.y - (chestPos.y + 0.5);
+    const dz = this.player.position.z - (chestPos.z + 0.5);
+    if (dx * dx + dy * dy + dz * dz > CHEST_AUTO_CLOSE_DISTANCE * CHEST_AUTO_CLOSE_DISTANCE) {
+      this._closeChestPanel('チェストから離れました');
     }
   }
 
@@ -573,6 +607,9 @@ export class GameController {
     const toolType = slot?.type != null ? ITEM_TO_TOOL_TYPE[slot.type] : null;
     if (toolType) {
       useToolStore.getState().setTool(toolType);
+    } else {
+      // ツールでないスロット（空・素材・食料等）を選択した場合はツールをクリア
+      useToolStore.getState().clearTool();
     }
   }
 
@@ -636,13 +673,6 @@ export class GameController {
   _tryPlaceBlock(now) {
     if (now - this.lastPlaceTime < PLACE_COOLDOWN) return;
 
-    const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
-    if (!hit) {
-      useUIStore.getState().showFeedback('設置失敗: 射程外です');
-      this.sound.playError();
-      return;
-    }
-
     const { selectedSlot, slots } = useInventoryStore.getState();
     const placeType = slots[selectedSlot]?.type ?? null;
 
@@ -652,9 +682,22 @@ export class GameController {
       return;
     }
 
-    // 食料アイテムは右クリックで食べる
+    // 食料アイテムはブロックを見ていなくても右クリックで食べる
     if (FOOD_ITEMS.has(placeType)) {
       this._tryEatFood(placeType);
+      return;
+    }
+
+    const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
+    if (!hit) {
+      useUIStore.getState().showFeedback('設置失敗: 射程外です');
+      this.sound.playError();
+      return;
+    }
+
+    // 右クリックでチェストを開く
+    if (hit.blockType === BlockType.CHEST) {
+      this._openChestAt(hit.blockPos);
       return;
     }
 
@@ -865,8 +908,10 @@ export class GameController {
       this.fpsTime = 0;
     }
 
-    if (this.player.locked) {
-      const dayNight = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
+    const dayNight = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
+
+    if (this.gameStarted) {
+      // プレイヤー物理・移動はパネルが開いていても常に更新
       const jumpRequested = Boolean(this.player.keys['Space'] && this.player.onGround);
       const fallingSpeedBeforeUpdate = this.player.velocity.y;
 
@@ -897,22 +942,26 @@ export class GameController {
       this.wasOnGround = this.player.onGround;
 
       this.world.update(this.player.position.x, this.player.position.z, this.camera);
-
       this._validateOpenedChest();
 
-      // Highlight target block
-      const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
-      if (hit) {
-        this.highlightMesh.visible = true;
-        this.highlightMesh.position.set(
-          hit.blockPos.x + 0.5,
-          hit.blockPos.y + 0.5,
-          hit.blockPos.z + 0.5
-        );
+      // ブロックハイライト・採掘はポインターロック時のみ
+      if (this.player.locked) {
+        const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
+        if (hit) {
+          this.highlightMesh.visible = true;
+          this.highlightMesh.position.set(
+            hit.blockPos.x + 0.5,
+            hit.blockPos.y + 0.5,
+            hit.blockPos.z + 0.5
+          );
 
-        if (this.input.isBreaking) {
-          this._updateBreaking(hit, time);
+          if (this.input.isBreaking) {
+            this._updateBreaking(hit, time);
+          } else {
+            this._resetBreaking();
+          }
         } else {
+          this.highlightMesh.visible = false;
           this._resetBreaking();
         }
       } else {
@@ -935,8 +984,8 @@ export class GameController {
 
       this._updateSurvivalSystems(dt);
     } else {
-      const dayNightIdle = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
-      useDayNightStore.getState().update(dayNightIdle.cycleRatio, dayNightIdle.isDay);
+      // タイトル画面
+      useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);
       this.highlightMesh.visible = false;
       this._resetBreaking();
       useUIStore.getState().setWaterOverlay(false);

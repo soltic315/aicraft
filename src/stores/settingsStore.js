@@ -54,11 +54,16 @@ export const useSettingsStore = create((set, get) => ({
     get().persist();
   },
 
+  setShowDebugInfo(value) {
+    set({ showDebugInfo: Boolean(value) });
+    get().persist();
+  },
+
   persist() {
-    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, highContrast } = get();
+    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, highContrast, showDebugInfo } = get();
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, highContrast }),
+      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, highContrast, showDebugInfo }),
     );
   },
 }));

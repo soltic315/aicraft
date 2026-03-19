@@ -35,9 +35,8 @@ export const useUIStore = create((set, get) => ({
     return willOpen;
   },
 
-  // E: インベントリ＋チェストをまとめて開く
-  openInventoryWithChest() {
-    set({ inventoryOpen: true, craftOpen: false, chestOpen: true });
+  openChestPanel() {
+    set({ chestOpen: true });
   },
 
   // インベントリ・クラフト・チェストをまとめて閉じる
