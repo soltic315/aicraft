@@ -17,7 +17,6 @@ import {
   DAY_NIGHT_CYCLE_SECONDS,
   PLACE_COOLDOWN,
   HOTBAR_BLOCKS,
-  STARTER_INVENTORY,
   CHEST_STORAGE_LIMIT,
   DAY_SKY_COLOR,
   NIGHT_SKY_COLOR,
@@ -27,7 +26,6 @@ import {
   NIGHT_AMBIENT_COLOR,
   DAY_SUN_COLOR,
   NIGHT_MOON_COLOR,
-  DEFAULT_SETTINGS,
   clamp,
   calculateFallDamage,
   sanitizeSettings,
@@ -35,20 +33,27 @@ import {
   parsePosKey,
   smoothstep,
 } from './config.js';
+import { useSettingsStore } from './stores/settingsStore.js';
+import { useInventoryStore } from './stores/inventoryStore.js';
+import { useChestStore } from './stores/chestStore.js';
+import { usePlayerStore } from './stores/playerStore.js';
+import { useGameStore } from './stores/gameStore.js';
+import { useDayNightStore } from './stores/dayNightStore.js';
+import { useBreakStore } from './stores/breakStore.js';
+import { useUIStore } from './stores/uiStore.js';
 
 export class GameController {
-  constructor(eventBus, sound, input, ui) {
+  constructor(eventBus, sound, input) {
     this.eventBus = eventBus;
     this.sound = sound;
     this.input = input;
-    this.ui = ui;
 
     // Settings & save data
-    this.settings = this._loadSettings();
     this.savedGame = this._loadSaveData();
     if (this.savedGame?.settings) {
-      Object.assign(this.settings, sanitizeSettings(this.savedGame.settings));
+      useSettingsStore.getState().load(this.savedGame.settings);
     }
+    this.settings = useSettingsStore.getState();
     this.worldSeed = Number.isFinite(this.savedGame?.worldSeed)
       ? this.savedGame.worldSeed
       : Math.floor(Math.random() * 100000);
@@ -88,6 +93,8 @@ export class GameController {
         const texture = new THREE.CanvasTexture(canvas);
         texture.magFilter = THREE.NearestFilter;
         texture.minFilter = THREE.NearestFilter;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
 
         const matOptions = { map: texture };
         if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; }
@@ -139,41 +146,28 @@ export class GameController {
     this.breakOverlayMesh.renderOrder = 2;
     this.scene.add(this.breakOverlayMesh);
 
-    // Inventory
-    this.selectedSlot = Number.isFinite(this.savedGame?.player?.selectedSlot)
-      ? this.savedGame.player.selectedSlot
-      : 0;
-    this.inventoryCounts = Object.fromEntries(
-      HOTBAR_BLOCKS.map((type) => [type, STARTER_INVENTORY[type] ?? 0])
-    );
-    if (this.savedGame?.player?.inventory && typeof this.savedGame.player.inventory === 'object') {
-      Object.entries(this.savedGame.player.inventory).forEach(([type, count]) => {
-        const t = Number(type);
-        if (!Number.isNaN(t) && Object.hasOwn(this.inventoryCounts, t)) {
-          this.inventoryCounts[t] = Math.max(0, Math.floor(Number(count) || 0));
-        }
-      });
+    // Inventory (restore from save via store)
+    if (this.savedGame?.player) {
+      useInventoryStore.getState().restoreFromSave(
+        this.savedGame.player.inventory,
+        this.savedGame.player.selectedSlot,
+      );
     }
 
-    // Chest storage
-    this.chestStorage = new Map();
-    this.openedChestKey = null;
-    if (this.savedGame?.chestStorage && typeof this.savedGame.chestStorage === 'object') {
-      Object.entries(this.savedGame.chestStorage).forEach(([posKey, contents]) => {
-        if (contents && typeof contents === 'object') {
-          this.chestStorage.set(posKey, { ...contents });
-        }
-      });
+    // Chest storage (restore from save via store)
+    if (this.savedGame?.chestStorage) {
+      useChestStore.getState().restoreFromSave(this.savedGame.chestStorage);
     }
 
-    // Break state
+    this.lastPlaceTime = 0;
+
+    // Break state (internal tracking for game loop)
     this.breakState = {
       key: null,
       duration: 0,
       startedAt: 0,
       blockType: BlockType.AIR,
     };
-    this.lastPlaceTime = 0;
 
     // Game loop state
     this.gameStarted = false;
@@ -183,24 +177,29 @@ export class GameController {
     this.frameCount = 0;
     this.fpsTime = 0;
     this.fps = 0;
+    this.lastAutoRenderAdjustTime = 0;
     this.autoSaveIntervalId = null;
   }
 
   init() {
-    // Initialize UI
-    this.ui.init(!!this.savedGame);
-    this.ui.updateSettingsValues(this.settings);
-    this.ui.setupSettingsListeners(this.settings, () => this._applySettings());
+    // Expose shared refs for Preact components
+    window.__aicraft = {
+      eventBus: this.eventBus,
+      sound: this.sound,
+      hasSavedGame: !!this.savedGame,
+      applySettings: () => this._applySettings(),
+    };
 
     // Apply initial settings
     this._applySettings(false);
 
-    // Build initial UI
-    this._refreshUI();
-    this.ui.updateHealthHud(this.player.health, this.player.maxHealth);
-
     // Subscribe to events
     this._subscribeEvents();
+
+    // Subscribe to settings store changes
+    useSettingsStore.subscribe((state) => {
+      this.settings = state;
+    });
 
     // Resize handler
     window.addEventListener('resize', () => {
@@ -248,43 +247,38 @@ export class GameController {
     });
 
     this.eventBus.on('slot-selected', (slot) => {
-      this.selectedSlot = slot;
-      this._refreshUI();
+      useInventoryStore.getState().setSlot(slot);
     });
 
     this.eventBus.on('slot-scroll', (deltaY) => {
       if (!this.player.locked) return;
-      if (deltaY > 0) {
-        this.selectedSlot = (this.selectedSlot + 1) % HOTBAR_BLOCKS.length;
-      } else {
-        this.selectedSlot = (this.selectedSlot - 1 + HOTBAR_BLOCKS.length) % HOTBAR_BLOCKS.length;
-      }
-      this._refreshUI();
+      useInventoryStore.getState().scrollSlot(deltaY);
     });
 
     this.eventBus.on('toggle-settings', () => {
-      const opened = this.ui.togglePanel(this.ui.settingsPanel);
+      const opened = useUIStore.getState().toggleSettings();
       if (opened && document.pointerLockElement === document.body) {
         document.exitPointerLock();
       }
     });
 
     this.eventBus.on('toggle-craft', () => {
-      const opened = this.ui.togglePanel(this.ui.craftPanel);
+      const opened = useUIStore.getState().toggleCraft();
       if (opened && document.pointerLockElement === document.body) {
         document.exitPointerLock();
       }
     });
 
     this.eventBus.on('interact-chest', () => {
-      if (this.openedChestKey) {
+      const chestStore = useChestStore.getState();
+      if (chestStore.openedChestKey) {
         this._closeChestPanel('チェストを閉じました', false);
         return;
       }
 
       const hit = this._getTargetChestHit();
       if (!hit) {
-        this.ui.showActionFeedback('視線先にチェストがありません');
+        useUIStore.getState().showFeedback('視線先にチェストがありません');
         this.sound.playError();
         return;
       }
@@ -295,8 +289,7 @@ export class GameController {
     this.eventBus.on('start-clicked', () => {
       if (this.gameStarted) return;
       void this.sound.ensureStarted();
-      this.ui.hideStartScreen();
-      this.ui.showLoadingScreen('ワールドを生成中...');
+      useGameStore.getState().setLoading(true, 'ワールドを生成中...');
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -315,10 +308,11 @@ export class GameController {
             this.player.pitch = this.savedGame.player.pitch;
           }
 
-          this.world.update(this.player.position.x, this.player.position.z);
+          this.world.update(this.player.position.x, this.player.position.z, this.camera);
           this.gameStarted = true;
+          useGameStore.getState().startGame();
           this._startAutoSave();
-          this.ui.hideLoadingScreen();
+          useGameStore.getState().setLoading(false);
           this.player.lock();
         });
       });
@@ -330,29 +324,43 @@ export class GameController {
 
     this.eventBus.on('delete-save-clicked', () => {
       localStorage.removeItem(SAVE_STORAGE_KEY);
-      this.ui.showActionFeedback('セーブデータを削除しました', 1200);
+      useUIStore.getState().showFeedback('セーブデータを削除しました', 1200);
     });
   }
 
   // ---- Settings ----
 
-  _loadSettings() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
-      return sanitizeSettings(parsed);
-    } catch {
-      return { ...DEFAULT_SETTINGS };
+  _applySettings(persist = true) {
+    const settings = useSettingsStore.getState();
+    this.settings = settings;
+    this.player.setMouseSensitivity(settings.sensitivity);
+    this.world.setRenderDistance(settings.renderDistance);
+    this.sound.setSEVolume(settings.seVolume);
+    this.sound.setBGMVolume(settings.bgmVolume);
+
+    if (persist) {
+      settings.persist();
     }
   }
 
-  _applySettings(persist = true) {
-    this.player.setMouseSensitivity(this.settings.sensitivity);
-    this.world.setRenderDistance(this.settings.renderDistance);
-    this.sound.setSEVolume(this.settings.seVolume);
-    this.sound.setBGMVolume(this.settings.bgmVolume);
+  _autoAdjustRenderDistance(time) {
+    const now = time || performance.now();
+    if (now - this.lastAutoRenderAdjustTime < 5000) return;
+    this.lastAutoRenderAdjustTime = now;
 
-    if (persist) {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(this.settings));
+    const current = this.settings.renderDistance;
+    let next = current;
+
+    if (this.fps < 40 && current > 2) {
+      next = current - 1;
+    } else if (this.fps >= 55 && current < 8) {
+      next = current + 1;
+    }
+
+    if (next !== current) {
+      useSettingsStore.getState().setRenderDistance(next);
+      this._applySettings();
+      useUIStore.getState().showFeedback(`描画距離を自動調整しました: ${next}`, 1200);
     }
   }
 
@@ -373,15 +381,14 @@ export class GameController {
 
   _saveGame({ showFeedback = true } = {}) {
     try {
+      const { counts: inventoryCounts, selectedSlot } = useInventoryStore.getState();
       const inventory = {};
-      Object.entries(this.inventoryCounts).forEach(([key, value]) => {
+      Object.entries(inventoryCounts).forEach(([key, value]) => {
         inventory[key] = Number(value) || 0;
       });
 
-      const chestState = {};
-      for (const [key, contents] of this.chestStorage.entries()) {
-        chestState[key] = { ...contents };
-      }
+      const chestState = useChestStore.getState().exportForSave();
+      const settings = useSettingsStore.getState();
 
       const data = {
         schemaVersion: SAVE_SCHEMA_VERSION,
@@ -396,18 +403,23 @@ export class GameController {
           yaw: this.player.yaw,
           pitch: this.player.pitch,
           inventory,
-          selectedSlot: this.selectedSlot,
+          selectedSlot,
         },
-        settings: { ...this.settings },
+        settings: {
+          sensitivity: settings.sensitivity,
+          bgmVolume: settings.bgmVolume,
+          seVolume: settings.seVolume,
+          renderDistance: settings.renderDistance,
+        },
         chunkDiffs: this.world.exportChunkEdits(),
         chestStorage: chestState,
       };
 
       localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(data));
-      if (showFeedback) this.ui.showActionFeedback('ゲームをセーブしました', 800);
+      if (showFeedback) useUIStore.getState().showFeedback('ゲームをセーブしました', 800);
     } catch (e) {
       console.warn('Failed to save game:', e);
-      if (showFeedback) this.ui.showActionFeedback('セーブに失敗しました', 1000);
+      if (showFeedback) useUIStore.getState().showFeedback('セーブに失敗しました', 1000);
     }
   }
 
@@ -418,67 +430,44 @@ export class GameController {
     }, AUTO_SAVE_INTERVAL_MS);
   }
 
-  // ---- Inventory ----
+  // ---- Inventory (delegated to store) ----
 
   getInventoryCount(type) {
-    return this.inventoryCounts[type] ?? 0;
+    return useInventoryStore.getState().getCount(type);
   }
 
   _addToInventory(type, amount = 1) {
-    if (!Object.hasOwn(this.inventoryCounts, type)) return;
-    this.inventoryCounts[type] += amount;
+    useInventoryStore.getState().addItem(type, amount);
   }
 
   _consumeFromInventory(type, amount = 1) {
-    if (!Object.hasOwn(this.inventoryCounts, type)) return false;
-    if (this.inventoryCounts[type] < amount) return false;
-    this.inventoryCounts[type] -= amount;
-    return true;
+    return useInventoryStore.getState().consumeItem(type, amount);
   }
 
   _hasRecipeIngredients(recipe) {
-    return Object.entries(recipe.consumes).every(([type, amount]) => {
-      return this.getInventoryCount(Number(type)) >= amount;
-    });
+    return useInventoryStore.getState().hasRecipeIngredients(recipe);
   }
 
   _craftRecipe(recipe) {
-    if (!this._hasRecipeIngredients(recipe)) {
-      this.ui.showActionFeedback('クラフト失敗: 素材が不足しています');
+    const inv = useInventoryStore.getState();
+    if (!inv.craftRecipe(recipe)) {
+      useUIStore.getState().showFeedback('クラフト失敗: 素材が不足しています');
       this.sound.playError();
       return false;
     }
 
-    for (const [type, amount] of Object.entries(recipe.consumes)) {
-      this._consumeFromInventory(Number(type), amount);
-    }
-    for (const [type, amount] of Object.entries(recipe.produces)) {
-      this._addToInventory(Number(type), amount);
-    }
-
-    this._refreshUI();
     this.sound.playPlace();
-    this.ui.showActionFeedback(`クラフト成功: ${recipe.label}`, 900);
+    useUIStore.getState().showFeedback(`クラフト成功: ${recipe.label}`, 900);
     return true;
   }
 
-  // ---- Chest ----
-
-  _getChestDataAt(pos, createIfMissing = false) {
-    const key = getPosKey(pos.x, pos.y, pos.z);
-    let data = this.chestStorage.get(key);
-    if (!data && createIfMissing) {
-      data = Object.fromEntries(HOTBAR_BLOCKS.map((type) => [type, 0]));
-      this.chestStorage.set(key, data);
-    }
-    return data;
-  }
+  // ---- Chest (delegated to store) ----
 
   _closeChestPanel(message = null, playError = false) {
-    this.openedChestKey = null;
-    this.ui.hideChestPanel();
+    useChestStore.getState().closeChest();
+    useUIStore.getState().setChestOpen(false);
     if (message) {
-      this.ui.showActionFeedback(message);
+      useUIStore.getState().showFeedback(message);
       if (playError) this.sound.playError();
     }
   }
@@ -489,10 +478,12 @@ export class GameController {
       return false;
     }
 
-    this.openedChestKey = getPosKey(pos.x, pos.y, pos.z);
-    this._getChestDataAt(pos, true);
-    this._renderChestPanel();
-    this.ui.showActionFeedback('チェストを開きました', 800);
+    const posKey = getPosKey(pos.x, pos.y, pos.z);
+    const chestStore = useChestStore.getState();
+    chestStore.getChestData(pos, true);
+    chestStore.openChest(posKey);
+    useUIStore.getState().setChestOpen(true);
+    useUIStore.getState().showFeedback('チェストを開きました', 800);
     this.sound.playPlace();
 
     if (document.pointerLockElement === document.body) {
@@ -508,106 +499,18 @@ export class GameController {
     return hit;
   }
 
-  _transferToChest(type) {
-    if (!this.openedChestKey) return false;
-
-    const chestPos = parsePosKey(this.openedChestKey);
-    if (this.world.getBlock(chestPos.x, chestPos.y, chestPos.z) !== BlockType.CHEST) {
-      this._closeChestPanel('チェストが見つかりません', true);
-      return false;
-    }
-
-    const chestData = this._getChestDataAt(chestPos, true);
-    const totalItems = Object.values(chestData).reduce((sum, v) => sum + (Number(v) || 0), 0);
-    if (totalItems >= CHEST_STORAGE_LIMIT) {
-      this.ui.showActionFeedback('収納失敗: チェストが満杯です');
-      this.sound.playError();
-      return false;
-    }
-
-    if (!this._consumeFromInventory(type, 1)) {
-      this.ui.showActionFeedback('収納失敗: 所持数が不足しています');
-      this.sound.playError();
-      return false;
-    }
-
-    chestData[type] = (chestData[type] ?? 0) + 1;
-    this._refreshUI();
-    this._renderChestPanel();
-    this.sound.playPlace();
-    return true;
-  }
-
-  _transferFromChest(type) {
-    if (!this.openedChestKey) return false;
-
-    const chestPos = parsePosKey(this.openedChestKey);
-    if (this.world.getBlock(chestPos.x, chestPos.y, chestPos.z) !== BlockType.CHEST) {
-      this._closeChestPanel('チェストが見つかりません', true);
-      return false;
-    }
-
-    const chestData = this._getChestDataAt(chestPos, false);
-    if (!chestData || (chestData[type] ?? 0) <= 0) {
-      this.ui.showActionFeedback('取り出し失敗: チェスト内の在庫が不足しています');
-      this.sound.playError();
-      return false;
-    }
-
-    chestData[type] -= 1;
-    this._addToInventory(type, 1);
-    this._refreshUI();
-    this._renderChestPanel();
-    this.sound.playPlace();
-    return true;
-  }
-
   _recoverChestItems(blockPos) {
-    const key = getPosKey(blockPos.x, blockPos.y, blockPos.z);
-    const chestData = this.chestStorage.get(key);
-    if (!chestData) {
-      if (this.openedChestKey === key) {
-        this._closeChestPanel('チェストを閉じました');
-      }
-      return 0;
-    }
-
-    let recovered = 0;
-    HOTBAR_BLOCKS.forEach((type) => {
-      const count = Math.max(0, Math.floor(chestData[type] ?? 0));
-      if (count <= 0) return;
-      this._addToInventory(type, count);
-      recovered += count;
-    });
-
-    this.chestStorage.delete(key);
-    if (this.openedChestKey === key) {
-      this._closeChestPanel('チェストを閉じました');
-    }
-
-    return recovered;
+    return useChestStore.getState().recoverChestItems(blockPos);
   }
 
-  _renderChestPanel() {
-    if (!this.openedChestKey) {
-      this.ui.hideChestPanel();
-      return;
-    }
+  _validateOpenedChest() {
+    const chestStore = useChestStore.getState();
+    if (!chestStore.openedChestKey) return;
 
-    const chestPos = parsePosKey(this.openedChestKey);
+    const chestPos = parsePosKey(chestStore.openedChestKey);
     if (this.world.getBlock(chestPos.x, chestPos.y, chestPos.z) !== BlockType.CHEST) {
       this._closeChestPanel('チェストが破壊されました');
-      return;
     }
-
-    const chestData = this._getChestDataAt(chestPos, true);
-    this.ui.renderChestPanel(
-      chestData,
-      chestPos,
-      (type) => this.getInventoryCount(type),
-      (type) => this._transferFromChest(type),
-      (type) => this._transferToChest(type),
-    );
   }
 
   // ---- Block Interaction ----
@@ -618,7 +521,7 @@ export class GameController {
     this.breakState.startedAt = 0;
     this.breakState.blockType = BlockType.AIR;
     this.breakOverlayMesh.visible = false;
-    this.ui.hideBreakProgress();
+    useBreakStore.getState().reset();
   }
 
   _setBreakOverlayStage(stageIndex) {
@@ -636,21 +539,22 @@ export class GameController {
 
     const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
     if (!hit) {
-      this.ui.showActionFeedback('設置失敗: 射程外です');
+      useUIStore.getState().showFeedback('設置失敗: 射程外です');
       this.sound.playError();
       return;
     }
 
-    const placeType = HOTBAR_BLOCKS[this.selectedSlot];
+    const { selectedSlot } = useInventoryStore.getState();
+    const placeType = HOTBAR_BLOCKS[selectedSlot];
     if (this.getInventoryCount(placeType) <= 0) {
-      this.ui.showActionFeedback('設置失敗: 所持数が不足しています');
+      useUIStore.getState().showFeedback('設置失敗: 所持数が不足しています');
       this.sound.playError();
       return;
     }
 
     const pp = hit.placePos;
     if (this.player.intersectsBlock(pp.x, pp.y, pp.z)) {
-      this.ui.showActionFeedback('設置失敗: プレイヤーと衝突します');
+      useUIStore.getState().showFeedback('設置失敗: プレイヤーと衝突します');
       this.sound.playError();
       return;
     }
@@ -660,9 +564,8 @@ export class GameController {
     if (!this._consumeFromInventory(placeType)) return;
     this.world.setBlockWithDiff(pp.x, pp.y, pp.z, placeType);
     if (placeType === BlockType.CHEST) {
-      this._getChestDataAt(pp, true);
+      useChestStore.getState().getChestData(pp, true);
     }
-    this._refreshUI();
     this.sound.playPlace();
   }
 
@@ -691,19 +594,18 @@ export class GameController {
       hit.blockPos.z + 0.5
     );
     this._setBreakOverlayStage(stageIndex);
-    this.ui.showBreakProgress(progress);
+    useBreakStore.getState().setProgress(progress);
 
     if (progress >= 1) {
       if (hit.blockType === BlockType.CHEST) {
         const recovered = this._recoverChestItems(hit.blockPos);
         if (recovered > 0) {
-          this.ui.showActionFeedback(`チェスト回収: 中身 ${recovered} 個を取得`, 1200);
+          useUIStore.getState().showFeedback(`チェスト回収: 中身 ${recovered} 個を取得`, 1200);
         }
       }
 
       this._addToInventory(hit.blockType, 1);
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
-      this._refreshUI();
       this.sound.playBreak();
       this._resetBreaking();
     }
@@ -741,17 +643,6 @@ export class GameController {
     return { cycleRatio, isDay: daylight >= 0.5 };
   }
 
-  // ---- UI Refresh ----
-
-  _refreshUI() {
-    this.ui.buildHotbar(this.selectedSlot, (type) => this.getInventoryCount(type));
-    this.ui.renderCraftPanel(
-      (recipe) => this._hasRecipeIngredients(recipe),
-      (recipe) => this._craftRecipe(recipe),
-    );
-    this._renderChestPanel();
-  }
-
   // ---- Game Loop ----
 
   _gameLoop(time) {
@@ -767,6 +658,7 @@ export class GameController {
       this.fps = this.frameCount;
       this.frameCount = 0;
       this.fpsTime = 0;
+      this._autoAdjustRenderDistance(time);
     }
 
     if (this.player.locked) {
@@ -788,23 +680,21 @@ export class GameController {
           const actualDamage = this.player.applyDamage(damage);
 
           if (actualDamage > 0) {
-            this.ui.showActionFeedback(`落下ダメージ: -${actualDamage} HP`, 1000);
+            useUIStore.getState().showFeedback(`落下ダメージ: -${actualDamage} HP`, 1000);
             this.sound.playError();
           }
 
           if (this.player.health <= 0) {
-            this.ui.showActionFeedback('力尽きました。スポーン地点に戻ります', 1500);
+            useUIStore.getState().showFeedback('力尽きました。スポーン地点に戻ります', 1500);
             this.player.spawn();
           }
         }
       }
       this.wasOnGround = this.player.onGround;
 
-      this.world.update(this.player.position.x, this.player.position.z);
+      this.world.update(this.player.position.x, this.player.position.z, this.camera);
 
-      if (this.openedChestKey) {
-        this._renderChestPanel();
-      }
+      this._validateOpenedChest();
 
       // Highlight target block
       const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
@@ -826,19 +716,10 @@ export class GameController {
         this._resetBreaking();
       }
 
-      // Update HUD
-      const blockName = BLOCK_NAMES[HOTBAR_BLOCKS[this.selectedSlot]] || '';
-      const selectedCount = this.getInventoryCount(HOTBAR_BLOCKS[this.selectedSlot]);
-      this.ui.updateInfo(
-        this.fps,
-        dayNight,
-        this.player.position,
-        this.player.health,
-        this.player.maxHealth,
-        blockName,
-        selectedCount,
-      );
-      this.ui.updateHealthHud(this.player.health, this.player.maxHealth);
+      // Sync stores for Preact UI
+      useGameStore.getState().setFps(this.fps);
+      useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);
+      usePlayerStore.getState().syncFromPlayer(this.player);
 
       const eyePos = this.player.getEyePosition();
       const eyeBlock = this.world.getBlock(
@@ -846,20 +727,19 @@ export class GameController {
         Math.floor(eyePos.y),
         Math.floor(eyePos.z)
       );
-      this.ui.setWaterOverlay(eyeBlock === BlockType.WATER);
+      useUIStore.getState().setWaterOverlay(eyeBlock === BlockType.WATER);
     } else {
-      this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
+      const dayNightIdle = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
+      useDayNightStore.getState().update(dayNightIdle.cycleRatio, dayNightIdle.isDay);
       this.highlightMesh.visible = false;
       this._resetBreaking();
-      this.ui.setWaterOverlay(false);
+      useUIStore.getState().setWaterOverlay(false);
       this.wasOnGround = this.player.onGround;
-      this.ui.updateHealthHud(this.player.health, this.player.maxHealth);
-      if (this.openedChestKey) {
-        this._renderChestPanel();
-      }
+      usePlayerStore.getState().syncFromPlayer(this.player);
+      this._validateOpenedChest();
     }
 
-    this.ui.setResumeHint(this.gameStarted && !this.player.locked);
+    useUIStore.getState().setResumeHint(this.gameStarted && !this.player.locked);
 
     this.renderer.render(this.scene, this.camera);
   }

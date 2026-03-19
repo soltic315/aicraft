@@ -436,87 +436,8 @@
   </style>
 </head>
 <body>
-  <div id="start-screen">
-    <h1 id="game-title">AiCraft</h1>
-    <p>Minecraft風ブラウザゲーム</p>
-    <button class="start-btn" id="start-btn">ゲーム開始</button>
-    <div id="mobile-warning">このバージョンはモバイル操作に最適化されていません（PC 推奨）</div>
-    <div class="controls">
-      WASD：移動　｜　スペース：ジャンプ　｜　Shift：降下<br>
-      左クリック：ブロック破壊　｜　右クリック：ブロック設置<br>
-      1-9/0：ブロック選択　｜　マウスホイール：ブロック切替<br>
-      C：クラフトパネル　｜　P：設定パネル　｜　E：チェストを開く<br>
-      ESC：マウスロック解除　｜　ロック解除中に画面クリック：ゲーム復帰
-    </div>
-  </div>
-  <div id="loading-screen">
-    <div class="loading-spinner" aria-hidden="true"></div>
-    <p id="loading-text">読み込み中...</p>
-  </div>
-  <div id="water-overlay"></div>
   <div id="crosshair"></div>
-  <div id="break-progress" aria-hidden="true"><div id="break-progress-fill"></div></div>
-  <div id="action-feedback" aria-live="polite"></div>
-  <div id="resume-hint">クリックしてゲームに戻る</div>
-  <div id="info"></div>
-  <div id="health-hud" aria-live="polite">
-    HP <span id="health-value">20 / 20</span>
-    <div id="health-bar" aria-hidden="true"><div id="health-fill"></div></div>
-  </div>
-  <div id="settings-panel" aria-label="設定パネル">
-    <h2>設定（P で表示切替）</h2>
-    <div class="setting">
-      <label for="setting-sensitivity">感度</label>
-      <div>
-        <input id="setting-sensitivity" type="range" min="0.5" max="4" step="0.1" value="2" />
-        <span id="setting-sensitivity-value" class="setting-value">2.0</span>
-      </div>
-    </div>
-    <div class="setting">
-      <label for="setting-bgm">BGM 音量</label>
-      <div>
-        <input id="setting-bgm" type="range" min="0" max="100" step="1" value="35" />
-        <span id="setting-bgm-value" class="setting-value">35</span>
-      </div>
-    </div>
-    <div class="setting">
-      <label for="setting-se">SE 音量</label>
-      <div>
-        <input id="setting-se" type="range" min="0" max="100" step="1" value="55" />
-        <span id="setting-se-value" class="setting-value">55</span>
-      </div>
-    </div>
-    <div class="setting">
-      <label for="setting-render-distance">描画距離</label>
-      <div>
-        <input id="setting-render-distance" type="range" min="2" max="8" step="1" value="5" />
-        <span id="setting-render-distance-value" class="setting-value">5</span>
-      </div>
-    </div>
-    <div class="setting">
-      <button id="save-btn" type="button">セーブ</button>
-      <button id="delete-save-btn" type="button">セーブ削除</button>
-    </div>
-    <p class="setting-hint">描画距離変更は負荷に応じて調整してください。</p>
-  </div>
-  <div id="craft-panel" aria-label="クラフトパネル">
-    <h2>クラフト（C で表示切替）</h2>
-    <div id="craft-list"></div>
-    <p id="craft-hint" class="craft-hint">素材が足りるレシピのみクラフトできます。</p>
-  </div>
-  <div id="chest-panel" aria-label="チェストパネル">
-    <h2>チェスト（E で開く / 閉じる）</h2>
-    <div class="chest-panel-section">
-      <p class="chest-panel-title">チェスト在庫</p>
-      <div id="chest-storage-list" class="chest-list"></div>
-    </div>
-    <div class="chest-panel-section">
-      <p class="chest-panel-title">所持品</p>
-      <div id="chest-player-list" class="chest-list"></div>
-    </div>
-    <p id="chest-hint" class="chest-hint">視線先のチェストとアイテムをやり取りできます。</p>
-  </div>
-  <div id="hud"></div>
+  <div id="ui-root"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>

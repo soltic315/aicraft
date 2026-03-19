@@ -1,6 +1,6 @@
 {
   "name": "aicraft",
-  "version": "1.1.0",
+  "version": "3.0.0",
   "description": "Minecraft-style browser game",
   "type": "module",
   "scripts": {
@@ -12,7 +12,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "preact": "^10.29.0",
     "three": "^0.183.2",
-    "vite": "^8.0.1"
+    "vite": "^8.0.1",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.4"
   }
 }

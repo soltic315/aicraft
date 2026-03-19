@@ -12,6 +12,8 @@
 |------|------|
 | ビルドツール | Vite 8 (Rolldown) |
 | 3D レンダリング | Three.js |
+| UI フレームワーク | Preact |
+| 状態管理 | Zustand |
 | 言語 | JavaScript (ES Modules) |
 
 ## 必要環境
@@ -70,17 +72,33 @@ aicraft/
 ├── vite.config.js          # Vite 設定
 ├── package.json
 └── src/
-    ├── main.js             # エントリポイント（モジュール初期化）
-    ├── GameController.js   # ゲームループ・シーン管理・状態管理
+    ├── main.js             # エントリポイント（モジュール初期化・Preact 描画）
+    ├── GameController.js   # ゲームループ・シーン管理
     ├── InputManager.js     # キーボード・マウス入力の捕捉
-    ├── UIManager.js        # HUD・パネル等の DOM 操作
     ├── SoundManager.js     # 効果音・BGM 管理
     ├── eventBus.js         # Pub/Sub イベントシステム
     ├── config.js           # 定数・ユーティリティ関数
     ├── world.js            # チャンク管理・地形生成・メッシュ構築
     ├── player.js           # プレイヤー操作・物理・衝突判定
     ├── blocks.js           # ブロック定義・テクスチャ生成
-    └── noise.js            # Perlin ノイズ
+    ├── noise.js            # Perlin ノイズ
+    ├── stores/             # Zustand ストア（状態管理）
+    │   ├── settingsStore.js
+    │   ├── inventoryStore.js
+    │   ├── chestStore.js
+    │   ├── playerStore.js
+    │   ├── gameStore.js
+    │   ├── dayNightStore.js
+    │   ├── breakStore.js
+    │   └── uiStore.js
+    └── ui/                 # Preact UI コンポーネント
+        ├── App.jsx
+        ├── screens/        # 全画面表示（スタート・ローディング）
+        ├── hotbar/         # ホットバー
+        ├── health/         # 体力表示
+        ├── info/           # 情報オーバーレイ
+        ├── panels/         # 設定・クラフト・チェストパネル
+        └── overlays/       # 水中・破壊プログレス等
 ```
 
 ## デプロイ

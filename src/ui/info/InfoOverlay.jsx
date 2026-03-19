@@ -1,0 +1,48 @@
+import { h } from 'preact';
+import { useRef, useEffect } from 'preact/hooks';
+import { useGameStore } from '../../stores/gameStore.js';
+import { useDayNightStore } from '../../stores/dayNightStore.js';
+import { usePlayerStore } from '../../stores/playerStore.js';
+import { useInventoryStore } from '../../stores/inventoryStore.js';
+import { HOTBAR_BLOCKS } from '../../config.js';
+import { BLOCK_NAMES } from '../../blocks.js';
+
+export function InfoOverlay() {
+  const elRef = useRef(null);
+
+  useEffect(() => {
+    // Use direct subscriptions for high-frequency updates
+    const update = () => {
+      const el = elRef.current;
+      if (!el) return;
+
+      const { fps } = useGameStore.getState();
+      const { cycleRatio, isDay } = useDayNightStore.getState();
+      const { position, health, maxHealth } = usePlayerStore.getState();
+      const { selectedSlot, counts } = useInventoryStore.getState();
+
+      const blockType = HOTBAR_BLOCKS[selectedSlot];
+      const blockName = BLOCK_NAMES[blockType] || '';
+      const selectedCount = counts[blockType] ?? 0;
+
+      el.innerHTML =
+        `FPS: ${fps}<br>` +
+        `時刻: ${isDay ? '昼' : '夜'} (${Math.floor(cycleRatio * 24).toString().padStart(2, '0')}:00)<br>` +
+        `座標: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}<br>` +
+        `体力: ${Math.round(health)} / ${maxHealth}<br>` +
+        `選択: ${blockName} x${selectedCount}`;
+    };
+
+    const unsubs = [
+      useGameStore.subscribe(update),
+      useDayNightStore.subscribe(update),
+      usePlayerStore.subscribe(update),
+      useInventoryStore.subscribe(update),
+    ];
+
+    update();
+    return () => unsubs.forEach((u) => u());
+  }, []);
+
+  return <div id="info" ref={elRef} />;
+}

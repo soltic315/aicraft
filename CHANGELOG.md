@@ -3,6 +3,44 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [3.0.0] - 2026-03-20
+
+### Added
+
+- Zustand（状態管理ライブラリ）を導入し、8 つのストア（settings / inventory / chest / player / game / dayNight / break / ui）でアプリケーション状態を一元管理
+- Preact（UI ライブラリ）を導入し、13 のコンポーネント（App / StartScreen / LoadingScreen / Hotbar / HealthDisplay / InfoOverlay / SettingsPanel / CraftPanel / ChestPanel / BreakProgress / ActionFeedback / WaterOverlay / ResumeHint）で UI をリアクティブに描画
+
+### Changed
+
+- `UIManager.js`（380 行の vanilla DOM 操作）を全廃し、Preact コンポーネント + Zustand ストアに置換
+- `GameController.js` から UI 関連のロジックを分離し、ストア経由で状態を更新するように変更
+- `index.html` の静的 HUD 要素を `<div id="ui-root"></div>` に統合し、Preact が動的に描画
+- `main.js` エントリポイントを Preact の `render()` 呼び出しに変更
+- `vite.config.js` に `@preact/preset-vite` プラグインを追加
+
+### Removed
+
+- `UIManager.js` を削除（Preact コンポーネントで完全に置換）
+
+## [2.0.3] - 2026-03-20
+
+### Changed
+
+- フラスタムカリングを追加し、カメラ視錐台外のチャンクを描画から除外してパフォーマンスを改善
+
+## [2.0.2] - 2026-03-20
+
+### Changed
+
+- ワールドメッシュ生成に Greedy Meshing を導入し、頂点数とドローコールを大幅に削減
+- チャンク生成時に隣接チャンクのメッシュも再構築するようにし、シームのちらつきを防止
+
+## [2.0.1] - 2026-03-20
+
+### Fixed
+
+- チェストパネルの DOM 更新を必要時のみ行うように最適化し、毎フレームの再描画を回避
+
 ## [2.0.0] - 2026-03-20
 
 ### Changed
@@ -11,6 +49,8 @@
 - 散在していたマジックナンバー・定数・ユーティリティ関数を `src/config.js` に集約
 - Pub/Sub イベントシステム（`src/eventBus.js`）を導入し、入力・UI 更新を疎結合化
 - 50 以上のグローバル変数を `GameController`・`UIManager`・`InputManager` クラスのインスタンスプロパティに封じ込め
+- 描画距離の自動調整を追加し、FPS 低下時に描画負荷を下げるように変更
+- チャンクのアンロード判定を `renderDistance + 1` に変更し、メモリ使用量を抑制
 
 ## [1.6.1] - 2026-03-20
 

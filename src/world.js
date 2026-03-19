@@ -18,6 +18,11 @@ export class World {
     this.treePlaced = new Set();
     this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
 
+    // Frustum culling helpers
+    this._frustum = new THREE.Frustum();
+    this._projScreenMatrix = new THREE.Matrix4();
+    this._hasFrustum = false;
+
     // Chunk-level edits applied after terrain generation.
     // Keyed by chunk key ("cx,cz") and contains an array of {x,y,z,type} edits.
     this.chunkEdits = new Map();
@@ -214,79 +219,164 @@ export class World {
     const chunk = this.chunks.get(key);
     if (!chunk) return null;
 
-    const positions = [];
-    const normals = [];
-    const uvs = [];
-    const indices = [];
-    const materialIndices = []; // which face belongs to which material group
+    const groups = {};
 
-    // Group faces by block type and face direction for materials
-    // We'll use a single geometry with groups
-    const groups = {}; // key: `${blockType}_${faceDir}` -> { positions, normals, uvs, indices }
+    const addQuad = (blockType, face, x, y, z, w, h) => {
+      const groupKey = `${blockType}_${face}`;
+      if (!groups[groupKey]) {
+        groups[groupKey] = { positions: [], normals: [], uvs: [], indices: [], blockType, face };
+      }
+      const g = groups[groupKey];
+      const vi = g.positions.length / 3;
+      this._addQuad(g, x, y, z, w, h, face, vi);
+    };
 
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      for (let y = 0; y < WORLD_HEIGHT; y++) {
+    const meshMask = (mask, sizeX, sizeY, processRect) => {
+      for (let i = 0; i < sizeX; i++) {
+        for (let j = 0; j < sizeY; ) {
+          const blockType = mask[i][j];
+          if (!blockType) {
+            j++;
+            continue;
+          }
+
+          let w = 1;
+          while (j + w < sizeY && mask[i][j + w] === blockType) w++;
+
+          let h = 1;
+          outer: while (i + h < sizeX) {
+            for (let k = 0; k < w; k++) {
+              if (mask[i + h][j + k] !== blockType) break outer;
+            }
+            h++;
+          }
+
+          processRect(i, j, w, h, blockType);
+
+          for (let di = 0; di < h; di++) {
+            for (let dj = 0; dj < w; dj++) {
+              mask[i + di][j + dj] = null;
+            }
+          }
+
+          j += w;
+        }
+      }
+    };
+
+    // Top / bottom faces
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+      const topMask = Array.from({ length: CHUNK_SIZE }, () => new Array(CHUNK_SIZE).fill(null));
+      const bottomMask = Array.from({ length: CHUNK_SIZE }, () => new Array(CHUNK_SIZE).fill(null));
+
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          const wx = cx * CHUNK_SIZE + lx;
+          const wz = cz * CHUNK_SIZE + lz;
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
-          const wx = cx * CHUNK_SIZE + lx;
-          const wz = cz * CHUNK_SIZE + lz;
+          const above = this.getBlock(wx, y + 1, wz);
+          if (above === BlockType.AIR || above === BlockType.WATER) {
+            topMask[lx][lz] = block;
+          }
 
-          // Check all 6 faces
-          const neighbors = [
-            { dir: 'top', dx: 0, dy: 1, dz: 0, face: 'top' },
-            { dir: 'bottom', dx: 0, dy: -1, dz: 0, face: 'bottom' },
-            { dir: 'front', dx: 0, dy: 0, dz: 1, face: 'side' },
-            { dir: 'back', dx: 0, dy: 0, dz: -1, face: 'side' },
-            { dir: 'right', dx: 1, dy: 0, dz: 0, face: 'side' },
-            { dir: 'left', dx: -1, dy: 0, dz: 0, face: 'side' },
-          ];
-
-          for (const n of neighbors) {
-            const nx = wx + n.dx;
-            const ny = y + n.dy;
-            const nz = wz + n.dz;
-
-            const neighbor = this.getBlock(nx, ny, nz);
-            if (neighbor !== BlockType.AIR && neighbor !== BlockType.WATER) continue;
-
-            const groupKey = `${block}_${n.face}`;
-            if (!groups[groupKey]) {
-              groups[groupKey] = { positions: [], normals: [], uvs: [], indices: [], blockType: block, face: n.face };
-            }
-            const g = groups[groupKey];
-            const vi = g.positions.length / 3;
-
-            this._addFace(g, wx, y, wz, n.dir, vi);
+          const below = this.getBlock(wx, y - 1, wz);
+          if (below === BlockType.AIR || below === BlockType.WATER) {
+            bottomMask[lx][lz] = block;
           }
         }
       }
+
+      meshMask(topMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, w, h, blockType) => {
+        addQuad(blockType, 'top', cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz, w, h);
+      });
+      meshMask(bottomMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, w, h, blockType) => {
+        addQuad(blockType, 'bottom', cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz, w, h);
+      });
     }
 
-    // Also render water surfaces
-    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      for (let y = 0; y < WORLD_HEIGHT; y++) {
-        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-          const block = chunk.blocks[lx][y][lz];
-          if (block !== BlockType.WATER) continue;
+    // Front / back faces
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const frontMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
+      const backMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
+      const wz = cz * CHUNK_SIZE + lz;
 
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let y = 0; y < WORLD_HEIGHT; y++) {
           const wx = cx * CHUNK_SIZE + lx;
-          const wz = cz * CHUNK_SIZE + lz;
+          const block = chunk.blocks[lx][y][lz];
+          if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
-          // Only top face for water
-          const above = this.getBlock(wx, y + 1, wz);
-          if (above === BlockType.AIR) {
-            const groupKey = `${BlockType.WATER}_top`;
-            if (!groups[groupKey]) {
-              groups[groupKey] = { positions: [], normals: [], uvs: [], indices: [], blockType: BlockType.WATER, face: 'top' };
-            }
-            const g = groups[groupKey];
-            const vi = g.positions.length / 3;
-            this._addFace(g, wx, y - 0.1, wz, 'top', vi);
+          const frontNeighbor = this.getBlock(wx, y, wz + 1);
+          if (frontNeighbor === BlockType.AIR || frontNeighbor === BlockType.WATER) {
+            frontMask[lx][y] = block;
+          }
+
+          const backNeighbor = this.getBlock(wx, y, wz - 1);
+          if (backNeighbor === BlockType.AIR || backNeighbor === BlockType.WATER) {
+            backMask[lx][y] = block;
           }
         }
       }
+
+      meshMask(frontMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, w, h, blockType) => {
+        addQuad(blockType, 'front', cx * CHUNK_SIZE + lx, y, wz, w, h);
+      });
+      meshMask(backMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, w, h, blockType) => {
+        addQuad(blockType, 'back', cx * CHUNK_SIZE + lx, y, wz, w, h);
+      });
+    }
+
+    // Right / left faces
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      const rightMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
+      const leftMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
+      const wx = cx * CHUNK_SIZE + lx;
+
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        for (let y = 0; y < WORLD_HEIGHT; y++) {
+          const wz = cz * CHUNK_SIZE + lz;
+          const block = chunk.blocks[lx][y][lz];
+          if (block === BlockType.AIR || block === BlockType.WATER) continue;
+
+          const rightNeighbor = this.getBlock(wx + 1, y, wz);
+          if (rightNeighbor === BlockType.AIR || rightNeighbor === BlockType.WATER) {
+            rightMask[lz][y] = block;
+          }
+
+          const leftNeighbor = this.getBlock(wx - 1, y, wz);
+          if (leftNeighbor === BlockType.AIR || leftNeighbor === BlockType.WATER) {
+            leftMask[lz][y] = block;
+          }
+        }
+      }
+
+      meshMask(rightMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, w, h, blockType) => {
+        addQuad(blockType, 'right', wx, y, cz * CHUNK_SIZE + lz, w, h);
+      });
+      meshMask(leftMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, w, h, blockType) => {
+        addQuad(blockType, 'left', wx, y, cz * CHUNK_SIZE + lz, w, h);
+      });
+    }
+
+    // Water surfaces
+    for (let y = 0; y < WORLD_HEIGHT; y++) {
+      const waterMask = Array.from({ length: CHUNK_SIZE }, () => new Array(CHUNK_SIZE).fill(null));
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          const wx = cx * CHUNK_SIZE + lx;
+          const wz = cz * CHUNK_SIZE + lz;
+          if (chunk.blocks[lx][y][lz] !== BlockType.WATER) continue;
+          const above = this.getBlock(wx, y + 1, wz);
+          if (above === BlockType.AIR) {
+            waterMask[lx][lz] = BlockType.WATER;
+          }
+        }
+      }
+      meshMask(waterMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, w, h) => {
+        addQuad(BlockType.WATER, 'top', cx * CHUNK_SIZE + lx, y - 0.1, cz * CHUNK_SIZE + lz, w, h);
+      });
     }
 
     // Combine into single geometry with material groups
@@ -348,7 +438,7 @@ export class World {
     return mesh;
   }
 
-  _addFace(g, x, y, z, dir, vi) {
+  _addQuad(g, x, y, z, w, h, dir, vi) {
     const p = g.positions;
     const n = g.normals;
     const u = g.uvs;
@@ -356,38 +446,72 @@ export class World {
 
     switch (dir) {
       case 'top':
-        p.push(x, y + 1, z, x, y + 1, z + 1, x + 1, y + 1, z + 1, x + 1, y + 1, z);
+        p.push(
+          x, y + 1, z,
+          x, y + 1, z + h,
+          x + w, y + 1, z + h,
+          x + w, y + 1, z
+        );
         n.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
-        u.push(0, 0, 1, 0, 1, 1, 0, 1);
+        u.push(0, 0, w, 0, w, h, 0, h);
         break;
       case 'bottom':
-        p.push(x, y, z, x + 1, y, z, x + 1, y, z + 1, x, y, z + 1);
+        p.push(
+          x, y, z,
+          x + w, y, z,
+          x + w, y, z + h,
+          x, y, z + h
+        );
         n.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
-        u.push(0, 0, 1, 0, 1, 1, 0, 1);
+        u.push(0, 0, w, 0, w, h, 0, h);
         break;
       case 'front':
-        p.push(x, y, z + 1, x + 1, y, z + 1, x + 1, y + 1, z + 1, x, y + 1, z + 1);
+        p.push(
+          x, y, z + 1,
+          x + w, y, z + 1,
+          x + w, y + h, z + 1,
+          x, y + h, z + 1
+        );
         n.push(0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1);
-        u.push(0, 0, 1, 0, 1, 1, 0, 1);
+        u.push(0, 0, w, 0, w, h, 0, h);
         break;
       case 'back':
-        p.push(x + 1, y, z, x, y, z, x, y + 1, z, x + 1, y + 1, z);
+        p.push(
+          x + w, y, z,
+          x, y, z,
+          x, y + h, z,
+          x + w, y + h, z
+        );
         n.push(0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1);
-        u.push(0, 0, 1, 0, 1, 1, 0, 1);
+        u.push(0, 0, w, 0, w, h, 0, h);
         break;
       case 'right':
-        p.push(x + 1, y, z + 1, x + 1, y, z, x + 1, y + 1, z, x + 1, y + 1, z + 1);
+        p.push(
+          x + 1, y, z + h,
+          x + 1, y, z,
+          x + 1, y + h, z,
+          x + 1, y + h, z + h
+        );
         n.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
-        u.push(0, 0, 1, 0, 1, 1, 0, 1);
+        u.push(0, 0, w, 0, w, h, 0, h);
         break;
       case 'left':
-        p.push(x, y, z, x, y, z + 1, x, y + 1, z + 1, x, y + 1, z);
+        p.push(
+          x, y, z,
+          x, y, z + h,
+          x, y + h, z + h,
+          x, y + h, z
+        );
         n.push(-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0);
-        u.push(0, 0, 1, 0, 1, 1, 0, 1);
+        u.push(0, 0, w, 0, w, h, 0, h);
         break;
     }
 
     idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+  }
+
+  _addFace(g, x, y, z, dir, vi) {
+    this._addQuad(g, x, y, z, 1, 1, dir, vi);
   }
 
   _rebuildChunkMesh(cx, cz) {
@@ -404,13 +528,54 @@ export class World {
     const mesh = this._buildChunkMesh(cx, cz);
     if (mesh) {
       chunk.mesh = mesh;
+
+      // Frustum culling: only render chunks visible to the camera (if computed)
+      if (chunk.boundingBox && this._hasFrustum) {
+        mesh.visible = this._frustum.intersectsBox(chunk.boundingBox);
+      }
+
       this.scene.add(mesh);
     }
+
+    // Rebuild adjacent loaded chunks to ensure internal faces are removed when a neighbor appears.
+    const rebuildNeighborMesh = (nx, nz) => {
+      const nKey = this._chunkKey(nx, nz);
+      const neighborChunk = this.chunks.get(nKey);
+      if (!neighborChunk) return;
+
+      if (neighborChunk.mesh) {
+        this.scene.remove(neighborChunk.mesh);
+        neighborChunk.mesh.geometry.dispose();
+        neighborChunk.mesh = null;
+      }
+
+      const neighborMesh = this._buildChunkMesh(nx, nz);
+      if (neighborMesh) {
+        neighborChunk.mesh = neighborMesh;
+        this.scene.add(neighborMesh);
+      }
+    };
+
+    rebuildNeighborMesh(cx - 1, cz);
+    rebuildNeighborMesh(cx + 1, cz);
+    rebuildNeighborMesh(cx, cz - 1);
+    rebuildNeighborMesh(cx, cz + 1);
   }
 
-  update(playerX, playerZ) {
+  update(playerX, playerZ, camera = null) {
     const pcx = Math.floor(playerX / CHUNK_SIZE);
     const pcz = Math.floor(playerZ / CHUNK_SIZE);
+
+    // Compute view frustum if camera is provided (used for culling chunks outside view)
+    let frustum = null;
+    this._hasFrustum = false;
+    if (camera) {
+      camera.updateMatrixWorld();
+      this._projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      this._frustum.setFromProjectionMatrix(this._projScreenMatrix);
+      frustum = this._frustum;
+      this._hasFrustum = true;
+    }
 
     // Load chunks in range
     for (let dx = -this.renderDistance; dx <= this.renderDistance; dx++) {
@@ -421,18 +586,31 @@ export class World {
 
         if (!this.chunks.has(key)) {
           const data = this._generateChunkData(cx, cz);
-          this.chunks.set(key, { ...data, mesh: null });
+          const boundingBox = new THREE.Box3(
+            new THREE.Vector3(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE),
+            new THREE.Vector3((cx + 1) * CHUNK_SIZE, WORLD_HEIGHT, (cz + 1) * CHUNK_SIZE)
+          );
+
+          this.chunks.set(key, { ...data, mesh: null, boundingBox });
           this._rebuildChunkMesh(cx, cz);
         }
       }
     }
 
-    // Unload far chunks
+    // Update chunk visibility based on frustum
+    if (frustum) {
+      for (const chunk of this.chunks.values()) {
+        if (!chunk.mesh || !chunk.boundingBox) continue;
+        chunk.mesh.visible = frustum.intersectsBox(chunk.boundingBox);
+      }
+    }
+
+    // Unload far chunks (aggressively unload one chunk beyond render distance)
     for (const [key, chunk] of this.chunks) {
       const [cx, cz] = key.split(',').map(Number);
       if (
-        Math.abs(cx - pcx) > this.renderDistance + 2 ||
-        Math.abs(cz - pcz) > this.renderDistance + 2
+        Math.abs(cx - pcx) > this.renderDistance + 1 ||
+        Math.abs(cz - pcz) > this.renderDistance + 1
       ) {
         if (chunk.mesh) {
           this.scene.remove(chunk.mesh);
