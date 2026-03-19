@@ -7,7 +7,9 @@ const JUMP_FORCE = 8;
 const GRAVITY = 20;
 const PLAYER_HEIGHT = 1.62;
 const PLAYER_RADIUS = 0.3;
+const PLAYER_COLLISION_HEIGHT = 1.8;
 const MOUSE_SENSITIVITY = 0.002;
+const COLLISION_EPSILON = 0.001;
 
 export class Player {
   constructor(camera, world) {
@@ -102,52 +104,125 @@ export class Player {
   }
 
   _moveAxis(axis, amount) {
+    if (amount === 0) {
+      if (axis === 'y') {
+        this.onGround = this._hasGroundSupport();
+      }
+      return;
+    }
+
     this.position[axis] += amount;
 
-    // Check collision
-    const feet = this.position.y;
-    const head = this.position.y + PLAYER_HEIGHT + 0.18;
+    const bounds = this._getBounds();
+    let collided = false;
 
-    // Check multiple points for collision
-    for (let yCheck = feet; yCheck <= head; yCheck += 0.5) {
-      for (let dx = -1; dx <= 1; dx += 2) {
-        for (let dz = -1; dz <= 1; dz += 2) {
-          const checkX = this.position.x + dx * PLAYER_RADIUS;
-          const checkZ = this.position.z + dz * PLAYER_RADIUS;
-          const bx = Math.floor(checkX);
-          const by = Math.floor(yCheck);
-          const bz = Math.floor(checkZ);
+    if (axis === 'x') {
+      collided = this._resolveHorizontalCollision(bounds, amount, 'x');
+      if (collided) this.velocity.x = 0;
+    } else if (axis === 'z') {
+      collided = this._resolveHorizontalCollision(bounds, amount, 'z');
+      if (collided) this.velocity.z = 0;
+    } else if (axis === 'y') {
+      this.onGround = false;
+      collided = this._resolveVerticalCollision(bounds, amount);
+      if (collided) this.velocity.y = 0;
+      if (!collided && amount <= 0) {
+        this.onGround = this._hasGroundSupport();
+      }
+    }
+  }
 
-          const block = this.world.getBlock(bx, by, bz);
-          if (block !== BlockType.AIR && block !== BlockType.WATER) {
-            // Push back
-            if (axis === 'x') {
-              if (amount > 0) this.position.x = bx - PLAYER_RADIUS;
-              else this.position.x = bx + 1 + PLAYER_RADIUS;
-              this.velocity.x = 0;
-            } else if (axis === 'z') {
-              if (amount > 0) this.position.z = bz - PLAYER_RADIUS;
-              else this.position.z = bz + 1 + PLAYER_RADIUS;
-              this.velocity.z = 0;
-            } else if (axis === 'y') {
-              if (amount < 0) {
-                this.position.y = by + 1;
-                this.velocity.y = 0;
-                this.onGround = true;
-              } else {
-                this.position.y = by - PLAYER_HEIGHT - 0.18;
-                this.velocity.y = 0;
-              }
-            }
-            return;
-          }
+  _getBounds() {
+    return {
+      minX: this.position.x - PLAYER_RADIUS,
+      maxX: this.position.x + PLAYER_RADIUS,
+      minY: this.position.y,
+      maxY: this.position.y + PLAYER_COLLISION_HEIGHT,
+      minZ: this.position.z - PLAYER_RADIUS,
+      maxZ: this.position.z + PLAYER_RADIUS,
+    };
+  }
+
+  _resolveHorizontalCollision(bounds, amount, axis) {
+    const checkCoord = amount > 0
+      ? Math.floor((axis === 'x' ? bounds.maxX : bounds.maxZ) - COLLISION_EPSILON)
+      : Math.floor((axis === 'x' ? bounds.minX : bounds.minZ) + COLLISION_EPSILON);
+
+    const minY = Math.floor(bounds.minY + COLLISION_EPSILON);
+    const maxY = Math.floor(bounds.maxY - COLLISION_EPSILON);
+    const minOther = Math.floor((axis === 'x' ? bounds.minZ : bounds.minX) + COLLISION_EPSILON);
+    const maxOther = Math.floor((axis === 'x' ? bounds.maxZ : bounds.maxX) - COLLISION_EPSILON);
+
+    for (let y = minY; y <= maxY; y++) {
+      for (let other = minOther; other <= maxOther; other++) {
+        const bx = axis === 'x' ? checkCoord : other;
+        const bz = axis === 'x' ? other : checkCoord;
+        if (!this._isSolidBlock(bx, y, bz)) continue;
+
+        if (axis === 'x') {
+          this.position.x = amount > 0
+            ? bx - PLAYER_RADIUS - COLLISION_EPSILON
+            : bx + 1 + PLAYER_RADIUS + COLLISION_EPSILON;
+        } else {
+          this.position.z = amount > 0
+            ? bz - PLAYER_RADIUS - COLLISION_EPSILON
+            : bz + 1 + PLAYER_RADIUS + COLLISION_EPSILON;
+        }
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  _resolveVerticalCollision(bounds, amount) {
+    const checkY = amount > 0
+      ? Math.floor(bounds.maxY - COLLISION_EPSILON)
+      : Math.floor(bounds.minY + COLLISION_EPSILON);
+    const minX = Math.floor(bounds.minX + COLLISION_EPSILON);
+    const maxX = Math.floor(bounds.maxX - COLLISION_EPSILON);
+    const minZ = Math.floor(bounds.minZ + COLLISION_EPSILON);
+    const maxZ = Math.floor(bounds.maxZ - COLLISION_EPSILON);
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        if (!this._isSolidBlock(x, checkY, z)) continue;
+
+        if (amount > 0) {
+          this.position.y = checkY - PLAYER_COLLISION_HEIGHT - COLLISION_EPSILON;
+        } else {
+          this.position.y = checkY + 1 + COLLISION_EPSILON;
+          this.onGround = true;
+        }
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  _hasGroundSupport() {
+    const bounds = this._getBounds();
+    const supportY = Math.floor(bounds.minY - COLLISION_EPSILON);
+    const minX = Math.floor(bounds.minX + COLLISION_EPSILON);
+    const maxX = Math.floor(bounds.maxX - COLLISION_EPSILON);
+    const minZ = Math.floor(bounds.minZ + COLLISION_EPSILON);
+    const maxZ = Math.floor(bounds.maxZ - COLLISION_EPSILON);
+
+    for (let x = minX; x <= maxX; x++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        if (this._isSolidBlock(x, supportY, z)) {
+          return true;
         }
       }
     }
 
-    if (axis === 'y') {
-      this.onGround = false;
-    }
+    return false;
+  }
+
+  _isSolidBlock(x, y, z) {
+    const block = this.world.getBlock(x, y, z);
+    return block !== BlockType.AIR && block !== BlockType.WATER;
   }
 
   getDirection() {
@@ -161,6 +236,26 @@ export class Player {
       this.position.x,
       this.position.y + PLAYER_HEIGHT,
       this.position.z
+    );
+  }
+
+  intersectsBlock(x, y, z) {
+    const bounds = this._getBounds();
+
+    const blockMinX = x;
+    const blockMaxX = x + 1;
+    const blockMinY = y;
+    const blockMaxY = y + 1;
+    const blockMinZ = z;
+    const blockMaxZ = z + 1;
+
+    return (
+      bounds.minX < blockMaxX &&
+      bounds.maxX > blockMinX &&
+      bounds.minY < blockMaxY &&
+      bounds.maxY > blockMinY &&
+      bounds.minZ < blockMaxZ &&
+      bounds.maxZ > blockMinZ
     );
   }
 }

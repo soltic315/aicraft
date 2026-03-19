@@ -293,12 +293,12 @@ export class World {
 
     switch (dir) {
       case 'top':
-        p.push(x, y + 1, z, x + 1, y + 1, z, x + 1, y + 1, z + 1, x, y + 1, z + 1);
+        p.push(x, y + 1, z, x, y + 1, z + 1, x + 1, y + 1, z + 1, x + 1, y + 1, z);
         n.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0);
         u.push(0, 0, 1, 0, 1, 1, 0, 1);
         break;
       case 'bottom':
-        p.push(x, y, z + 1, x + 1, y, z + 1, x + 1, y, z, x, y, z);
+        p.push(x, y, z, x + 1, y, z, x + 1, y, z + 1, x, y, z + 1);
         n.push(0, -1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0);
         u.push(0, 0, 1, 0, 1, 1, 0, 1);
         break;

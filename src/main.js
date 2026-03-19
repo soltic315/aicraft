@@ -4,6 +4,8 @@ import { BlockType, BLOCK_NAMES, generateTextures, generateBlockIcon } from './b
 import { World } from './world.js';
 import { Player } from './player.js';
 
+const GAME_VERSION = '1.0.4';
+
 // ---- Setup Scene ----
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -136,12 +138,8 @@ document.addEventListener('mousedown', (e) => {
     // Place block
     const placeType = HOTBAR_BLOCKS[selectedSlot];
     // Don't place inside player
-    const px = Math.floor(player.position.x);
-    const py = Math.floor(player.position.y);
-    const pz = Math.floor(player.position.z);
-    const ph = Math.floor(player.position.y + 1.62);
     const pp = hit.placePos;
-    if ((pp.x === px && pp.z === pz) && (pp.y === py || pp.y === ph)) return;
+    if (player.intersectsBlock(pp.x, pp.y, pp.z)) return;
 
     world.setBlock(pp.x, pp.y, pp.z, placeType);
   }
@@ -153,13 +151,39 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 // ---- Start Screen ----
 const startScreen = document.getElementById('start-screen');
 const startBtn = document.getElementById('start-btn');
+const loadingScreen = document.getElementById('loading-screen');
+const loadingText = document.getElementById('loading-text');
+const gameTitle = document.getElementById('game-title');
+const resumeHint = document.getElementById('resume-hint');
+const waterOverlay = document.getElementById('water-overlay');
+let gameStarted = false;
+
+if (gameTitle) {
+  gameTitle.textContent = `AiCraft v${GAME_VERSION}`;
+}
+document.title = `AiCraft v${GAME_VERSION}`;
 
 startBtn.addEventListener('click', () => {
+  if (gameStarted) return;
   startScreen.style.display = 'none';
+  loadingScreen.style.display = 'flex';
+  loadingText.textContent = 'ワールドを生成中...';
+
+  // Let the loading UI paint before heavy chunk generation starts.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      world.update(player.position.x, player.position.z);
+      player.spawn();
+      gameStarted = true;
+      loadingScreen.style.display = 'none';
+      player.lock();
+    });
+  });
+});
+
+renderer.domElement.addEventListener('click', () => {
+  if (!gameStarted || player.locked) return;
   player.lock();
-  // Generate initial chunks
-  world.update(player.position.x, player.position.z);
-  player.spawn();
 });
 
 // ---- HUD Info ----
@@ -213,7 +237,16 @@ function gameLoop(time) {
       `FPS: ${fps}<br>` +
       `座標: ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}<br>` +
       `選択: ${blockName}`;
+
+    const eyePos = player.getEyePosition();
+    const eyeBlock = world.getBlock(Math.floor(eyePos.x), Math.floor(eyePos.y), Math.floor(eyePos.z));
+    waterOverlay.style.display = eyeBlock === BlockType.WATER ? 'block' : 'none';
+  } else {
+    highlightMesh.visible = false;
+    waterOverlay.style.display = 'none';
   }
+
+  resumeHint.style.display = gameStarted && !player.locked ? 'block' : 'none';
 
   renderer.render(scene, camera);
 }
