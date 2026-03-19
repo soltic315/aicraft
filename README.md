@@ -105,7 +105,7 @@ aicraft/
 
 `main` ブランチに push すると **GitHub Actions** が自動でビルド・デプロイします。
 
-デプロイ先: `https://soltic315.github.io/aicraft/`
+デプロイ先: https://soltic315.github.io/aicraft/
 
 > **初回設定:** リポジトリの **Settings → Pages → Source** を **"GitHub Actions"** に変更してください。
 

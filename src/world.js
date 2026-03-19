@@ -7,6 +7,7 @@ const CHUNK_SIZE = 16;
 const WORLD_HEIGHT = 64;
 const SEA_LEVEL = 20;
 const DEFAULT_RENDER_DISTANCE = 5;
+const CHUNK_LOADS_PER_FRAME = 2;
 
 export class World {
   constructor(scene, blockMaterials, options = {}) {
@@ -15,8 +16,11 @@ export class World {
     this.chunks = new Map();
     this.seed = Number.isFinite(options.seed) ? options.seed : Math.floor(Math.random() * 100000);
     this.noise = new Noise(this.seed);
+    this.treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
     this.treePlaced = new Set();
     this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
+    this.pendingChunkLoads = [];
+    this.pendingChunkSet = new Set();
 
     // Frustum culling helpers
     this._frustum = new THREE.Frustum();
@@ -69,6 +73,33 @@ export class World {
 
   _chunkKey(cx, cz) {
     return `${cx},${cz}`;
+  }
+
+  _queueChunkLoad(cx, cz) {
+    const key = this._chunkKey(cx, cz);
+    if (this.chunks.has(key) || this.pendingChunkSet.has(key)) return;
+    this.pendingChunkLoads.push({ cx, cz, key });
+    this.pendingChunkSet.add(key);
+  }
+
+  _dequeueNearestChunkLoad(pcx, pcz) {
+    if (this.pendingChunkLoads.length === 0) return null;
+
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+
+    for (let i = 0; i < this.pendingChunkLoads.length; i++) {
+      const item = this.pendingChunkLoads[i];
+      const distance = Math.abs(item.cx - pcx) + Math.abs(item.cz - pcz);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = i;
+      }
+    }
+
+    const [next] = this.pendingChunkLoads.splice(nearestIndex, 1);
+    this.pendingChunkSet.delete(next.key);
+    return next;
   }
 
   // Get terrain height at world (x, z)
@@ -130,8 +161,6 @@ export class World {
       }
     }
 
-    const treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
-
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const wx = cx * CHUNK_SIZE + lx;
@@ -160,13 +189,13 @@ export class World {
 
         // Trees (only on grass, sparse)
         if (height > SEA_LEVEL + 1) {
-          const treeVal = treeNoise.noise2D(wx * 0.5, wz * 0.5);
+          const treeVal = this.treeNoise.noise2D(wx * 0.5, wz * 0.5);
           if (treeVal > 0.35 && lx > 2 && lx < CHUNK_SIZE - 3 && lz > 2 && lz < CHUNK_SIZE - 3) {
             const treeKey = `${wx},${wz}`;
             if (!this.treePlaced.has(treeKey)) {
               this.treePlaced.add(treeKey);
               // Trunk
-              const trunkHeight = 4 + Math.floor(Math.abs(treeNoise.noise2D(wx * 10, wz * 10)) * 3);
+              const trunkHeight = 4 + Math.floor(Math.abs(this.treeNoise.noise2D(wx * 10, wz * 10)) * 3);
               for (let ty = 1; ty <= trunkHeight; ty++) {
                 if (height + ty < WORLD_HEIGHT) {
                   blocks[lx][height + ty][lz] = BlockType.WOOD;
@@ -231,36 +260,12 @@ export class World {
       this._addQuad(g, x, y, z, w, h, face, vi);
     };
 
-    const meshMask = (mask, sizeX, sizeY, processRect) => {
-      for (let j = 0; j < sizeY; j++) {
-        for (let i = 0; i < sizeX; ) {
+    const emitMaskFaces = (mask, sizeX, sizeY, emitFace) => {
+      for (let i = 0; i < sizeX; i++) {
+        for (let j = 0; j < sizeY; j++) {
           const blockType = mask[i][j];
-          if (!blockType) {
-            i++;
-            continue;
-          }
-
-          // Grow width along X-axis, then height along Y-axis in mask space.
-          let w = 1;
-          while (i + w < sizeX && mask[i + w][j] === blockType) w++;
-
-          let h = 1;
-          outer: while (j + h < sizeY) {
-            for (let k = 0; k < w; k++) {
-              if (mask[i + k][j + h] !== blockType) break outer;
-            }
-            h++;
-          }
-
-          processRect(i, j, w, h, blockType);
-
-          for (let dj = 0; dj < h; dj++) {
-            for (let di = 0; di < w; di++) {
-              mask[i + di][j + dj] = null;
-            }
-          }
-
-          i += w;
+          if (!blockType) continue;
+          emitFace(i, j, blockType);
         }
       }
     };
@@ -289,11 +294,11 @@ export class World {
         }
       }
 
-      meshMask(topMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, w, h, blockType) => {
-        addQuad(blockType, 'top', cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz, w, h);
+      emitMaskFaces(topMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, blockType) => {
+        addQuad(blockType, 'top', cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz, 1, 1);
       });
-      meshMask(bottomMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, w, h, blockType) => {
-        addQuad(blockType, 'bottom', cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz, w, h);
+      emitMaskFaces(bottomMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, blockType) => {
+        addQuad(blockType, 'bottom', cx * CHUNK_SIZE + lx, y, cz * CHUNK_SIZE + lz, 1, 1);
       });
     }
 
@@ -321,11 +326,11 @@ export class World {
         }
       }
 
-      meshMask(frontMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, w, h, blockType) => {
-        addQuad(blockType, 'front', cx * CHUNK_SIZE + lx, y, wz, w, h);
+      emitMaskFaces(frontMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, blockType) => {
+        addQuad(blockType, 'front', cx * CHUNK_SIZE + lx, y, wz, 1, 1);
       });
-      meshMask(backMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, w, h, blockType) => {
-        addQuad(blockType, 'back', cx * CHUNK_SIZE + lx, y, wz, w, h);
+      emitMaskFaces(backMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, blockType) => {
+        addQuad(blockType, 'back', cx * CHUNK_SIZE + lx, y, wz, 1, 1);
       });
     }
 
@@ -353,11 +358,11 @@ export class World {
         }
       }
 
-      meshMask(rightMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, w, h, blockType) => {
-        addQuad(blockType, 'right', wx, y, cz * CHUNK_SIZE + lz, w, h);
+      emitMaskFaces(rightMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, blockType) => {
+        addQuad(blockType, 'right', wx, y, cz * CHUNK_SIZE + lz, 1, 1);
       });
-      meshMask(leftMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, w, h, blockType) => {
-        addQuad(blockType, 'left', wx, y, cz * CHUNK_SIZE + lz, w, h);
+      emitMaskFaces(leftMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, blockType) => {
+        addQuad(blockType, 'left', wx, y, cz * CHUNK_SIZE + lz, 1, 1);
       });
     }
 
@@ -375,8 +380,8 @@ export class World {
           }
         }
       }
-      meshMask(waterMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz, w, h) => {
-        addQuad(BlockType.WATER, 'top', cx * CHUNK_SIZE + lx, y - 0.1, cz * CHUNK_SIZE + lz, w, h);
+      emitMaskFaces(waterMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz) => {
+        addQuad(BlockType.WATER, 'top', cx * CHUNK_SIZE + lx, y - 0.1, cz * CHUNK_SIZE + lz, 1, 1);
       });
     }
 
@@ -582,24 +587,38 @@ export class World {
       this._hasFrustum = true;
     }
 
-    // Load chunks in range
+    // Queue chunks in range
     for (let dx = -this.renderDistance; dx <= this.renderDistance; dx++) {
       for (let dz = -this.renderDistance; dz <= this.renderDistance; dz++) {
         const cx = pcx + dx;
         const cz = pcz + dz;
-        const key = this._chunkKey(cx, cz);
-
-        if (!this.chunks.has(key)) {
-          const data = this._generateChunkData(cx, cz);
-          const boundingBox = new THREE.Box3(
-            new THREE.Vector3(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE),
-            new THREE.Vector3((cx + 1) * CHUNK_SIZE, WORLD_HEIGHT, (cz + 1) * CHUNK_SIZE)
-          );
-
-          this.chunks.set(key, { ...data, mesh: null, boundingBox });
-          this._rebuildChunkMesh(cx, cz, false);
-        }
+        this._queueChunkLoad(cx, cz);
       }
+    }
+
+    // Drop queued chunks that are no longer relevant.
+    this.pendingChunkLoads = this.pendingChunkLoads.filter((item) => {
+      const inRange =
+        Math.abs(item.cx - pcx) <= this.renderDistance + 1 &&
+        Math.abs(item.cz - pcz) <= this.renderDistance + 1;
+      if (!inRange) this.pendingChunkSet.delete(item.key);
+      return inRange;
+    });
+
+    // Load a small fixed number per frame to prevent generation spikes.
+    for (let i = 0; i < CHUNK_LOADS_PER_FRAME; i++) {
+      const next = this._dequeueNearestChunkLoad(pcx, pcz);
+      if (!next) break;
+      if (this.chunks.has(next.key)) continue;
+
+      const data = this._generateChunkData(next.cx, next.cz);
+      const boundingBox = new THREE.Box3(
+        new THREE.Vector3(next.cx * CHUNK_SIZE, 0, next.cz * CHUNK_SIZE),
+        new THREE.Vector3((next.cx + 1) * CHUNK_SIZE, WORLD_HEIGHT, (next.cz + 1) * CHUNK_SIZE)
+      );
+
+      this.chunks.set(next.key, { ...data, mesh: null, boundingBox });
+      this._rebuildChunkMesh(next.cx, next.cz, false);
     }
 
     // Update chunk visibility based on frustum
@@ -632,6 +651,7 @@ export class World {
           chunk.mesh.geometry.dispose();
         }
         this.chunks.delete(key);
+        this.pendingChunkSet.delete(key);
       }
     }
   }

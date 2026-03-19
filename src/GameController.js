@@ -177,8 +177,6 @@ export class GameController {
     this.frameCount = 0;
     this.fpsTime = 0;
     this.fps = 0;
-    this.lastAutoRenderAdjustTime = 0;
-    this.lowFpsStreak = 0;
     this.autoSaveIntervalId = null;
   }
 
@@ -351,34 +349,6 @@ export class GameController {
 
     if (persist) {
       settings.persist();
-    }
-  }
-
-  _autoAdjustRenderDistance(time) {
-    const now = time || performance.now();
-    if (now - this.lastAutoRenderAdjustTime < 10000) return;
-    this.lastAutoRenderAdjustTime = now;
-
-    const current = this.settings.renderDistance;
-    let next = current;
-
-    if (this.fps < 35) {
-      this.lowFpsStreak += 1;
-    } else {
-      this.lowFpsStreak = 0;
-    }
-
-    // Keep this conservative: only shrink distance after sustained low FPS.
-    // Avoid automatic upscaling to prevent chunk churn spikes during play.
-    if (this.lowFpsStreak >= 2 && current > 2) {
-      next = current - 1;
-      this.lowFpsStreak = 0;
-    }
-
-    if (next !== current) {
-      useSettingsStore.getState().setRenderDistance(next);
-      this._applySettings();
-      useUIStore.getState().showFeedback(`描画距離を自動調整しました: ${next}`, 1200);
     }
   }
 
@@ -676,7 +646,6 @@ export class GameController {
       this.fps = this.frameCount;
       this.frameCount = 0;
       this.fpsTime = 0;
-      this._autoAdjustRenderDistance(time);
     }
 
     if (this.player.locked) {
