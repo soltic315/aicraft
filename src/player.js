@@ -7,6 +7,9 @@ const SPRINT_MULTIPLIER = 1.3;
 const SNEAK_MULTIPLIER = 0.4;
 const JUMP_FORCE = 8;
 const GRAVITY = 20;
+const WATER_GRAVITY = 5;
+const WATER_SPEED_MULTIPLIER = 0.4;
+const SWIM_FORCE = 4;
 const PLAYER_HEIGHT = 1.62;
 const PLAYER_RADIUS = 0.3;
 const PLAYER_COLLISION_HEIGHT = 1.8;
@@ -34,6 +37,7 @@ export class Player {
     this.onGround = false;
     this.isSprinting = false;
     this.isSneaking = false;
+    this.isInWater = false;
     this.keys = {};
     this.locked = false;
     this.mouseSensitivity = options.mouseSensitivity ?? DEFAULT_MOUSE_SENSITIVITY;
@@ -41,6 +45,7 @@ export class Player {
     this.maxHealth = options.maxHealth ?? DEFAULT_MAX_HEALTH;
     this.health = this.maxHealth;
     this.healthRegenCooldown = 0;
+    this.regenEnabled = true;
 
     this._initControls();
   }
@@ -78,6 +83,13 @@ export class Player {
   update(dt) {
     dt = Math.min(dt, 0.05); // Cap delta
 
+    // 水中判定（足元ブロック）
+    this.isInWater = this.world.getBlock(
+      Math.floor(this.position.x),
+      Math.floor(this.position.y + 0.5),
+      Math.floor(this.position.z)
+    ) === BlockType.WATER;
+
     // Movement direction
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
@@ -91,25 +103,36 @@ export class Player {
     if (moveDir.length() > 0) moveDir.normalize();
 
     // スプリント（CtrlまたはControl長押し）・スニーク（Shift長押し）
-    this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight']) && this.onGround && moveDir.length() > 0;
+    this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight']) && this.onGround && moveDir.length() > 0 && !this.isInWater;
     this.isSneaking = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && !this.isSprinting;
 
     let speed = MOVE_SPEED;
     if (this.isSprinting) speed *= SPRINT_MULTIPLIER;
     else if (this.isSneaking) speed *= SNEAK_MULTIPLIER;
+    if (this.isInWater) speed *= WATER_SPEED_MULTIPLIER;
 
     // Horizontal velocity
     this.velocity.x = moveDir.x * speed;
     this.velocity.z = moveDir.z * speed;
 
-    // Jump
-    if (this.keys['Space'] && this.onGround) {
-      this.velocity.y = JUMP_FORCE;
-      this.onGround = false;
+    if (this.isInWater) {
+      // 水中: Spaceで浮上、浮力で上昇減速
+      if (this.keys['Space']) {
+        this.velocity.y = SWIM_FORCE;
+      }
+      // 水中重力（浮力で軽減）
+      this.velocity.y -= WATER_GRAVITY * dt;
+      // 水中では速度を減衰させる
+      this.velocity.y *= (1 - 3 * dt);
+    } else {
+      // 通常ジャンプ
+      if (this.keys['Space'] && this.onGround) {
+        this.velocity.y = JUMP_FORCE;
+        this.onGround = false;
+      }
+      // 重力
+      this.velocity.y -= GRAVITY * dt;
     }
-
-    // Gravity
-    this.velocity.y -= GRAVITY * dt;
 
     // Move and collide
     this._moveAxis('y', this.velocity.y * dt);
@@ -264,6 +287,26 @@ export class Player {
     return block !== BlockType.AIR && block !== BlockType.WATER;
   }
 
+  // 頭部が水中にあるか判定
+  isHeadInWater() {
+    const block = this.world.getBlock(
+      Math.floor(this.position.x),
+      Math.floor(this.position.y + PLAYER_HEIGHT),
+      Math.floor(this.position.z)
+    );
+    return block === BlockType.WATER;
+  }
+
+  // 頭部が固体ブロック内にあるか判定（窒息）
+  isHeadInSolid() {
+    const block = this.world.getBlock(
+      Math.floor(this.position.x),
+      Math.floor(this.position.y + PLAYER_HEIGHT),
+      Math.floor(this.position.z)
+    );
+    return block !== BlockType.AIR && block !== BlockType.WATER;
+  }
+
   getDirection() {
     const dir = new THREE.Vector3(0, 0, -1);
     dir.applyQuaternion(this.camera.quaternion);
@@ -335,6 +378,8 @@ export class Player {
 
   _updateHealth(dt) {
     if (this.health >= this.maxHealth) return;
+
+    if (!this.regenEnabled) return; // 空腹時は回復しない
 
     if (this.healthRegenCooldown > 0) {
       this.healthRegenCooldown = Math.max(0, this.healthRegenCooldown - dt);

@@ -4,6 +4,7 @@ import { LoadingScreen } from './screens/LoadingScreen.jsx';
 import { DeathScreen } from './screens/DeathScreen.jsx';
 import { Hotbar } from './hotbar/Hotbar.jsx';
 import { HealthDisplay } from './health/HealthDisplay.jsx';
+import { HungerDisplay } from './health/HungerDisplay.jsx';
 import { InfoOverlay } from './info/InfoOverlay.jsx';
 import { SettingsPanel } from './panels/SettingsPanel.jsx';
 import { CraftPanel } from './panels/CraftPanel.jsx';
@@ -25,6 +26,7 @@ export function App() {
       <ResumeHint />
       <InfoOverlay />
       <HealthDisplay />
+      <HungerDisplay />
       <SettingsPanel />
       <CraftPanel />
       <ChestPanel />

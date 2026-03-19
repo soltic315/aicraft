@@ -57,6 +57,7 @@ export class InputManager {
       if (e.code === 'KeyP') this.eventBus.emit('toggle-settings');
       if (e.code === 'KeyC') this.eventBus.emit('toggle-craft');
       if (e.code === 'KeyE') this.eventBus.emit('interact-chest');
+      if (e.code === 'KeyF') this.eventBus.emit('eat-food');
 
       // Tool selection
       if (e.code === 'KeyZ') this.eventBus.emit('tool-selected', ToolType.PICKAXE);

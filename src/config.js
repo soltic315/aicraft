@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.1.0';
+export const GAME_VERSION = '3.3.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 1;
@@ -10,6 +10,30 @@ export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 
 export const SPRINT_SPEED_MULTIPLIER = 1.3;
 export const SNEAK_SPEED_MULTIPLIER = 0.4;
+
+// 水中移動
+export const WATER_SPEED_MULTIPLIER = 0.4;
+export const WATER_GRAVITY = 5;
+export const SWIM_FORCE = 4;
+
+// 溺れダメージ
+export const DROWNING_GRACE_PERIOD = 10;
+export const DROWNING_DAMAGE_INTERVAL = 1;
+export const DROWNING_DAMAGE = 2;
+
+// 窒息ダメージ
+export const SUFFOCATION_DAMAGE_INTERVAL = 0.5;
+export const SUFFOCATION_DAMAGE = 1;
+
+// 空腹システム
+export const HUNGER_MAX = 20;
+export const HUNGER_DRAIN_IDLE = 0.04;
+export const HUNGER_DRAIN_MOVE = 0.22;
+export const HUNGER_DRAIN_SPRINT = 0.42;
+export const HUNGER_LOW_THRESHOLD = 6;
+export const HUNGER_STARVE_DAMAGE_INTERVAL = 2;
+export const HUNGER_STARVE_DAMAGE = 1;
+export const APPLE_HUNGER_RESTORE = 4;
 
 export const FALL_DAMAGE_SAFE_SPEED = 12;
 export const FALL_DAMAGE_HEAVY_SPEED = 16;
@@ -49,7 +73,11 @@ export const HOTBAR_BLOCKS = [
   BlockType.GLASS,
   BlockType.CRAFTING_TABLE,
   BlockType.CHEST,
+  BlockType.APPLE,
 ];
+
+// 食料アイテムのセット（設置不可）
+export const FOOD_ITEMS = new Set([BlockType.APPLE]);
 
 export const STARTER_INVENTORY = {
   [BlockType.GRASS]: 16,
@@ -63,6 +91,7 @@ export const STARTER_INVENTORY = {
   [BlockType.GLASS]: 0,
   [BlockType.CRAFTING_TABLE]: 0,
   [BlockType.CHEST]: 0,
+  [BlockType.APPLE]: 0,
 };
 
 export const CRAFT_RECIPES = [

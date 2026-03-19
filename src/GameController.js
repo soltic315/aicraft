@@ -17,6 +17,7 @@ import {
   DAY_NIGHT_CYCLE_SECONDS,
   PLACE_COOLDOWN,
   HOTBAR_BLOCKS,
+  FOOD_ITEMS,
   CHEST_STORAGE_LIMIT,
   DAY_SKY_COLOR,
   NIGHT_SKY_COLOR,
@@ -32,6 +33,18 @@ import {
   getPosKey,
   parsePosKey,
   smoothstep,
+  DROWNING_GRACE_PERIOD,
+  DROWNING_DAMAGE_INTERVAL,
+  DROWNING_DAMAGE,
+  SUFFOCATION_DAMAGE_INTERVAL,
+  SUFFOCATION_DAMAGE,
+  HUNGER_DRAIN_IDLE,
+  HUNGER_DRAIN_MOVE,
+  HUNGER_DRAIN_SPRINT,
+  HUNGER_LOW_THRESHOLD,
+  HUNGER_STARVE_DAMAGE_INTERVAL,
+  HUNGER_STARVE_DAMAGE,
+  APPLE_HUNGER_RESTORE,
 } from './config.js';
 import { useSettingsStore } from './stores/settingsStore.js';
 import { useInventoryStore } from './stores/inventoryStore.js';
@@ -42,6 +55,7 @@ import { useDayNightStore } from './stores/dayNightStore.js';
 import { useBreakStore } from './stores/breakStore.js';
 import { useUIStore } from './stores/uiStore.js';
 import { useToolStore } from './stores/toolStore.js';
+import { useHungerStore } from './stores/hungerStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType } from './tools.js';
 
 export class GameController {
@@ -164,6 +178,11 @@ export class GameController {
       useChestStore.getState().restoreFromSave(this.savedGame.chestStorage);
     }
 
+    // 空腹値を復元
+    if (Number.isFinite(this.savedGame?.player?.hunger)) {
+      useHungerStore.getState().restoreFromSave(this.savedGame.player.hunger);
+    }
+
     this.lastPlaceTime = 0;
 
     // Break state (internal tracking for game loop)
@@ -174,6 +193,12 @@ export class GameController {
       blockType: BlockType.AIR,
       toolType: null,
     };
+
+    // 溺れ・窒息・飢餓タイマー
+    this.underwaterTimer = 0;
+    this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
+    this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
+    this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
 
     // Game loop state
     this.gameStarted = false;
@@ -346,8 +371,18 @@ export class GameController {
 
     this.eventBus.on('respawn-clicked', () => {
       useGameStore.getState().setDead(false);
+      useHungerStore.getState().reset();
+      this.underwaterTimer = 0;
+      this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
+      this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
+      this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
       this.player.spawn();
       this.player.lock();
+    });
+
+    this.eventBus.on('eat-food', () => {
+      if (!this.player.locked) return;
+      this._tryEatFood();
     });
   }
 
@@ -396,6 +431,7 @@ export class GameController {
 
       const chestState = useChestStore.getState().exportForSave();
       const settings = useSettingsStore.getState();
+      const { hunger } = useHungerStore.getState();
 
       const data = {
         schemaVersion: SAVE_SCHEMA_VERSION,
@@ -412,6 +448,7 @@ export class GameController {
           inventory,
           selectedSlot,
           selectedTool,
+          hunger,
         },
         settings: {
           sensitivity: settings.sensitivity,
@@ -521,6 +558,36 @@ export class GameController {
     }
   }
 
+  // ---- 食料消費 ----
+
+  _tryEatFood() {
+    const { selectedSlot } = useInventoryStore.getState();
+    const selectedType = HOTBAR_BLOCKS[selectedSlot];
+
+    if (!FOOD_ITEMS.has(selectedType)) {
+      useUIStore.getState().showFeedback('食べられるものが選択されていません');
+      this.sound.playError();
+      return;
+    }
+
+    const hungerStore = useHungerStore.getState();
+    if (hungerStore.hunger >= hungerStore.maxHunger) {
+      useUIStore.getState().showFeedback('お腹がいっぱいです', 800);
+      return;
+    }
+
+    if (this.getInventoryCount(selectedType) <= 0) {
+      useUIStore.getState().showFeedback('リンゴがありません', 800);
+      this.sound.playError();
+      return;
+    }
+
+    this._consumeFromInventory(selectedType);
+    hungerStore.feedHunger(APPLE_HUNGER_RESTORE);
+    useUIStore.getState().showFeedback(`リンゴを食べた！ 空腹 +${APPLE_HUNGER_RESTORE}`, 1000);
+    this.sound.playPlace();
+  }
+
   // ---- Block Interaction ----
 
   _resetBreaking() {
@@ -555,6 +622,14 @@ export class GameController {
 
     const { selectedSlot } = useInventoryStore.getState();
     const placeType = HOTBAR_BLOCKS[selectedSlot];
+
+    // 食料アイテムは設置不可
+    if (FOOD_ITEMS.has(placeType)) {
+      useUIStore.getState().showFeedback('食べ物は設置できません。F キーで食べてください', 1200);
+      this.sound.playError();
+      return;
+    }
+
     if (this.getInventoryCount(placeType) <= 0) {
       useUIStore.getState().showFeedback('設置失敗: 所持数が不足しています');
       this.sound.playError();
@@ -618,9 +693,88 @@ export class GameController {
       }
 
       this._addToInventory(hit.blockType, 1);
+      // 葉ブロック破壊時に30%の確率でリンゴドロップ
+      if (hit.blockType === BlockType.LEAVES && Math.random() < 0.3) {
+        this._addToInventory(BlockType.APPLE, 1);
+        useUIStore.getState().showFeedback('リンゴをゲット！', 1000);
+      }
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.sound.playBreak();
       this._resetBreaking();
+    }
+  }
+
+  // ---- サバイバルシステム（溺れ・窒息・空腹） ----
+
+  _updateSurvivalSystems(dt) {
+    if (useGameStore.getState().isDead) return;
+
+    // --- 空腹 ---
+    const isMoving = Math.abs(this.player.velocity.x) > 0.3 || Math.abs(this.player.velocity.z) > 0.3;
+    let hungerDrain = HUNGER_DRAIN_IDLE;
+    if (this.player.isSprinting) hungerDrain = HUNGER_DRAIN_SPRINT;
+    else if (isMoving) hungerDrain = HUNGER_DRAIN_MOVE;
+    useHungerStore.getState().consumeHunger(hungerDrain * dt);
+
+    // 最新の空腹値を取得
+    const currentHunger = useHungerStore.getState().hunger;
+
+    // HP回復: 空腹度が低いと無効化
+    this.player.regenEnabled = currentHunger > HUNGER_LOW_THRESHOLD;
+
+    // 飢餓ダメージ
+    if (currentHunger <= 0) {
+      this.starvationDamageTimer -= dt;
+      if (this.starvationDamageTimer <= 0) {
+        this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
+        const dmg = this.player.applyDamage(HUNGER_STARVE_DAMAGE);
+        if (dmg > 0) {
+          useUIStore.getState().showFeedback('空腹でダメージ！ -1 HP', 900);
+          this.sound.playError();
+        }
+      }
+    } else {
+      this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
+    }
+
+    // --- 溺れダメージ ---
+    if (this.player.isHeadInWater()) {
+      this.underwaterTimer += dt;
+      if (this.underwaterTimer >= DROWNING_GRACE_PERIOD) {
+        this.drowningDamageTimer -= dt;
+        if (this.drowningDamageTimer <= 0) {
+          this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
+          const dmg = this.player.applyDamage(DROWNING_DAMAGE);
+          if (dmg > 0) {
+            useUIStore.getState().showFeedback('溺れている！ -2 HP', 900);
+            this.sound.playError();
+          }
+        }
+      }
+    } else {
+      this.underwaterTimer = 0;
+      this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
+    }
+
+    // --- 窒息ダメージ ---
+    if (this.player.isHeadInSolid()) {
+      this.suffocationDamageTimer -= dt;
+      if (this.suffocationDamageTimer <= 0) {
+        this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
+        const dmg = this.player.applyDamage(SUFFOCATION_DAMAGE);
+        if (dmg > 0) {
+          useUIStore.getState().showFeedback('窒息している！ -1 HP', 900);
+          this.sound.playError();
+        }
+      }
+    } else {
+      this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
+    }
+
+    // 死亡判定
+    if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+      useGameStore.getState().setDead(true);
+      document.exitPointerLock();
     }
   }
 
@@ -740,6 +894,8 @@ export class GameController {
         Math.floor(eyePos.z)
       );
       useUIStore.getState().setWaterOverlay(eyeBlock === BlockType.WATER);
+
+      this._updateSurvivalSystems(dt);
     } else {
       const dayNightIdle = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
       useDayNightStore.getState().update(dayNightIdle.cycleRatio, dayNightIdle.isDay);

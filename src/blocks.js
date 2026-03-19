@@ -13,6 +13,7 @@ export const BlockType = {
   GLASS: 9,
   CRAFTING_TABLE: 10,
   CHEST: 11,
+  APPLE: 12,
 };
 
 export const BLOCK_NAMES = {
@@ -27,6 +28,7 @@ export const BLOCK_NAMES = {
   [BlockType.GLASS]: 'ガラス',
   [BlockType.CRAFTING_TABLE]: '作業台',
   [BlockType.CHEST]: 'チェスト',
+  [BlockType.APPLE]: 'リンゴ',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -374,8 +376,51 @@ export function generateTextures() {
   return textures;
 }
 
+// リンゴ専用アイコンを描画
+function generateAppleIcon() {
+  const size = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const cx = size / 2;
+  const cy = size / 2 + 2;
+  const r = size * 0.36;
+
+  // リンゴ本体（赤）
+  ctx.fillStyle = '#d63020';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ハイライト
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.beginPath();
+  ctx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.28, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 茎
+  ctx.strokeStyle = '#3a2010';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + 1.5, cy - r - 5);
+  ctx.stroke();
+
+  // 葉
+  ctx.fillStyle = '#2e7a18';
+  ctx.beginPath();
+  ctx.ellipse(cx + 4, cy - r - 3, 4, 2, Math.PI / 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  return canvas;
+}
+
 // Generate a small icon canvas for hotbar display
 export function generateBlockIcon(type) {
+  if (type === BlockType.APPLE) return generateAppleIcon();
+
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;
 
