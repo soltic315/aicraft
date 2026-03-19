@@ -13,8 +13,6 @@ import { InventoryPanel } from './panels/InventoryPanel.jsx';
 import { BreakProgress } from './overlays/BreakProgress.jsx';
 import { ActionFeedback } from './overlays/ActionFeedback.jsx';
 import { WaterOverlay } from './overlays/WaterOverlay.jsx';
-import { ResumeHint } from './overlays/ResumeHint.jsx';
-
 export function App() {
   return (
     <>
@@ -24,14 +22,13 @@ export function App() {
       <WaterOverlay />
       <BreakProgress />
       <ActionFeedback />
-      <ResumeHint />
       <InfoOverlay />
       <HealthDisplay />
       <HungerDisplay />
       <SettingsPanel />
+      <InventoryPanel />
       <CraftPanel />
       <ChestPanel />
-      <InventoryPanel />
       <Hotbar />
     </>
   );

@@ -243,13 +243,16 @@ export class GameController {
       this._saveGame({ showFeedback: false });
     });
 
-    // Canvas click to re-lock（インベントリ等のパネルが開いている間はロックしない）
-    this.renderer.domElement.addEventListener('click', () => {
-      void this.sound.ensureStarted();
+    // パネルが閉じている状態でのクリック/キー入力で自動再ロック
+    const tryRelock = () => {
       if (!this.gameStarted || this.player.locked) return;
-      if (useUIStore.getState().inventoryOpen) return;
+      const ui = useUIStore.getState();
+      if (ui.inventoryOpen || ui.settingsOpen || ui.chestOpen) return;
+      void this.sound.ensureStarted();
       this.player.lock();
-    });
+    };
+    this.renderer.domElement.addEventListener('click', tryRelock);
+    document.addEventListener('keydown', tryRelock);
 
     // Start game loop
     requestAnimationFrame((t) => this._gameLoop(t));
@@ -302,18 +305,15 @@ export class GameController {
       }
     });
 
-    this.eventBus.on('toggle-craft', () => {
-      const opened = useUIStore.getState().toggleCraft();
+    this.eventBus.on('toggle-inventory', () => {
+      const opened = useUIStore.getState().toggleInventoryWithCraft();
       if (opened && document.pointerLockElement === document.body) {
         document.exitPointerLock();
       }
     });
 
-    this.eventBus.on('toggle-inventory', () => {
-      const opened = useUIStore.getState().toggleInventory();
-      if (opened && document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
+    this.eventBus.on('close-chest', () => {
+      this._closeChestPanel('チェストを閉じました', false);
     });
 
     this.eventBus.on('interact-chest', () => {
@@ -517,7 +517,7 @@ export class GameController {
 
   _closeChestPanel(message = null, playError = false) {
     useChestStore.getState().closeChest();
-    useUIStore.getState().setChestOpen(false);
+    useUIStore.getState().closeInventoryPanels();
     if (message) {
       useUIStore.getState().showFeedback(message);
       if (playError) this.sound.playError();
@@ -534,7 +534,7 @@ export class GameController {
     const chestStore = useChestStore.getState();
     chestStore.getChestData(pos, true);
     chestStore.openChest(posKey);
-    useUIStore.getState().setChestOpen(true);
+    useUIStore.getState().openInventoryWithChest();
     useUIStore.getState().showFeedback('チェストを開きました', 800);
     this.sound.playPlace();
 
@@ -944,8 +944,6 @@ export class GameController {
       usePlayerStore.getState().syncFromPlayer(this.player);
       this._validateOpenedChest();
     }
-
-    useUIStore.getState().setResumeHint(this.gameStarted && !this.player.locked);
 
     this.renderer.render(this.scene, this.camera);
   }

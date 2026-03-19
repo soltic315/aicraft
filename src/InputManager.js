@@ -48,8 +48,7 @@ export class InputManager {
 
       // Panel toggles and interactions
       if (e.code === 'KeyP') this.eventBus.emit('toggle-settings');
-      if (e.code === 'KeyC') this.eventBus.emit('toggle-craft');
-      if (e.code === 'KeyI') this.eventBus.emit('toggle-inventory');
+      if (e.code === 'Tab') { e.preventDefault(); this.eventBus.emit('toggle-inventory'); }
       if (e.code === 'KeyE') this.eventBus.emit('interact-chest');
     });
 

@@ -28,6 +28,23 @@ export const useUIStore = create((set, get) => ({
     return isNow;
   },
 
+  // Tab: インベントリ＋クラフトをまとめて開閉
+  toggleInventoryWithCraft() {
+    const willOpen = !get().inventoryOpen;
+    set({ inventoryOpen: willOpen, craftOpen: willOpen, chestOpen: false });
+    return willOpen;
+  },
+
+  // E: インベントリ＋チェストをまとめて開く
+  openInventoryWithChest() {
+    set({ inventoryOpen: true, craftOpen: false, chestOpen: true });
+  },
+
+  // インベントリ・クラフト・チェストをまとめて閉じる
+  closeInventoryPanels() {
+    set({ inventoryOpen: false, craftOpen: false, chestOpen: false });
+  },
+
   setChestOpen(open) {
     set({ chestOpen: open });
   },

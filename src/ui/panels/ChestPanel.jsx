@@ -1,9 +1,43 @@
 import { h } from 'preact';
+import { useMemo, useState, useEffect } from 'preact/hooks';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
-import { ALL_ITEM_TYPES, CHEST_STORAGE_LIMIT, parsePosKey } from '../../config.js';
-import { BLOCK_NAMES } from '../../blocks.js';
+import { BLOCK_NAMES, generateBlockIcon } from '../../blocks.js';
+import { TOOL_ITEMS, CHEST_STORAGE_LIMIT, parsePosKey } from '../../config.js';
+
+function getIconUrl(type) {
+  if (type == null) return null;
+  const canvas = generateBlockIcon(type);
+  return canvas ? canvas.toDataURL() : null;
+}
+
+function ChestItemSlot({ type, count, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }) {
+  const iconUrl = useMemo(() => getIconUrl(type), [type]);
+  const isTool = TOOL_ITEMS.has(type);
+
+  return (
+    <div
+      class={`inv-slot${isDragOver ? ' inv-drag-over' : ''}`}
+      draggable
+      onDragStart={() => onDragStart('chest-' + type)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver('chest-' + type); }}
+      onDrop={(e) => { e.preventDefault(); onDrop('chest-' + type); }}
+      onDragEnd={onDragEnd}
+      title={BLOCK_NAMES[type] ?? '?'}
+    >
+      {isTool && <span class="inv-slot-badge">道具</span>}
+      {iconUrl && (
+        <img src={iconUrl} width={32} height={32} alt=""
+          class="inv-slot-icon"
+          style={{ imageRendering: 'pixelated', display: 'block' }} />
+      )}
+      {!iconUrl && <span class="inv-slot-icon" />}
+      <span class="inv-slot-name">{BLOCK_NAMES[type] ?? '?'}</span>
+      <span class="inv-slot-count">{isTool ? (count > 0 ? '✓' : '✗') : count}</span>
+    </div>
+  );
+}
 
 export function ChestPanel() {
   const chestOpen      = useUIStore((s) => s.chestOpen);
@@ -11,85 +45,127 @@ export function ChestPanel() {
   const storage        = useChestStore((s) => s.storage);
   const slots          = useInventoryStore((s) => s.slots);
 
-  if (!chestOpen || !openedChestKey) return null;
+  const [dragFrom,    setDragFrom]    = useState(null);
+  const [dragOverKey, setDragOverKey] = useState(null);
 
+  // E / ESC で閉じる
+  useEffect(() => {
+    if (!chestOpen) return;
+    const handleKey = (e) => {
+      if (e.code === 'Escape' || e.code === 'KeyE') {
+        e.stopPropagation();
+        window.__aicraft?.eventBus?.emit('close-chest');
+      }
+    };
+    window.addEventListener('keydown', handleKey, true);
+    return () => window.removeEventListener('keydown', handleKey, true);
+  }, [chestOpen]);
+
+  if (!chestOpen || !openedChestKey) return null;
   const chestData = storage.get(openedChestKey);
   if (!chestData) return null;
 
-  const chestPos = parsePosKey(openedChestKey);
+  const chestPos   = parsePosKey(openedChestKey);
   const totalItems = Object.values(chestData).reduce((sum, v) => sum + (Number(v) || 0), 0);
 
-  // インベントリの各アイテム数
-  const getInvCount = (type) => slots.reduce((sum, s) => (s.type === type ? sum + s.count : sum), 0);
+  const chestItems = Object.entries(chestData)
+    .map(([typeStr, count]) => ({ type: Number(typeStr), count: Number(count) || 0 }))
+    .filter((item) => item.count > 0)
+    .sort((a, b) => a.type - b.type);
+
+  const handleDragStart = (key) => {
+    setDragFrom(key);
+    if (key.startsWith('chest-')) {
+      // インベントリ・ホットバーのドロップハンドラが参照するグローバル
+      window.__chestDragType = Number(key.replace('chest-', ''));
+    } else {
+      window.__invDragFrom = Number(key.replace('inv-', ''));
+    }
+  };
+  const handleDragOver  = (key) => setDragOverKey(key);
+  const handleDragEnd   = () => {
+    setDragFrom(null);
+    setDragOverKey(null);
+    window.__invDragFrom = null;
+    window.__chestDragType = null;
+  };
+
+  const handleDrop = (toKey) => {
+    const from = dragFrom;
+    if (!from || from === toKey) { handleDragEnd(); return; }
+    const chest = useChestStore.getState();
+
+    if (from.startsWith('chest-') && toKey.startsWith('inv-')) {
+      // チェスト → インベントリ
+      const type = Number(from.replace('chest-', ''));
+      const ok = chest.transferAllFromChest(type);
+      if (ok) window.__aicraft?.sound?.playPlace();
+      else window.__aicraft?.sound?.playError();
+    } else if (from.startsWith('inv-') && toKey.startsWith('chest-')) {
+      // インベントリ → チェスト
+      const slotIdx = Number(from.replace('inv-', ''));
+      const result = chest.depositSlot(slotIdx);
+      if (result === true) window.__aicraft?.sound?.playPlace();
+      else if (result === 'full') {
+        window.__aicraft?.sound?.playError();
+        useUIStore.getState().showFeedback('収納失敗: チェストが満杯です');
+      }
+    }
+    handleDragEnd();
+  };
+
+  // チェストエリアへのドロップ（インベントリ or ホットバーから）
+  const handleChestAreaDrop = (e) => {
+    e.preventDefault();
+    const localFrom  = dragFrom;
+    const hotbarFrom = (window.__invDragFrom != null) ? 'inv-' + window.__invDragFrom : null;
+    const from = localFrom || hotbarFrom;
+    if (!from || !from.startsWith('inv-')) { handleDragEnd(); return; }
+    const slotIdx = Number(from.replace('inv-', ''));
+    const result = useChestStore.getState().depositSlot(slotIdx);
+    if (result === true) window.__aicraft?.sound?.playPlace();
+    else if (result === 'full') {
+      window.__aicraft?.sound?.playError();
+      useUIStore.getState().showFeedback('収納失敗: チェストが満杯です');
+    }
+    handleDragEnd();
+  };
 
   return (
-    <div id="chest-panel" style={{ display: 'block' }} aria-label="チェストパネル">
-      <h2>チェスト（E で開く / 閉じる）</h2>
-
-      <div class="chest-panel-section">
-        <p class="chest-panel-title">チェスト在庫</p>
-        <div id="chest-storage-list" class="chest-list">
-          {ALL_ITEM_TYPES.map((type) => {
-            const count = Number(chestData[type] ?? 0);
-            return (
-              <div key={`chest-${type}`} class="chest-row">
-                <span>{BLOCK_NAMES[type]} x{count}</span>
-                <button
-                  type="button"
-                  disabled={count <= 0}
-                  onClick={() => {
-                    const result = useChestStore.getState().transferFromChest(type);
-                    if (result) {
-                      window.__aicraft?.sound?.playPlace();
-                    } else {
-                      window.__aicraft?.sound?.playError();
-                      useUIStore.getState().showFeedback('取り出し失敗: チェスト内の在庫が不足しています');
-                    }
-                  }}
-                >
-                  取り出す
-                </button>
-              </div>
-            );
-          })}
-        </div>
+    <div id="chest-panel-modal">
+      <div class="inv-header">
+        <span>チェスト（{chestPos.x}, {chestPos.y}, {chestPos.z}）&nbsp;
+          <span style={{ opacity: 0.6, fontSize: '10px' }}>{totalItems} / {CHEST_STORAGE_LIMIT}</span>
+        </span>
+        <button class="inv-close-btn"
+          onClick={() => window.__aicraft?.eventBus?.emit('close-chest')}>✕</button>
       </div>
-
-      <div class="chest-panel-section">
-        <p class="chest-panel-title">所持品</p>
-        <div id="chest-player-list" class="chest-list">
-          {ALL_ITEM_TYPES.map((type) => {
-            const count = getInvCount(type);
-            return (
-              <div key={`inv-${type}`} class="chest-row">
-                <span>{BLOCK_NAMES[type]} x{count}</span>
-                <button
-                  type="button"
-                  disabled={count <= 0 || totalItems >= CHEST_STORAGE_LIMIT}
-                  onClick={() => {
-                    const result = useChestStore.getState().transferToChest(type);
-                    if (result === true) {
-                      window.__aicraft?.sound?.playPlace();
-                    } else if (result === 'full') {
-                      window.__aicraft?.sound?.playError();
-                      useUIStore.getState().showFeedback('収納失敗: チェストが満杯です');
-                    } else {
-                      window.__aicraft?.sound?.playError();
-                      useUIStore.getState().showFeedback('収納失敗: 所持数が不足しています');
-                    }
-                  }}
-                >
-                  収納する
-                </button>
-              </div>
-            );
-          })}
-        </div>
+      <div class="inv-section-label">チェスト内容</div>
+      <div
+        id="chest-grid"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleChestAreaDrop}
+      >
+        {chestItems.length === 0 && (
+          <div class="chest-empty-hint">（空） — インベントリからドラッグして預ける</div>
+        )}
+        {chestItems.map(({ type, count }) => (
+          <ChestItemSlot
+            key={type}
+            type={type}
+            count={count}
+            isDragOver={dragOverKey === 'chest-' + type}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragEnd={handleDragEnd}
+          />
+        ))}
       </div>
-
-      <p id="chest-hint" class="chest-hint">
-        {`座標: (${chestPos.x}, ${chestPos.y}, ${chestPos.z}) / 合計: ${totalItems} / ${CHEST_STORAGE_LIMIT}`}
-      </p>
+      <div class="inv-hint-bar">
+        <span>E / ESC: 閉じる</span>
+        <span>ドラッグ: チェスト ↔ インベントリ</span>
+      </div>
     </div>
   );
 }

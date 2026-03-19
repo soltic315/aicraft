@@ -17,6 +17,9 @@ export function StartScreen() {
         class="start-btn"
         id="start-btn"
         onClick={() => {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
           const { eventBus } = window.__aicraft;
           eventBus.emit('start-clicked');
         }}
@@ -33,7 +36,7 @@ export function StartScreen() {
         左クリック：ブロック破壊　｜　右クリック：ブロック設置<br />
         1-9/0：ブロック選択　｜　マウスホイール：ブロック切替<br />
         Z：ツルハシ　｜　X：斧　｜　V：シャベル<br />
-        C：クラフトパネル　｜　P：設定パネル　｜　E：チェストを開く<br />
+        Tab：インベントリ・クラフト　｜　P：設定パネル　｜　E：チェストを開く<br />
         ESC：マウスロック解除　｜　ロック解除中に画面クリック：ゲーム復帰
       </div>
     </div>

@@ -63,6 +63,72 @@ export const useChestStore = create((set, get) => ({
     return true;
   },
 
+  // チェストから全スタックをインベントリへ転送（空きスロット自動）
+  transferAllFromChest(type) {
+    const { openedChestKey, storage } = get();
+    if (!openedChestKey) return false;
+    const chestData = storage.get(openedChestKey);
+    const count = chestData ? Math.max(0, Number(chestData[type] ?? 0)) : 0;
+    if (count <= 0) return false;
+    chestData[type] = 0;
+    useInventoryStore.getState().addItem(type, count);
+    set({ storage: new Map(storage) });
+    return true;
+  },
+
+  // チェストから全スタックを指定スロットへ転送（ドラッグ&ドロップ用）
+  transferFromChestToSlot(type, toSlot) {
+    const { openedChestKey, storage } = get();
+    if (!openedChestKey) return false;
+    const chestData = storage.get(openedChestKey);
+    const count = chestData ? Math.max(0, Number(chestData[type] ?? 0)) : 0;
+    if (count <= 0) return false;
+
+    const inv = useInventoryStore.getState();
+    const newSlots = inv.slots.map((s) => ({ ...s }));
+    const target = newSlots[toSlot];
+
+    if (target.type == null) {
+      // 空スロット: そのまま配置
+      newSlots[toSlot] = { type, count };
+    } else if (target.type === type) {
+      // 同種: スタック加算
+      newSlots[toSlot] = { type, count: target.count + count };
+    } else {
+      // 異種: 空き優先でインベントリに追加（スロット指定は諦めてaddItem）
+      chestData[type] = 0;
+      set({ storage: new Map(storage) });
+      inv.addItem(type, count);
+      return true;
+    }
+
+    chestData[type] = 0;
+    useInventoryStore.setState({ slots: newSlots });
+    set({ storage: new Map(storage) });
+    return true;
+  },
+
+  // インベントリの指定スロットを全てチェストへ預ける
+  depositSlot(slotIndex) {
+    const { openedChestKey, storage } = get();
+    if (!openedChestKey) return 'no-chest';
+    const chestData = storage.get(openedChestKey);
+    if (!chestData) return false;
+    const inv = useInventoryStore.getState();
+    const slot = inv.slots[slotIndex];
+    if (!slot || slot.type == null || slot.count <= 0) return false;
+    const totalItems = Object.values(chestData).reduce((sum, v) => sum + (Number(v) || 0), 0);
+    if (totalItems >= CHEST_STORAGE_LIMIT) return 'full';
+    const { type, count } = slot;
+    chestData[type] = (chestData[type] ?? 0) + count;
+    // スロットを空にする
+    const newSlots = inv.slots.map((s) => ({ ...s }));
+    newSlots[slotIndex] = { type: null, count: 0 };
+    useInventoryStore.setState({ slots: newSlots });
+    set({ storage: new Map(storage) });
+    return true;
+  },
+
   recoverChestItems(blockPos) {
     const key = getPosKey(blockPos.x, blockPos.y, blockPos.z);
     const { storage, openedChestKey } = get();
