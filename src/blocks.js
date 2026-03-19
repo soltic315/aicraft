@@ -14,6 +14,9 @@ export const BlockType = {
   CRAFTING_TABLE: 10,
   CHEST: 11,
   APPLE: 12,
+  PICKAXE: 13,
+  AXE: 14,
+  SHOVEL: 15,
 };
 
 export const BLOCK_NAMES = {
@@ -29,6 +32,9 @@ export const BLOCK_NAMES = {
   [BlockType.CRAFTING_TABLE]: '作業台',
   [BlockType.CHEST]: 'チェスト',
   [BlockType.APPLE]: 'リンゴ',
+  [BlockType.PICKAXE]: 'ツルハシ',
+  [BlockType.AXE]: '斧',
+  [BlockType.SHOVEL]: 'シャベル',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -417,9 +423,74 @@ function generateAppleIcon() {
   return canvas;
 }
 
+// ツルハシアイコン
+function generatePickaxeIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // ハンドル
+  ctx.strokeStyle = '#7B4F2E';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(7, 25); ctx.lineTo(20, 12); ctx.stroke();
+  // ヘッド横棒
+  ctx.fillStyle = '#B0BCC8';
+  ctx.fillRect(16, 8, 12, 4);
+  // 左の爪（下向き）
+  ctx.fillRect(16, 12, 4, 5);
+  // 右の爪（上向き）
+  ctx.fillRect(24, 3, 4, 5);
+  return c;
+}
+
+// 斧アイコン
+function generateAxeIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // ハンドル
+  ctx.strokeStyle = '#7B4F2E';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(22, 25); ctx.lineTo(12, 10); ctx.stroke();
+  // 刃（台形）
+  ctx.fillStyle = '#B0BCC8';
+  ctx.beginPath();
+  ctx.moveTo(8, 5); ctx.lineTo(20, 8); ctx.lineTo(17, 20); ctx.lineTo(8, 16);
+  ctx.closePath(); ctx.fill();
+  // 刃エッジ（明るい）
+  ctx.strokeStyle = '#D0DCE8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(8, 5); ctx.lineTo(8, 16); ctx.stroke();
+  return c;
+}
+
+// シャベルアイコン
+function generateShovelIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // ハンドル
+  ctx.strokeStyle = '#7B4F2E';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(16, 4); ctx.lineTo(16, 20); ctx.stroke();
+  // ブレード（長方形）
+  ctx.fillStyle = '#B0BCC8';
+  ctx.fillRect(10, 18, 12, 8);
+  // ブレード下端（半円）
+  ctx.beginPath();
+  ctx.arc(16, 26, 6, 0, Math.PI);
+  ctx.fill();
+  return c;
+}
+
 // Generate a small icon canvas for hotbar display
 export function generateBlockIcon(type) {
-  if (type === BlockType.APPLE) return generateAppleIcon();
+  if (type === BlockType.APPLE)   return generateAppleIcon();
+  if (type === BlockType.PICKAXE) return generatePickaxeIcon();
+  if (type === BlockType.AXE)     return generateAxeIcon();
+  if (type === BlockType.SHOVEL)  return generateShovelIcon();
 
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;

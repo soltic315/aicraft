@@ -37,6 +37,7 @@
     #settings-panel,
     #craft-panel,
     #chest-panel,
+    #inventory-panel,
     #loading-screen {
       pointer-events: auto;
     }
@@ -534,6 +535,160 @@
       color: #888;
       text-align: center;
       line-height: 1.8;
+    }
+
+    /* ===== インベントリパネル ===== */
+    #inventory-panel {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 480px;
+      max-width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+      overflow-y: auto;
+      background: rgba(18, 22, 36, 0.97);
+      border: 1px solid rgba(255,255,255,0.22);
+      border-radius: 10px;
+      padding: 14px;
+      color: #e8eeff;
+      font-family: monospace;
+      font-size: 12px;
+      z-index: 15;
+      backdrop-filter: blur(5px);
+      user-select: none;
+    }
+    .inv-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+      letter-spacing: 0.8px;
+      color: #fff;
+    }
+    .inv-close-btn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.28);
+      color: #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 2px 8px;
+      font-family: inherit;
+      font-size: 12px;
+    }
+    .inv-close-btn:hover { background: rgba(255,255,255,0.12); }
+    #inventory-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .inv-slot {
+      height: 74px;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.32);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: grab;
+      padding: 4px 4px 2px;
+      transition: border-color 80ms, background 80ms;
+    }
+    .inv-slot:hover { border-color: rgba(255,255,255,0.42); background: rgba(255,255,255,0.07); }
+    .inv-slot.inv-active { border-color: #fff; background: rgba(255,255,255,0.14); }
+    .inv-slot.inv-drag-over { border-color: #7cc8ff; background: rgba(100,180,255,0.15); }
+    .inv-slot.inv-active-tool { border-color: #7cc8ff; background: rgba(80,160,255,0.18); }
+    .inv-slot.inv-food-slot { border-color: rgba(255,200,80,0.5); }
+    .inv-slot-badge {
+      position: absolute; top: 2px; right: 3px;
+      font-size: 8px; color: rgba(180,200,255,0.7);
+      background: rgba(0,0,0,0.35); border-radius: 2px; padding: 0 2px;
+    }
+    .inv-badge-food { color: rgba(255,210,100,0.85); }
+    .inv-op-hint {
+      font-size: 10px; color: rgba(180,200,255,0.55);
+      margin-bottom: 10px; line-height: 1.5;
+    }
+    .inv-slot canvas { width: 36px; height: 36px; image-rendering: pixelated; }
+    .inv-slot-icon { display: flex; align-items: center; justify-content: center; }
+    .inv-slot-name {
+      font-size: 9px;
+      color: rgba(210,225,255,0.7);
+      margin-top: 2px;
+      max-width: 96%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .inv-slot-count {
+      position: absolute;
+      right: 4px; bottom: 3px;
+      color: #fff;
+      font-size: 11px;
+      text-shadow: 1px 1px 2px rgba(0,0,0,0.9);
+    }
+    .inv-slot-num {
+      position: absolute;
+      left: 4px; top: 2px;
+      color: rgba(255,255,255,0.45);
+      font-size: 9px;
+    }
+    .inv-divider { height: 1px; background: rgba(255,255,255,0.14); margin: 2px 0 10px; }
+    .inv-section { margin-bottom: 10px; }
+    .inv-section-title {
+      display: block;
+      font-size: 10px;
+      color: rgba(190,210,255,0.6);
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+    .inv-tool-row { display: flex; gap: 8px; }
+    .inv-tool-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 8px 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.3);
+      color: #e8eeff;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      transition: border-color 80ms, background 80ms;
+    }
+    .inv-tool-btn:hover { background: rgba(255,255,255,0.1); }
+    .inv-tool-btn.active { border-color: #7cc8ff; background: rgba(100,180,255,0.18); color: #fff; }
+    .inv-tool-icon { font-size: 22px; line-height: 1; }
+    .inv-tool-name { font-size: 11px; }
+    .inv-tool-key { font-size: 10px; color: rgba(190,210,255,0.5); }
+    .inv-food-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .inv-food-btn {
+      padding: 5px 12px;
+      border: 1px solid rgba(255,200,100,0.38);
+      border-radius: 5px;
+      background: rgba(55,35,0,0.5);
+      color: #ffd87a;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .inv-food-btn:hover { background: rgba(80,55,0,0.65); }
+    .inv-food-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+    .inv-hint-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      color: rgba(190,210,255,0.45);
+      font-size: 10px;
     }
   </style>
 </head>

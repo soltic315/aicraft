@@ -2,10 +2,23 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.3.0';
+export const GAME_VERSION = '3.7.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
+
+// インベントリスロット数
+export const HOTBAR_SIZE      = 9;   // ホットバー（1〜9キー）
+export const INVENTORY_SIZE   = 18;  // バックパック（インベントリ画面）
+export const TOTAL_SLOTS      = HOTBAR_SIZE + INVENTORY_SIZE; // 27
+
+// チェスト・回収に使うアイテム種別一覧
+export const ALL_ITEM_TYPES = [
+  BlockType.GRASS, BlockType.DIRT, BlockType.STONE, BlockType.WOOD,
+  BlockType.LEAVES, BlockType.SAND, BlockType.WATER, BlockType.PLANK,
+  BlockType.GLASS, BlockType.CRAFTING_TABLE, BlockType.CHEST,
+  BlockType.APPLE, BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL,
+];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 
 export const SPRINT_SPEED_MULTIPLIER = 1.3;
@@ -61,37 +74,29 @@ export const DEFAULT_SETTINGS = {
   highContrast: false,
 };
 
-export const HOTBAR_BLOCKS = [
-  BlockType.GRASS,
-  BlockType.DIRT,
-  BlockType.STONE,
-  BlockType.WOOD,
-  BlockType.LEAVES,
-  BlockType.SAND,
-  BlockType.WATER,
-  BlockType.PLANK,
-  BlockType.GLASS,
-  BlockType.CRAFTING_TABLE,
-  BlockType.CHEST,
-  BlockType.APPLE,
-];
-
-// 食料アイテムのセット（設置不可）
+// 食料アイテムのセット（設置不可・右クリックで食べる）
 export const FOOD_ITEMS = new Set([BlockType.APPLE]);
 
+// ツールアイテムのセット（設置不可・選択時に自動装備）
+export const TOOL_ITEMS = new Set([BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL]);
+
+// 全アイテムを 0 から開始（ブロック破壊・クラフトで入手）
 export const STARTER_INVENTORY = {
-  [BlockType.GRASS]: 16,
-  [BlockType.DIRT]: 16,
-  [BlockType.STONE]: 12,
-  [BlockType.WOOD]: 12,
-  [BlockType.LEAVES]: 8,
-  [BlockType.SAND]: 12,
-  [BlockType.WATER]: 6,
+  [BlockType.GRASS]: 0,
+  [BlockType.DIRT]: 0,
+  [BlockType.STONE]: 0,
+  [BlockType.WOOD]: 0,
+  [BlockType.LEAVES]: 0,
+  [BlockType.SAND]: 0,
+  [BlockType.WATER]: 0,
   [BlockType.PLANK]: 0,
   [BlockType.GLASS]: 0,
   [BlockType.CRAFTING_TABLE]: 0,
   [BlockType.CHEST]: 0,
   [BlockType.APPLE]: 0,
+  [BlockType.PICKAXE]: 0,
+  [BlockType.AXE]: 0,
+  [BlockType.SHOVEL]: 0,
 };
 
 export const CRAFT_RECIPES = [
@@ -118,6 +123,24 @@ export const CRAFT_RECIPES = [
     label: '板材 x8 -> チェスト x1',
     consumes: { [BlockType.PLANK]: 8 },
     produces: { [BlockType.CHEST]: 1 },
+  },
+  {
+    id: 'pickaxe_from_plank',
+    label: '板材 x2 -> ツルハシ x1',
+    consumes: { [BlockType.PLANK]: 2 },
+    produces: { [BlockType.PICKAXE]: 1 },
+  },
+  {
+    id: 'axe_from_plank',
+    label: '板材 x2 -> 斧 x1',
+    consumes: { [BlockType.PLANK]: 2 },
+    produces: { [BlockType.AXE]: 1 },
+  },
+  {
+    id: 'shovel_from_plank',
+    label: '板材 x2 -> シャベル x1',
+    consumes: { [BlockType.PLANK]: 2 },
+    produces: { [BlockType.SHOVEL]: 1 },
   },
 ];
 

@@ -4,6 +4,7 @@ export const useUIStore = create((set, get) => ({
   settingsOpen: false,
   craftOpen: false,
   chestOpen: false,
+  inventoryOpen: false,
   resumeHintVisible: false,
   waterOverlay: false,
   actionFeedback: '',
@@ -18,6 +19,12 @@ export const useUIStore = create((set, get) => ({
   toggleCraft() {
     const isNow = !get().craftOpen;
     set({ craftOpen: isNow });
+    return isNow;
+  },
+
+  toggleInventory() {
+    const isNow = !get().inventoryOpen;
+    set({ inventoryOpen: isNow });
     return isNow;
   },
 

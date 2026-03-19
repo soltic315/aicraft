@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  HOTBAR_BLOCKS,
+  ALL_ITEM_TYPES,
   CHEST_STORAGE_LIMIT,
   getPosKey,
   parsePosKey,
@@ -16,7 +16,8 @@ export const useChestStore = create((set, get) => ({
     const { storage } = get();
     let data = storage.get(key);
     if (!data && createIfMissing) {
-      data = Object.fromEntries(HOTBAR_BLOCKS.map((type) => [type, 0]));
+      // 全アイテム種別を 0 で初期化
+      data = Object.fromEntries(ALL_ITEM_TYPES.map((type) => [type, 0]));
       storage.set(key, data);
       set({ storage: new Map(storage) });
     }
@@ -73,13 +74,14 @@ export const useChestStore = create((set, get) => ({
 
     let recovered = 0;
     const inv = useInventoryStore.getState();
-    HOTBAR_BLOCKS.forEach((type) => {
-      const count = Math.max(0, Math.floor(chestData[type] ?? 0));
+    // チェストデータのキーを走査（0 以上の個数があるものだけ戻す）
+    for (const [typeStr, cnt] of Object.entries(chestData)) {
+      const count = Math.max(0, Math.floor(Number(cnt) || 0));
       if (count > 0) {
-        inv.addItem(type, count);
+        inv.addItem(Number(typeStr), count);
         recovered += count;
       }
-    });
+    }
 
     storage.delete(key);
     const updates = { storage: new Map(storage) };

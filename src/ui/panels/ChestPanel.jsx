@@ -2,14 +2,14 @@ import { h } from 'preact';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
-import { HOTBAR_BLOCKS, CHEST_STORAGE_LIMIT, parsePosKey } from '../../config.js';
+import { ALL_ITEM_TYPES, CHEST_STORAGE_LIMIT, parsePosKey } from '../../config.js';
 import { BLOCK_NAMES } from '../../blocks.js';
 
 export function ChestPanel() {
-  const chestOpen = useUIStore((s) => s.chestOpen);
+  const chestOpen      = useUIStore((s) => s.chestOpen);
   const openedChestKey = useChestStore((s) => s.openedChestKey);
-  const storage = useChestStore((s) => s.storage);
-  const invCounts = useInventoryStore((s) => s.counts);
+  const storage        = useChestStore((s) => s.storage);
+  const slots          = useInventoryStore((s) => s.slots);
 
   if (!chestOpen || !openedChestKey) return null;
 
@@ -19,6 +19,9 @@ export function ChestPanel() {
   const chestPos = parsePosKey(openedChestKey);
   const totalItems = Object.values(chestData).reduce((sum, v) => sum + (Number(v) || 0), 0);
 
+  // インベントリの各アイテム数
+  const getInvCount = (type) => slots.reduce((sum, s) => (s.type === type ? sum + s.count : sum), 0);
+
   return (
     <div id="chest-panel" style={{ display: 'block' }} aria-label="チェストパネル">
       <h2>チェスト（E で開く / 閉じる）</h2>
@@ -26,7 +29,7 @@ export function ChestPanel() {
       <div class="chest-panel-section">
         <p class="chest-panel-title">チェスト在庫</p>
         <div id="chest-storage-list" class="chest-list">
-          {HOTBAR_BLOCKS.map((type) => {
+          {ALL_ITEM_TYPES.map((type) => {
             const count = Number(chestData[type] ?? 0);
             return (
               <div key={`chest-${type}`} class="chest-row">
@@ -55,8 +58,8 @@ export function ChestPanel() {
       <div class="chest-panel-section">
         <p class="chest-panel-title">所持品</p>
         <div id="chest-player-list" class="chest-list">
-          {HOTBAR_BLOCKS.map((type) => {
-            const count = invCounts[type] ?? 0;
+          {ALL_ITEM_TYPES.map((type) => {
+            const count = getInvCount(type);
             return (
               <div key={`inv-${type}`} class="chest-row">
                 <span>{BLOCK_NAMES[type]} x{count}</span>

@@ -5,7 +5,6 @@ import { useDayNightStore } from '../../stores/dayNightStore.js';
 import { usePlayerStore } from '../../stores/playerStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { useToolStore } from '../../stores/toolStore.js';
-import { HOTBAR_BLOCKS } from '../../config.js';
 import { BLOCK_NAMES } from '../../blocks.js';
 import { TOOL_NAMES } from '../../tools.js';
 
@@ -13,7 +12,6 @@ export function InfoOverlay() {
   const elRef = useRef(null);
 
   useEffect(() => {
-    // Use direct subscriptions for high-frequency updates
     const update = () => {
       const el = elRef.current;
       if (!el) return;
@@ -21,12 +19,13 @@ export function InfoOverlay() {
       const { fps } = useGameStore.getState();
       const { cycleRatio, isDay } = useDayNightStore.getState();
       const { position, health, maxHealth } = usePlayerStore.getState();
-      const { selectedSlot, counts } = useInventoryStore.getState();
+      const { selectedSlot, slots } = useInventoryStore.getState();
       const { selectedTool } = useToolStore.getState();
 
-      const blockType = HOTBAR_BLOCKS[selectedSlot];
-      const blockName = BLOCK_NAMES[blockType] || '';
-      const selectedCount = counts[blockType] ?? 0;
+      const selectedSlotData = slots[selectedSlot];
+      const blockType = selectedSlotData?.type ?? null;
+      const blockName = blockType != null ? (BLOCK_NAMES[blockType] || '') : '（空）';
+      const selectedCount = selectedSlotData?.count ?? 0;
       const toolName = TOOL_NAMES[selectedTool] || '-';
 
       el.innerHTML =
@@ -34,7 +33,7 @@ export function InfoOverlay() {
         `時刻: ${isDay ? '昼' : '夜'} (${Math.floor(cycleRatio * 24).toString().padStart(2, '0')}:00)<br>` +
         `座標: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}<br>` +
         `体力: ${Math.round(health)} / ${maxHealth}<br>` +
-        `選択: ${blockName} x${selectedCount}<br>` +
+        `選択: ${blockName}${blockType != null ? ` x${selectedCount}` : ''}<br>` +
         `道具: ${toolName}`;
     };
 

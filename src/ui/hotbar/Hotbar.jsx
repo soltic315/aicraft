@@ -1,47 +1,56 @@
 import { h } from 'preact';
-import { memo } from 'preact/compat';
-import { useRef, useEffect } from 'preact/hooks';
+import { memo, useMemo } from 'preact/compat';
 import { generateBlockIcon } from '../../blocks.js';
-import { HOTBAR_BLOCKS } from '../../config.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
+import { HOTBAR_SIZE } from '../../config.js';
 
-const HotbarSlot = memo(function HotbarSlot({ type, index, isActive, count }) {
-  const iconRef = useRef(null);
+/** スロットタイプに対応するアイコン画像URL（null なら null を返す） */
+function getIconUrl(type) {
+  if (type == null) return null;
+  const canvas = generateBlockIcon(type);
+  return canvas ? canvas.toDataURL() : null;
+}
 
-  useEffect(() => {
-    const container = iconRef.current;
-    if (!container) return;
-    container.innerHTML = '';
-    const icon = generateBlockIcon(type);
-    if (icon) container.appendChild(icon);
-  }, [type]);
-
-  const label = index === 9 ? '0' : String(index + 1);
+const HotbarSlot = memo(function HotbarSlot({ slotType, index, isActive, count }) {
+  // slotType が変わったときのみ URL を再計算
+  const iconUrl = useMemo(() => getIconUrl(slotType), [slotType]);
+  const label = String(index + 1);
 
   return (
     <div class={`hotbar-slot${isActive ? ' active' : ''}`}>
       <span class="slot-num">{label}</span>
-      <span ref={iconRef} />
-      <span class="slot-count">{count}</span>
+      {iconUrl && (
+        <img
+          src={iconUrl}
+          width={40}
+          height={40}
+          alt=""
+          style={{ imageRendering: 'pixelated', display: 'block' }}
+        />
+      )}
+      {slotType != null && <span class="slot-count">{count}</span>}
     </div>
   );
 });
 
 export function Hotbar() {
   const selectedSlot = useInventoryStore((s) => s.selectedSlot);
-  const counts = useInventoryStore((s) => s.counts);
+  const slots        = useInventoryStore((s) => s.slots);
 
   return (
     <div id="hud">
-      {HOTBAR_BLOCKS.map((type, i) => (
-        <HotbarSlot
-          key={type}
-          type={type}
-          index={i}
-          isActive={i === selectedSlot}
-          count={counts[type] ?? 0}
-        />
-      ))}
+      {Array.from({ length: HOTBAR_SIZE }, (_, i) => {
+        const slot = slots[i];
+        return (
+          <HotbarSlot
+            key={i}
+            slotType={slot?.type ?? null}
+            index={i}
+            isActive={i === selectedSlot}
+            count={slot?.count ?? 0}
+          />
+        );
+      })}
     </div>
   );
 }

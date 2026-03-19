@@ -1,6 +1,5 @@
 // Keyboard and mouse input capture
-import { HOTBAR_BLOCKS } from './config.js';
-import { ToolType } from './tools.js';
+import { HOTBAR_SIZE } from './config.js';
 
 export class InputManager {
   constructor(eventBus) {
@@ -40,15 +39,9 @@ export class InputManager {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
     document.addEventListener('keydown', (e) => {
-      // Slot selection: 0 key → slot 9
-      if (e.key === '0' && HOTBAR_BLOCKS.length >= 10) {
-        this.eventBus.emit('slot-selected', 9);
-        return;
-      }
-
-      // Slot selection: 1-9 keys
+      // Slot selection: 1-9 keys (ホットバーは9スロット固定)
       const num = Number.parseInt(e.key, 10);
-      if (!Number.isNaN(num) && num >= 1 && num <= Math.min(HOTBAR_BLOCKS.length, 9)) {
+      if (!Number.isNaN(num) && num >= 1 && num <= Math.min(HOTBAR_SIZE, 9)) {
         this.eventBus.emit('slot-selected', num - 1);
         return;
       }
@@ -56,13 +49,8 @@ export class InputManager {
       // Panel toggles and interactions
       if (e.code === 'KeyP') this.eventBus.emit('toggle-settings');
       if (e.code === 'KeyC') this.eventBus.emit('toggle-craft');
+      if (e.code === 'KeyI') this.eventBus.emit('toggle-inventory');
       if (e.code === 'KeyE') this.eventBus.emit('interact-chest');
-      if (e.code === 'KeyF') this.eventBus.emit('eat-food');
-
-      // Tool selection
-      if (e.code === 'KeyZ') this.eventBus.emit('tool-selected', ToolType.PICKAXE);
-      if (e.code === 'KeyX') this.eventBus.emit('tool-selected', ToolType.AXE);
-      if (e.code === 'KeyV') this.eventBus.emit('tool-selected', ToolType.SHOVEL);
     });
 
     document.addEventListener('wheel', (e) => {

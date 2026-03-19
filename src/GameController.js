@@ -16,8 +16,8 @@ import {
   AUTO_SAVE_INTERVAL_MS,
   DAY_NIGHT_CYCLE_SECONDS,
   PLACE_COOLDOWN,
-  HOTBAR_BLOCKS,
   FOOD_ITEMS,
+  TOOL_ITEMS,
   CHEST_STORAGE_LIMIT,
   DAY_SKY_COLOR,
   NIGHT_SKY_COLOR,
@@ -56,7 +56,7 @@ import { useBreakStore } from './stores/breakStore.js';
 import { useUIStore } from './stores/uiStore.js';
 import { useToolStore } from './stores/toolStore.js';
 import { useHungerStore } from './stores/hungerStore.js';
-import { TOOL_NAMES, getToolBreakMultiplier, isToolType } from './tools.js';
+import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -243,10 +243,11 @@ export class GameController {
       this._saveGame({ showFeedback: false });
     });
 
-    // Canvas click to re-lock
+    // Canvas click to re-lock（インベントリ等のパネルが開いている間はロックしない）
     this.renderer.domElement.addEventListener('click', () => {
       void this.sound.ensureStarted();
       if (!this.gameStarted || this.player.locked) return;
+      if (useUIStore.getState().inventoryOpen) return;
       this.player.lock();
     });
 
@@ -278,17 +279,20 @@ export class GameController {
 
     this.eventBus.on('slot-selected', (slot) => {
       useInventoryStore.getState().setSlot(slot);
+      this._onSlotChanged();
     });
 
     this.eventBus.on('slot-scroll', (deltaY) => {
       if (!this.player.locked) return;
       useInventoryStore.getState().scrollSlot(deltaY);
+      this._onSlotChanged();
     });
 
-    this.eventBus.on('tool-selected', (toolType) => {
-      if (!isToolType(toolType)) return;
-      useToolStore.getState().setTool(toolType);
-      useUIStore.getState().showFeedback(`道具切替: ${TOOL_NAMES[toolType]}`, 900);
+    // スロット内容変更時も追従（ドラッグ&ドロップ等）
+    useInventoryStore.subscribe((state, prev) => {
+      if (state.selectedSlot !== prev.selectedSlot || state.slots !== prev.slots) {
+        this._onSlotChanged();
+      }
     });
 
     this.eventBus.on('toggle-settings', () => {
@@ -300,6 +304,13 @@ export class GameController {
 
     this.eventBus.on('toggle-craft', () => {
       const opened = useUIStore.getState().toggleCraft();
+      if (opened && document.pointerLockElement === document.body) {
+        document.exitPointerLock();
+      }
+    });
+
+    this.eventBus.on('toggle-inventory', () => {
+      const opened = useUIStore.getState().toggleInventory();
       if (opened && document.pointerLockElement === document.body) {
         document.exitPointerLock();
       }
@@ -347,6 +358,7 @@ export class GameController {
 
             this.world.update(this.player.position.x, this.player.position.z, this.camera);
             this.gameStarted = true;
+            this._onSlotChanged(); // 初期スロットのツールを装備
             useGameStore.getState().startGame();
             this._startAutoSave();
             this.player.lock();
@@ -380,9 +392,9 @@ export class GameController {
       this.player.lock();
     });
 
-    this.eventBus.on('eat-food', () => {
-      if (!this.player.locked) return;
-      this._tryEatFood();
+    this.eventBus.on('eat-food', (foodType) => {
+      if (!this.gameStarted) return;
+      this._tryEatFood(foodType);
     });
   }
 
@@ -422,13 +434,8 @@ export class GameController {
 
   _saveGame({ showFeedback = true } = {}) {
     try {
-      const { counts: inventoryCounts, selectedSlot } = useInventoryStore.getState();
+      const { slots, selectedSlot } = useInventoryStore.getState();
       const { selectedTool } = useToolStore.getState();
-      const inventory = {};
-      Object.entries(inventoryCounts).forEach(([key, value]) => {
-        inventory[key] = Number(value) || 0;
-      });
-
       const chestState = useChestStore.getState().exportForSave();
       const settings = useSettingsStore.getState();
       const { hunger } = useHungerStore.getState();
@@ -445,7 +452,7 @@ export class GameController {
           },
           yaw: this.player.yaw,
           pitch: this.player.pitch,
-          inventory,
+          inventory: slots.map((s) => ({ type: s.type, count: s.count })),
           selectedSlot,
           selectedTool,
           hunger,
@@ -558,17 +565,33 @@ export class GameController {
     }
   }
 
+  // ---- スロット変更時の処理（ツール自動装備） ----
+
+  _onSlotChanged() {
+    const { selectedSlot, slots } = useInventoryStore.getState();
+    const slot = slots[selectedSlot];
+    const toolType = slot?.type != null ? ITEM_TO_TOOL_TYPE[slot.type] : null;
+    if (toolType) {
+      useToolStore.getState().setTool(toolType);
+    }
+  }
+
   // ---- 食料消費 ----
 
-  _tryEatFood() {
-    const { selectedSlot } = useInventoryStore.getState();
-    const selectedType = HOTBAR_BLOCKS[selectedSlot];
+  _tryEatFood(foodType) {
+    // foodType 未指定の場合は選択スロットから取得
+    if (!foodType) {
+      const { selectedSlot, slots } = useInventoryStore.getState();
+      foodType = slots[selectedSlot]?.type ?? null;
+    }
 
-    if (!FOOD_ITEMS.has(selectedType)) {
+    if (!FOOD_ITEMS.has(foodType)) {
       useUIStore.getState().showFeedback('食べられるものが選択されていません');
       this.sound.playError();
       return;
     }
+
+    const selectedType = foodType;
 
     const hungerStore = useHungerStore.getState();
     if (hungerStore.hunger >= hungerStore.maxHunger) {
@@ -620,12 +643,24 @@ export class GameController {
       return;
     }
 
-    const { selectedSlot } = useInventoryStore.getState();
-    const placeType = HOTBAR_BLOCKS[selectedSlot];
+    const { selectedSlot, slots } = useInventoryStore.getState();
+    const placeType = slots[selectedSlot]?.type ?? null;
 
-    // 食料アイテムは設置不可
+    if (placeType == null) {
+      useUIStore.getState().showFeedback('選択中のスロットは空です', 800);
+      this.sound.playError();
+      return;
+    }
+
+    // 食料アイテムは右クリックで食べる
     if (FOOD_ITEMS.has(placeType)) {
-      useUIStore.getState().showFeedback('食べ物は設置できません。F キーで食べてください', 1200);
+      this._tryEatFood(placeType);
+      return;
+    }
+
+    // ツールアイテムは設置不可
+    if (TOOL_ITEMS.has(placeType)) {
+      useUIStore.getState().showFeedback('ツールは設置できません', 800);
       this.sound.playError();
       return;
     }
@@ -655,9 +690,12 @@ export class GameController {
 
   _updateBreaking(hit, now) {
     const selectedTool = useToolStore.getState().selectedTool;
-    const key = `${getPosKey(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)}|${selectedTool}`;
+    // ツールを持っていない場合は補正なし（素手扱い）
+    const toolItemType = TOOL_TYPE_TO_ITEM[selectedTool];
+    const hasTool = toolItemType != null && useInventoryStore.getState().getCount(toolItemType) > 0;
+    const key = `${getPosKey(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)}|${selectedTool}|${hasTool}`;
     const baseDuration = BLOCK_BREAK_DURATIONS[hit.blockType] ?? 0.5;
-    const multiplier = getToolBreakMultiplier(selectedTool, hit.blockType);
+    const multiplier = hasTool ? getToolBreakMultiplier(selectedTool, hit.blockType) : 1;
     const duration = Math.max(0.08, baseDuration / multiplier);
 
     if (this.breakState.key !== key) {

@@ -4,14 +4,17 @@ import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { CRAFT_RECIPES } from '../../config.js';
 
 export function CraftPanel() {
-  const open = useUIStore((s) => s.craftOpen);
-  const counts = useInventoryStore((s) => s.counts);
+  const open  = useUIStore((s) => s.craftOpen);
+  const slots = useInventoryStore((s) => s.slots);
 
   if (!open) return null;
 
+  // slots から各アイテム数を計算
+  const getCount = (type) => slots.reduce((sum, s) => (s.type === type ? sum + s.count : sum), 0);
+
   const hasIngredients = (recipe) => {
     return Object.entries(recipe.consumes).every(
-      ([type, amount]) => (counts[Number(type)] ?? 0) >= amount,
+      ([type, amount]) => getCount(Number(type)) >= amount,
     );
   };
 
