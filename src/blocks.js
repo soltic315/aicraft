@@ -9,6 +9,10 @@ export const BlockType = {
   LEAVES: 5,
   SAND: 6,
   WATER: 7,
+  PLANK: 8,
+  GLASS: 9,
+  CRAFTING_TABLE: 10,
+  CHEST: 11,
 };
 
 export const BLOCK_NAMES = {
@@ -19,6 +23,10 @@ export const BLOCK_NAMES = {
   [BlockType.LEAVES]: '葉',
   [BlockType.SAND]: '砂',
   [BlockType.WATER]: '水',
+  [BlockType.PLANK]: '板材',
+  [BlockType.GLASS]: 'ガラス',
+  [BlockType.CRAFTING_TABLE]: '作業台',
+  [BlockType.CHEST]: 'チェスト',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -28,6 +36,10 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.WOOD]: 0.9,
   [BlockType.LEAVES]: 0.2,
   [BlockType.SAND]: 0.4,
+  [BlockType.PLANK]: 0.5,
+  [BlockType.GLASS]: 0.35,
+  [BlockType.CRAFTING_TABLE]: 1.0,
+  [BlockType.CHEST]: 1.1,
 };
 
 // Color palettes for each block type (top, side, bottom)
@@ -80,6 +92,34 @@ const BLOCK_COLORS = {
     bottom: '#2050a0',
     topDetail: '#2860b0',
     sideDetail: '#2050a0',
+  },
+  [BlockType.PLANK]: {
+    top: '#c79a63',
+    side: '#b88952',
+    bottom: '#c79a63',
+    topDetail: '#ab7f48',
+    sideDetail: '#9f7441',
+  },
+  [BlockType.GLASS]: {
+    top: '#9fd6e9',
+    side: '#8ac8de',
+    bottom: '#88c3d8',
+    topDetail: '#d5f0fb',
+    sideDetail: '#c2e6f6',
+  },
+  [BlockType.CRAFTING_TABLE]: {
+    top: '#9b6d3f',
+    side: '#7b4d29',
+    bottom: '#a67949',
+    topDetail: '#d7b26e',
+    sideDetail: '#5f3a1f',
+  },
+  [BlockType.CHEST]: {
+    top: '#b27a3f',
+    side: '#8f5b2d',
+    bottom: '#7a4a24',
+    topDetail: '#d49c5d',
+    sideDetail: '#5f3518',
   },
 };
 
@@ -163,6 +203,62 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
       ctx.fillStyle = rand() > 0.5 ? '#2d6018' : '#48a228';
       ctx.fillRect(px, py, pixelSize, pixelSize);
     }
+  } else if (pattern === 'plank') {
+    for (let y = 0; y < 16; y++) {
+      if (y % 4 === 0) {
+        ctx.fillStyle = '#9f7441';
+        ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.6));
+      }
+    }
+    for (let i = 0; i < 16; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#d1a36a' : '#ae824c';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+  } else if (pattern === 'glass') {
+    ctx.strokeStyle = 'rgba(235, 248, 255, 0.7)';
+    ctx.lineWidth = Math.max(1, pixelSize * 0.5);
+    ctx.strokeRect(pixelSize * 1.5, pixelSize * 1.5, size - pixelSize * 3, size - pixelSize * 3);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.beginPath();
+    ctx.moveTo(pixelSize * 3, pixelSize * 4);
+    ctx.lineTo(pixelSize * 7, pixelSize * 2);
+    ctx.stroke();
+  } else if (pattern === 'crafting_top') {
+    for (let x = 0; x < 16; x += 4) {
+      for (let y = 0; y < 16; y += 4) {
+        ctx.fillStyle = (x + y) % 8 === 0 ? '#c79a63' : '#8b5f34';
+        ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize * 4, pixelSize * 4);
+      }
+    }
+    ctx.strokeStyle = '#5a3620';
+    ctx.lineWidth = Math.max(1, pixelSize * 0.6);
+    ctx.strokeRect(0, 0, size, size);
+  } else if (pattern === 'crafting_side') {
+    for (let y = 1; y < 16; y += 3) {
+      ctx.fillStyle = y % 2 === 0 ? '#6f4526' : '#8b5d34';
+      ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.8));
+    }
+    ctx.fillStyle = '#4f2f18';
+    ctx.fillRect(pixelSize * 2, pixelSize * 5, pixelSize * 12, pixelSize * 6);
+  } else if (pattern === 'chest_top') {
+    for (let y = 2; y < 16; y += 4) {
+      ctx.fillStyle = y % 8 === 2 ? '#c79151' : '#9b6733';
+      ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.8));
+    }
+    ctx.strokeStyle = '#4f2b13';
+    ctx.lineWidth = Math.max(1, pixelSize * 0.6);
+    ctx.strokeRect(0, 0, size, size);
+  } else if (pattern === 'chest_side') {
+    for (let y = 1; y < 16; y += 3) {
+      ctx.fillStyle = y % 2 === 0 ? '#7f4f26' : '#9a6532';
+      ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.85));
+    }
+    ctx.fillStyle = '#3b250f';
+    ctx.fillRect(pixelSize * 1.5, pixelSize * 6, pixelSize * 13, pixelSize * 1.6);
+    ctx.fillStyle = '#c9a15c';
+    ctx.fillRect(pixelSize * 7.2, pixelSize * 5.3, pixelSize * 1.6, pixelSize * 2.2);
   }
 
   return canvas;
@@ -249,6 +345,18 @@ export function generateTextures() {
     [BlockType.LEAVES]: { top: 'leaves', side: 'leaves', bottom: 'leaves' },
     [BlockType.SAND]: { top: 'noise', side: 'noise', bottom: 'noise' },
     [BlockType.WATER]: { top: 'noise', side: 'noise', bottom: 'noise' },
+    [BlockType.PLANK]: { top: 'plank', side: 'plank', bottom: 'plank' },
+    [BlockType.GLASS]: { top: 'glass', side: 'glass', bottom: 'glass' },
+    [BlockType.CRAFTING_TABLE]: {
+      top: 'crafting_top',
+      side: 'crafting_side',
+      bottom: 'plank',
+    },
+    [BlockType.CHEST]: {
+      top: 'chest_top',
+      side: 'chest_side',
+      bottom: 'plank',
+    },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {

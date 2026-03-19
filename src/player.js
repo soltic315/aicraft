@@ -10,6 +10,14 @@ const PLAYER_RADIUS = 0.3;
 const PLAYER_COLLISION_HEIGHT = 1.8;
 const DEFAULT_MOUSE_SENSITIVITY = 0.002;
 const COLLISION_EPSILON = 0.001;
+const DEFAULT_MAX_HEALTH = 20;
+const HEALTH_REGEN_COOLDOWN = 3.5;
+
+const HEALTH_REGEN_TIERS = [
+  { maxRatio: 0.35, perSecond: 0.7 },
+  { maxRatio: 0.75, perSecond: 1.15 },
+  { maxRatio: 1, perSecond: 0.85 },
+];
 
 export class Player {
   constructor(camera, world, options = {}) {
@@ -25,6 +33,10 @@ export class Player {
     this.keys = {};
     this.locked = false;
     this.mouseSensitivity = options.mouseSensitivity ?? DEFAULT_MOUSE_SENSITIVITY;
+
+    this.maxHealth = options.maxHealth ?? DEFAULT_MAX_HEALTH;
+    this.health = this.maxHealth;
+    this.healthRegenCooldown = 0;
 
     this._initControls();
   }
@@ -56,6 +68,7 @@ export class Player {
     const spawnY = this.world.getSpawnHeight(8, 8);
     this.position.set(8, spawnY, 8);
     this.velocity.set(0, 0, 0);
+    this.restoreHealth();
   }
 
   update(dt) {
@@ -95,6 +108,8 @@ export class Player {
     if (this.position.y < -10) {
       this.spawn();
     }
+
+    this._updateHealth(dt);
 
     // Update camera
     this.camera.position.copy(this.position);
@@ -264,5 +279,56 @@ export class Player {
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     this.mouseSensitivity = Math.min(Math.max(num, 0.0005), 0.008);
+  }
+
+  applyDamage(amount) {
+    const damage = Math.max(0, Number(amount) || 0);
+    if (damage <= 0) return 0;
+
+    const prev = this.health;
+    this.health = Math.max(0, this.health - damage);
+    this.healthRegenCooldown = HEALTH_REGEN_COOLDOWN;
+    return prev - this.health;
+  }
+
+  heal(amount) {
+    const healAmount = Math.max(0, Number(amount) || 0);
+    if (healAmount <= 0) return 0;
+
+    const prev = this.health;
+    this.health = Math.min(this.maxHealth, this.health + healAmount);
+    return this.health - prev;
+  }
+
+  restoreHealth() {
+    this.health = this.maxHealth;
+    this.healthRegenCooldown = 0;
+  }
+
+  getHealthRatio() {
+    if (this.maxHealth <= 0) return 0;
+    return this.health / this.maxHealth;
+  }
+
+  _updateHealth(dt) {
+    if (this.health >= this.maxHealth) return;
+
+    if (this.healthRegenCooldown > 0) {
+      this.healthRegenCooldown = Math.max(0, this.healthRegenCooldown - dt);
+      return;
+    }
+
+    // Regen is intentionally gated to grounded state so players can recover safely.
+    if (this.onGround) {
+      this.heal(this._getHealthRegenPerSecond() * dt);
+    }
+  }
+
+  _getHealthRegenPerSecond() {
+    if (this.maxHealth <= 0) return 0;
+
+    const ratio = this.health / this.maxHealth;
+    const tier = HEALTH_REGEN_TIERS.find((entry) => ratio <= entry.maxRatio);
+    return tier ? tier.perSecond : HEALTH_REGEN_TIERS[HEALTH_REGEN_TIERS.length - 1].perSecond;
   }
 }
