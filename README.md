@@ -66,15 +66,21 @@ npm run preview
 
 ```
 aicraft/
-├── index.html          # エントリ HTML
-├── vite.config.js      # Vite 設定
+├── index.html              # エントリ HTML
+├── vite.config.js          # Vite 設定
 ├── package.json
 └── src/
-    ├── main.js         # ゲームループ・シーン構築・UI
-    ├── world.js        # チャンク管理・地形生成・メッシュ構築
-    ├── player.js       # プレイヤー操作・物理・衝突判定
-    ├── blocks.js       # ブロック定義・テクスチャ生成
-    └── noise.js        # Perlin ノイズ
+    ├── main.js             # エントリポイント（モジュール初期化）
+    ├── GameController.js   # ゲームループ・シーン管理・状態管理
+    ├── InputManager.js     # キーボード・マウス入力の捕捉
+    ├── UIManager.js        # HUD・パネル等の DOM 操作
+    ├── SoundManager.js     # 効果音・BGM 管理
+    ├── eventBus.js         # Pub/Sub イベントシステム
+    ├── config.js           # 定数・ユーティリティ関数
+    ├── world.js            # チャンク管理・地形生成・メッシュ構築
+    ├── player.js           # プレイヤー操作・物理・衝突判定
+    ├── blocks.js           # ブロック定義・テクスチャ生成
+    └── noise.js            # Perlin ノイズ
 ```
 
 ## デプロイ
@@ -96,3 +102,4 @@ aicraft/
 - `P` キーで設定パネルを開閉
 - 調整可能項目: 感度、BGM 音量、SE 音量、描画距離
 - 設定は `localStorage` に保存され、再起動後も復元
+- ゲーム進行は自動セーブ（30 秒ごと + ブラウザ終了直前）され、次回起動時に続きからプレイ可能

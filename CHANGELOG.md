@@ -3,6 +3,23 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [2.0.0] - 2026-03-20
+
+### Changed
+
+- `main.js`（1328 行）を `GameController`・`InputManager`・`UIManager`・`SoundManager`・`config`・`eventBus` の 6 モジュールに分割し、エントリポイントを 14 行に削減
+- 散在していたマジックナンバー・定数・ユーティリティ関数を `src/config.js` に集約
+- Pub/Sub イベントシステム（`src/eventBus.js`）を導入し、入力・UI 更新を疎結合化
+- 50 以上のグローバル変数を `GameController`・`UIManager`・`InputManager` クラスのインスタンスプロパティに封じ込め
+
+## [1.6.1] - 2026-03-20
+
+### Added
+
+- セーブ / ロード機能を追加し、プレイ状態（ワールド編集・プレイヤー位置・インベントリ・チェストなど）をローカルストレージに保存・復元するように変更
+- 30 秒ごとのオートセーブとブラウザ終了直前の自動セーブを追加
+- 設定パネルに「セーブ」「セーブ削除」ボタンを追加
+
 ## [1.6.0] - 2026-03-20
 
 ### Added

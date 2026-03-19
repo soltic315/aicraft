@@ -13,15 +13,53 @@ export class World {
     this.scene = scene;
     this.blockMaterials = blockMaterials;
     this.chunks = new Map();
-    this.noise = new Noise(Math.floor(Math.random() * 100000));
+    this.seed = Number.isFinite(options.seed) ? options.seed : Math.floor(Math.random() * 100000);
+    this.noise = new Noise(this.seed);
     this.treePlaced = new Set();
     this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
+
+    // Chunk-level edits applied after terrain generation.
+    // Keyed by chunk key ("cx,cz") and contains an array of {x,y,z,type} edits.
+    this.chunkEdits = new Map();
   }
 
   setRenderDistance(distance) {
     const next = Math.floor(Number(distance));
     if (!Number.isFinite(next)) return;
     this.renderDistance = Math.min(Math.max(next, 2), 8);
+  }
+
+  applyChunkEdits(edits = []) {
+    this.chunkEdits.clear();
+    for (const edit of edits) {
+      if (!edit || typeof edit !== 'object') continue;
+      const { x, y, z, type } = edit;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z) || !Number.isFinite(type)) continue;
+      this.recordChunkEdit(x, y, z, type);
+    }
+  }
+
+  recordChunkEdit(x, y, z, type) {
+    const cx = Math.floor(x / CHUNK_SIZE);
+    const cz = Math.floor(z / CHUNK_SIZE);
+    const key = this._chunkKey(cx, cz);
+    let chunkMap = this.chunkEdits.get(key);
+    if (!chunkMap) {
+      chunkMap = new Map();
+      this.chunkEdits.set(key, chunkMap);
+    }
+    const posKey = `${x},${y},${z}`;
+    chunkMap.set(posKey, { x, y, z, type });
+  }
+
+  exportChunkEdits() {
+    const edits = [];
+    for (const chunkMap of this.chunkEdits.values()) {
+      for (const edit of chunkMap.values()) {
+        edits.push(edit);
+      }
+    }
+    return edits;
   }
 
   _chunkKey(cx, cz) {
@@ -71,6 +109,11 @@ export class World {
     if (lx === CHUNK_SIZE - 1) this._rebuildChunkMesh(cx + 1, cz);
     if (lz === 0) this._rebuildChunkMesh(cx, cz - 1);
     if (lz === CHUNK_SIZE - 1) this._rebuildChunkMesh(cx, cz + 1);
+  }
+
+  setBlockWithDiff(x, y, z, type) {
+    this.setBlock(x, y, z, type);
+    this.recordChunkEdit(x, y, z, type);
   }
 
   _generateChunkData(cx, cz) {
@@ -146,6 +189,19 @@ export class World {
               }
             }
           }
+        }
+      }
+    }
+
+    // Apply saved chunk edits (diffs) to override generated terrain.
+    const chunkKey = this._chunkKey(cx, cz);
+    const editsMap = this.chunkEdits.get(chunkKey);
+    if (editsMap) {
+      for (const edit of editsMap.values()) {
+        const lx = ((edit.x % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+        const lz = ((edit.z % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+        if (edit.y >= 0 && edit.y < WORLD_HEIGHT) {
+          blocks[lx][edit.y][lz] = edit.type;
         }
       }
     }
