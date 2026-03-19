@@ -8,6 +8,8 @@ export function SettingsPanel() {
   const bgmVolume = useSettingsStore((s) => s.bgmVolume);
   const seVolume = useSettingsStore((s) => s.seVolume);
   const renderDistance = useSettingsStore((s) => s.renderDistance);
+  const uiScale = useSettingsStore((s) => s.uiScale);
+  const highContrast = useSettingsStore((s) => s.highContrast);
 
   if (!open) return null;
 
@@ -90,6 +92,40 @@ export function SettingsPanel() {
             }}
           />
           <span class="setting-value">{renderDistance}</span>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label for="setting-ui-scale">表示倍率</label>
+        <div>
+          <input
+            id="setting-ui-scale"
+            type="range"
+            min="0.7"
+            max="2"
+            step="0.1"
+            value={uiScale}
+            onInput={(e) => {
+              useSettingsStore.getState().setUiScale(Number(e.currentTarget.value));
+              window.__aicraft?.applySettings?.();
+            }}
+          />
+          <span class="setting-value">{uiScale.toFixed(1)}x</span>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label for="setting-high-contrast">ハイコントラスト</label>
+        <div>
+          <input
+            id="setting-high-contrast"
+            type="checkbox"
+            checked={highContrast}
+            onInput={(e) => {
+              useSettingsStore.getState().setHighContrast(e.currentTarget.checked);
+              window.__aicraft?.applySettings?.();
+            }}
+          />
         </div>
       </div>
 

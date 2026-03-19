@@ -232,34 +232,35 @@ export class World {
     };
 
     const meshMask = (mask, sizeX, sizeY, processRect) => {
-      for (let i = 0; i < sizeX; i++) {
-        for (let j = 0; j < sizeY; ) {
+      for (let j = 0; j < sizeY; j++) {
+        for (let i = 0; i < sizeX; ) {
           const blockType = mask[i][j];
           if (!blockType) {
-            j++;
+            i++;
             continue;
           }
 
+          // Grow width along X-axis, then height along Y-axis in mask space.
           let w = 1;
-          while (j + w < sizeY && mask[i][j + w] === blockType) w++;
+          while (i + w < sizeX && mask[i + w][j] === blockType) w++;
 
           let h = 1;
-          outer: while (i + h < sizeX) {
+          outer: while (j + h < sizeY) {
             for (let k = 0; k < w; k++) {
-              if (mask[i + h][j + k] !== blockType) break outer;
+              if (mask[i + k][j + h] !== blockType) break outer;
             }
             h++;
           }
 
           processRect(i, j, w, h, blockType);
 
-          for (let di = 0; di < h; di++) {
-            for (let dj = 0; dj < w; dj++) {
+          for (let dj = 0; dj < h; dj++) {
+            for (let di = 0; di < w; di++) {
               mask[i + di][j + dj] = null;
             }
           }
 
-          j += w;
+          i += w;
         }
       }
     };
@@ -430,7 +431,8 @@ export class World {
     const materials = materialList.map(key => {
       const [typeStr, face] = key.split('_');
       const type = Number(typeStr);
-      return this.blockMaterials[type]?.[face] || this.blockMaterials[BlockType.STONE].side;
+      const faceKey = (face === 'top' || face === 'bottom') ? face : 'side';
+      return this.blockMaterials[type]?.[faceKey] || this.blockMaterials[BlockType.STONE].side;
     });
 
     const mesh = new THREE.Mesh(geometry, materials);
@@ -487,10 +489,10 @@ export class World {
         break;
       case 'right':
         p.push(
-          x + 1, y, z + h,
+          x + 1, y, z + w,
           x + 1, y, z,
           x + 1, y + h, z,
-          x + 1, y + h, z + h
+          x + 1, y + h, z + w
         );
         n.push(1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0);
         u.push(0, 0, w, 0, w, h, 0, h);
@@ -498,8 +500,8 @@ export class World {
       case 'left':
         p.push(
           x, y, z,
-          x, y, z + h,
-          x, y + h, z + h,
+          x, y, z + w,
+          x, y + h, z + w,
           x, y + h, z
         );
         n.push(-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0);
@@ -514,7 +516,7 @@ export class World {
     this._addQuad(g, x, y, z, 1, 1, dir, vi);
   }
 
-  _rebuildChunkMesh(cx, cz) {
+  _rebuildChunkMesh(cx, cz, rebuildNeighbors = true) {
     const key = this._chunkKey(cx, cz);
     if (!this.chunks.has(key)) return;
 
@@ -537,7 +539,10 @@ export class World {
       this.scene.add(mesh);
     }
 
-    // Rebuild adjacent loaded chunks to ensure internal faces are removed when a neighbor appears.
+    // Rebuild adjacent loaded chunks when needed (e.g., block edits on chunk borders).
+    // During bulk chunk loading this is skipped to avoid rebuild storms and frame hitches.
+    if (!rebuildNeighbors) return;
+
     const rebuildNeighborMesh = (nx, nz) => {
       const nKey = this._chunkKey(nx, nz);
       const neighborChunk = this.chunks.get(nKey);
@@ -592,16 +597,26 @@ export class World {
           );
 
           this.chunks.set(key, { ...data, mesh: null, boundingBox });
-          this._rebuildChunkMesh(cx, cz);
+          this._rebuildChunkMesh(cx, cz, false);
         }
       }
     }
 
     // Update chunk visibility based on frustum
     if (frustum) {
+      let visibleChunkCount = 0;
       for (const chunk of this.chunks.values()) {
         if (!chunk.mesh || !chunk.boundingBox) continue;
         chunk.mesh.visible = frustum.intersectsBox(chunk.boundingBox);
+        if (chunk.mesh.visible) visibleChunkCount++;
+      }
+
+      // Safety net: avoid a fully black frame if frustum state becomes invalid.
+      if (visibleChunkCount === 0) {
+        for (const chunk of this.chunks.values()) {
+          if (!chunk.mesh) continue;
+          chunk.mesh.visible = true;
+        }
       }
     }
 

@@ -30,6 +30,8 @@ export const DEFAULT_SETTINGS = {
   bgmVolume: 0.35,
   seVolume: 0.55,
   renderDistance: 5,
+  uiScale: 1,
+  highContrast: false,
 };
 
 export const HOTBAR_BLOCKS = [
@@ -103,11 +105,14 @@ export function calculateFallDamage(landingSpeed) {
 
 export function sanitizeSettings(raw) {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS };
+  const highContrast = raw.highContrast === true || raw.highContrast === 'true';
   return {
     sensitivity: clamp(Number(raw.sensitivity) || DEFAULT_SETTINGS.sensitivity, 0.0005, 0.004),
     bgmVolume: clamp(Number(raw.bgmVolume) || 0, 0, 1),
     seVolume: clamp(Number(raw.seVolume) || 0, 0, 1),
     renderDistance: clamp(Math.floor(Number(raw.renderDistance) || DEFAULT_SETTINGS.renderDistance), 2, 8),
+    uiScale: clamp(Number(raw.uiScale) || DEFAULT_SETTINGS.uiScale, 0.7, 2),
+    highContrast,
   };
 }
 

@@ -178,6 +178,7 @@ export class GameController {
     this.fpsTime = 0;
     this.fps = 0;
     this.lastAutoRenderAdjustTime = 0;
+    this.lowFpsStreak = 0;
     this.autoSaveIntervalId = null;
   }
 
@@ -293,27 +294,33 @@ export class GameController {
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          this.player.spawn();
-          if (this.savedGame?.player?.position && typeof this.savedGame.player.position === 'object') {
-            this.player.position.set(
-              Number(this.savedGame.player.position.x) || this.player.position.x,
-              Number(this.savedGame.player.position.y) || this.player.position.y,
-              Number(this.savedGame.player.position.z) || this.player.position.z
-            );
-          }
-          if (Number.isFinite(this.savedGame?.player?.yaw)) {
-            this.player.yaw = this.savedGame.player.yaw;
-          }
-          if (Number.isFinite(this.savedGame?.player?.pitch)) {
-            this.player.pitch = this.savedGame.player.pitch;
-          }
+          try {
+            this.player.spawn();
+            if (this.savedGame?.player?.position && typeof this.savedGame.player.position === 'object') {
+              this.player.position.set(
+                Number(this.savedGame.player.position.x) || this.player.position.x,
+                Number(this.savedGame.player.position.y) || this.player.position.y,
+                Number(this.savedGame.player.position.z) || this.player.position.z
+              );
+            }
+            if (Number.isFinite(this.savedGame?.player?.yaw)) {
+              this.player.yaw = this.savedGame.player.yaw;
+            }
+            if (Number.isFinite(this.savedGame?.player?.pitch)) {
+              this.player.pitch = this.savedGame.player.pitch;
+            }
 
-          this.world.update(this.player.position.x, this.player.position.z, this.camera);
-          this.gameStarted = true;
-          useGameStore.getState().startGame();
-          this._startAutoSave();
-          useGameStore.getState().setLoading(false);
-          this.player.lock();
+            this.world.update(this.player.position.x, this.player.position.z, this.camera);
+            this.gameStarted = true;
+            useGameStore.getState().startGame();
+            this._startAutoSave();
+            this.player.lock();
+          } catch (error) {
+            console.error('Failed to start game:', error);
+            useUIStore.getState().showFeedback('ワールド初期化に失敗しました。再読み込みしてください', 2200);
+          } finally {
+            useGameStore.getState().setLoading(false);
+          }
         });
       });
     });
@@ -338,6 +345,10 @@ export class GameController {
     this.sound.setSEVolume(settings.seVolume);
     this.sound.setBGMVolume(settings.bgmVolume);
 
+    // Accessibility / UI scaling
+    document.documentElement.style.setProperty('--ui-scale', String(settings.uiScale ?? 1));
+    document.body.classList.toggle('high-contrast', Boolean(settings.highContrast));
+
     if (persist) {
       settings.persist();
     }
@@ -345,16 +356,23 @@ export class GameController {
 
   _autoAdjustRenderDistance(time) {
     const now = time || performance.now();
-    if (now - this.lastAutoRenderAdjustTime < 5000) return;
+    if (now - this.lastAutoRenderAdjustTime < 10000) return;
     this.lastAutoRenderAdjustTime = now;
 
     const current = this.settings.renderDistance;
     let next = current;
 
-    if (this.fps < 40 && current > 2) {
+    if (this.fps < 35) {
+      this.lowFpsStreak += 1;
+    } else {
+      this.lowFpsStreak = 0;
+    }
+
+    // Keep this conservative: only shrink distance after sustained low FPS.
+    // Avoid automatic upscaling to prevent chunk churn spikes during play.
+    if (this.lowFpsStreak >= 2 && current > 2) {
       next = current - 1;
-    } else if (this.fps >= 55 && current < 8) {
-      next = current + 1;
+      this.lowFpsStreak = 0;
     }
 
     if (next !== current) {
