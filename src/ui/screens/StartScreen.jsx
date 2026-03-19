@@ -29,7 +29,7 @@ export function StartScreen() {
         </div>
       )}
       <div class="controls">
-        WASD：移動　｜　スペース：ジャンプ　｜　Shift：降下<br />
+        WASD：移動　｜　スペース：ジャンプ　｜　Ctrl：ダッシュ　｜　Shift：スニーク<br />
         左クリック：ブロック破壊　｜　右クリック：ブロック設置<br />
         1-9/0：ブロック選択　｜　マウスホイール：ブロック切替<br />
         Z：ツルハシ　｜　X：斧　｜　V：シャベル<br />

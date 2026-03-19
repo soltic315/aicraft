@@ -33,6 +33,7 @@
     }
 
     #start-screen,
+    #death-screen,
     #settings-panel,
     #craft-panel,
     #chest-panel,
@@ -404,6 +405,45 @@
       z-index: 100;
       color: #fff;
       font-family: 'Segoe UI', sans-serif;
+    }
+
+    #death-screen {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(80, 0, 0, 0.75);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 110;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+    }
+    #death-title {
+      font-size: 72px;
+      color: #ff4444;
+      text-shadow: 0 0 20px rgba(255, 0, 0, 0.7), 3px 3px 6px rgba(0,0,0,0.8);
+      margin-bottom: 12px;
+      letter-spacing: 4px;
+    }
+    #death-message {
+      font-size: 18px;
+      color: #ffaaaa;
+      margin-bottom: 40px;
+    }
+    .respawn-btn {
+      padding: 14px 48px;
+      font-size: 20px;
+      background: #8b2222;
+      color: #fff;
+      border: 2px solid #ff6666;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 1px;
+      transition: background 0.15s;
+    }
+    .respawn-btn:hover {
+      background: #b03030;
     }
 
     #loading-screen {

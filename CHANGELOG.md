@@ -3,6 +3,22 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [3.2.0] - 2026-03-20
+
+### Added
+
+- デスクリーンを追加: HP が 0 になると「You Died」画面を表示し、リスポーンボタンでスポーン地点に復活
+- ダッシュ機能を追加: Ctrl 長押しで移動速度が 1.3 倍になるスプリント（地上移動中のみ有効）
+- スニーク機能を追加: Shift 長押しで移動速度が 0.4 倍になり、ブロックの端から落ちなくなる
+
+### Fixed
+
+- 木の幹の高さ（`trunkHeight`）+ 地表高が `WORLD_HEIGHT`（64）を超えるケースをクランプし、高所地形での木生成崩れを修正
+
+### Changed
+
+- スタート画面の操作説明を更新: 「Shift：降下」→「Ctrl：ダッシュ / Shift：スニーク」
+
 ## [3.1.0] - 2026-03-20
 
 ### Added

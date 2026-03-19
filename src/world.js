@@ -195,7 +195,9 @@ export class World {
             if (!this.treePlaced.has(treeKey)) {
               this.treePlaced.add(treeKey);
               // Trunk
-              const trunkHeight = 4 + Math.floor(Math.abs(this.treeNoise.noise2D(wx * 10, wz * 10)) * 3);
+              // 地表高 + 幹の高さがワールド高さを超えないようにクランプ
+              const maxTrunkHeight = Math.max(1, WORLD_HEIGHT - height - 4);
+              const trunkHeight = Math.min(4 + Math.floor(Math.abs(this.treeNoise.noise2D(wx * 10, wz * 10)) * 3), maxTrunkHeight);
               for (let ty = 1; ty <= trunkHeight; ty++) {
                 if (height + ty < WORLD_HEIGHT) {
                   blocks[lx][height + ty][lz] = BlockType.WOOD;

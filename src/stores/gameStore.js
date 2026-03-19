@@ -5,6 +5,7 @@ export const useGameStore = create((set) => ({
   fps: 0,
   loading: false,
   loadingMessage: '',
+  isDead: false,
 
   startGame() {
     set({ gameStarted: true });
@@ -16,5 +17,9 @@ export const useGameStore = create((set) => ({
 
   setLoading(loading, message = '') {
     set({ loading, loadingMessage: message });
+  },
+
+  setDead(isDead) {
+    set({ isDead });
   },
 }));

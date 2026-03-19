@@ -343,6 +343,12 @@ export class GameController {
       localStorage.removeItem(SAVE_STORAGE_KEY);
       useUIStore.getState().showFeedback('セーブデータを削除しました', 1200);
     });
+
+    this.eventBus.on('respawn-clicked', () => {
+      useGameStore.getState().setDead(false);
+      this.player.spawn();
+      this.player.lock();
+    });
   }
 
   // ---- Settings ----
@@ -690,9 +696,9 @@ export class GameController {
             this.sound.playError();
           }
 
-          if (this.player.health <= 0) {
-            useUIStore.getState().showFeedback('力尽きました。スポーン地点に戻ります', 1500);
-            this.player.spawn();
+          if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+            useGameStore.getState().setDead(true);
+            document.exitPointerLock();
           }
         }
       }

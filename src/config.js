@@ -8,6 +8,9 @@ export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 1;
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 
+export const SPRINT_SPEED_MULTIPLIER = 1.3;
+export const SNEAK_SPEED_MULTIPLIER = 0.4;
+
 export const FALL_DAMAGE_SAFE_SPEED = 12;
 export const FALL_DAMAGE_HEAVY_SPEED = 16;
 export const FALL_DAMAGE_LIGHT_SCALE = 1.2;

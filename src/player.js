@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
 const MOVE_SPEED = 5;
+const SPRINT_MULTIPLIER = 1.3;
+const SNEAK_MULTIPLIER = 0.4;
 const JUMP_FORCE = 8;
 const GRAVITY = 20;
 const PLAYER_HEIGHT = 1.62;
@@ -30,6 +32,8 @@ export class Player {
     this.yaw = 0;
 
     this.onGround = false;
+    this.isSprinting = false;
+    this.isSneaking = false;
     this.keys = {};
     this.locked = false;
     this.mouseSensitivity = options.mouseSensitivity ?? DEFAULT_MOUSE_SENSITIVITY;
@@ -86,9 +90,17 @@ export class Player {
 
     if (moveDir.length() > 0) moveDir.normalize();
 
+    // スプリント（CtrlまたはControl長押し）・スニーク（Shift長押し）
+    this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight']) && this.onGround && moveDir.length() > 0;
+    this.isSneaking = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && !this.isSprinting;
+
+    let speed = MOVE_SPEED;
+    if (this.isSprinting) speed *= SPRINT_MULTIPLIER;
+    else if (this.isSneaking) speed *= SNEAK_MULTIPLIER;
+
     // Horizontal velocity
-    this.velocity.x = moveDir.x * MOVE_SPEED;
-    this.velocity.z = moveDir.z * MOVE_SPEED;
+    this.velocity.x = moveDir.x * speed;
+    this.velocity.z = moveDir.z * speed;
 
     // Jump
     if (this.keys['Space'] && this.onGround) {
@@ -127,6 +139,7 @@ export class Player {
       return;
     }
 
+    const wasOnGround = this.onGround;
     this.position[axis] += amount;
 
     const bounds = this._getBounds();
@@ -135,9 +148,19 @@ export class Player {
     if (axis === 'x') {
       collided = this._resolveHorizontalCollision(bounds, amount, 'x');
       if (collided) this.velocity.x = 0;
+      // スニーク時エッジ防止: 移動後に地面サポートがなければ戻す
+      if (!collided && this.isSneaking && wasOnGround && !this._hasGroundSupport()) {
+        this.position.x -= amount;
+        this.velocity.x = 0;
+      }
     } else if (axis === 'z') {
       collided = this._resolveHorizontalCollision(bounds, amount, 'z');
       if (collided) this.velocity.z = 0;
+      // スニーク時エッジ防止: 移動後に地面サポートがなければ戻す
+      if (!collided && this.isSneaking && wasOnGround && !this._hasGroundSupport()) {
+        this.position.z -= amount;
+        this.velocity.z = 0;
+      }
     } else if (axis === 'y') {
       this.onGround = false;
       collided = this._resolveVerticalCollision(bounds, amount);
