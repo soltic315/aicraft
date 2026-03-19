@@ -21,6 +21,15 @@ export const BLOCK_NAMES = {
   [BlockType.WATER]: '水',
 };
 
+export const BLOCK_BREAK_DURATIONS = {
+  [BlockType.GRASS]: 0.45,
+  [BlockType.DIRT]: 0.55,
+  [BlockType.STONE]: 1.4,
+  [BlockType.WOOD]: 0.9,
+  [BlockType.LEAVES]: 0.2,
+  [BlockType.SAND]: 0.4,
+};
+
 // Color palettes for each block type (top, side, bottom)
 const BLOCK_COLORS = {
   [BlockType.GRASS]: {
@@ -164,6 +173,67 @@ function adjustBrightness(hex, amount) {
   const g = Math.min(255, Math.max(0, parseInt(hex.slice(3, 5), 16) + amount * 255));
   const b = Math.min(255, Math.max(0, parseInt(hex.slice(5, 7), 16) + amount * 255));
   return `rgb(${Math.floor(r)},${Math.floor(g)},${Math.floor(b)})`;
+}
+
+export function generateBreakOverlayTextures(stageCount = 8, size = 64) {
+  const segments = [];
+  const rand = seededRandom(71337);
+
+  for (let i = 0; i < 18; i++) {
+    const startX = rand() * size;
+    const startY = rand() * size;
+    const angle = rand() * Math.PI * 2;
+    const length = size * (0.14 + rand() * 0.24);
+    const endX = Math.min(size, Math.max(0, startX + Math.cos(angle) * length));
+    const endY = Math.min(size, Math.max(0, startY + Math.sin(angle) * length));
+
+    segments.push({
+      startX,
+      startY,
+      endX,
+      endY,
+      width: 1 + rand() * 1.4,
+    });
+
+    if (rand() > 0.35) {
+      const midX = startX + (endX - startX) * (0.35 + rand() * 0.3);
+      const midY = startY + (endY - startY) * (0.35 + rand() * 0.3);
+      const branchAngle = angle + (rand() > 0.5 ? 1 : -1) * (0.45 + rand() * 0.7);
+      const branchLength = length * (0.25 + rand() * 0.2);
+      segments.push({
+        startX: midX,
+        startY: midY,
+        endX: Math.min(size, Math.max(0, midX + Math.cos(branchAngle) * branchLength)),
+        endY: Math.min(size, Math.max(0, midY + Math.sin(branchAngle) * branchLength)),
+        width: 0.8 + rand(),
+      });
+    }
+  }
+
+  return Array.from({ length: stageCount }, (_, stageIndex) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const visibleCount = Math.max(1, Math.ceil((segments.length * (stageIndex + 1)) / stageCount));
+    const opacity = 0.18 + (stageIndex / Math.max(1, stageCount - 1)) * 0.55;
+
+    ctx.clearRect(0, 0, size, size);
+    ctx.strokeStyle = `rgba(30, 20, 20, ${opacity})`;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (let i = 0; i < visibleCount; i++) {
+      const segment = segments[i];
+      ctx.lineWidth = segment.width;
+      ctx.beginPath();
+      ctx.moveTo(segment.startX, segment.startY);
+      ctx.lineTo(segment.endX, segment.endY);
+      ctx.stroke();
+    }
+
+    return canvas;
+  });
 }
 
 // Generate textures for all block types
