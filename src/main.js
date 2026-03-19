@@ -11,13 +11,56 @@ import {
 import { World } from './world.js';
 import { Player } from './player.js';
 
-const GAME_VERSION = '1.1.1';
+const GAME_VERSION = '1.2.0';
+const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
+
+const DEFAULT_SETTINGS = {
+  sensitivity: 0.002,
+  bgmVolume: 0.35,
+  seVolume: 0.55,
+  renderDistance: 5,
+};
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function sanitizeSettings(raw) {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_SETTINGS };
+  return {
+    sensitivity: clamp(Number(raw.sensitivity) || DEFAULT_SETTINGS.sensitivity, 0.0005, 0.004),
+    bgmVolume: clamp(Number(raw.bgmVolume) || 0, 0, 1),
+    seVolume: clamp(Number(raw.seVolume) || 0, 0, 1),
+    renderDistance: clamp(Math.floor(Number(raw.renderDistance) || DEFAULT_SETTINGS.renderDistance), 2, 8),
+  };
+}
+
+function loadSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SETTINGS_STORAGE_KEY) || '{}');
+    return sanitizeSettings(parsed);
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(settings) {
+  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+}
+
+const settings = loadSettings();
 
 // ---- Sound Effects ----
 class SoundManager {
   constructor() {
     this.ctx = null;
     this.masterGain = null;
+    this.seGain = null;
+    this.bgmGain = null;
+    this.bgmNodes = [];
+    this.bgmStarted = false;
+    this.seVolume = DEFAULT_SETTINGS.seVolume;
+    this.bgmVolume = DEFAULT_SETTINGS.bgmVolume;
   }
 
   async ensureStarted() {
@@ -27,17 +70,27 @@ class SoundManager {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioCtx();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = 0.22;
+      this.masterGain.gain.value = 0.45;
+
+      this.seGain = this.ctx.createGain();
+      this.bgmGain = this.ctx.createGain();
+      this.seGain.connect(this.masterGain);
+      this.bgmGain.connect(this.masterGain);
       this.masterGain.connect(this.ctx.destination);
+
+      this.setSEVolume(this.seVolume);
+      this.setBGMVolume(this.bgmVolume);
     }
 
     if (this.ctx.state === 'suspended') {
       await this.ctx.resume();
     }
+
+    this.startBGM();
   }
 
   _playSweep({ from, to, duration, type = 'square', volume = 0.2 }) {
-    if (!this.ctx || !this.masterGain || this.ctx.state !== 'running') return;
+    if (!this.ctx || !this.seGain || this.ctx.state !== 'running') return;
 
     const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
@@ -52,9 +105,49 @@ class SoundManager {
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     osc.connect(gain);
-    gain.connect(this.masterGain);
+    gain.connect(this.seGain);
     osc.start(now);
     osc.stop(now + duration + 0.02);
+  }
+
+  startBGM() {
+    if (!this.ctx || !this.bgmGain || this.bgmStarted) return;
+
+    const now = this.ctx.currentTime;
+    const padA = this.ctx.createOscillator();
+    const padB = this.ctx.createOscillator();
+    const filter = this.ctx.createBiquadFilter();
+
+    padA.type = 'sine';
+    padB.type = 'triangle';
+    padA.frequency.setValueAtTime(82.41, now);
+    padB.frequency.setValueAtTime(123.47, now);
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(420, now);
+    filter.Q.value = 0.7;
+
+    padA.connect(filter);
+    padB.connect(filter);
+    filter.connect(this.bgmGain);
+
+    padA.start(now);
+    padB.start(now);
+
+    this.bgmNodes = [padA, padB, filter];
+    this.bgmStarted = true;
+  }
+
+  setSEVolume(volume) {
+    this.seVolume = clamp(Number(volume) || 0, 0, 1);
+    if (!this.seGain || !this.ctx) return;
+    this.seGain.gain.setTargetAtTime(this.seVolume, this.ctx.currentTime, 0.02);
+  }
+
+  setBGMVolume(volume) {
+    this.bgmVolume = clamp(Number(volume) || 0, 0, 1);
+    if (!this.bgmGain || !this.ctx) return;
+    this.bgmGain.gain.setTargetAtTime(this.bgmVolume * 0.2, this.ctx.currentTime, 0.04);
   }
 
   playBreak() {
@@ -79,6 +172,10 @@ class SoundManager {
       type: 'triangle',
       volume: 0.08 * clamped,
     });
+  }
+
+  playError() {
+    this._playSweep({ from: 180, to: 120, duration: 0.06, type: 'sawtooth', volume: 0.09 });
   }
 }
 
@@ -134,8 +231,8 @@ for (const [typeStr, faceTextures] of Object.entries(textures)) {
 }
 
 // ---- World & Player ----
-const world = new World(scene, blockMaterials);
-const player = new Player(camera, world);
+const world = new World(scene, blockMaterials, { renderDistance: settings.renderDistance });
+const player = new Player(camera, world, { mouseSensitivity: settings.sensitivity });
 
 // ---- Block highlight wireframe ----
 const highlightGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
@@ -177,8 +274,19 @@ const HOTBAR_BLOCKS = [
   BlockType.SAND,
   BlockType.WATER,
 ];
+const STARTER_INVENTORY = {
+  [BlockType.GRASS]: 16,
+  [BlockType.DIRT]: 16,
+  [BlockType.STONE]: 12,
+  [BlockType.WOOD]: 12,
+  [BlockType.LEAVES]: 8,
+  [BlockType.SAND]: 12,
+  [BlockType.WATER]: 6,
+};
 let selectedSlot = 0;
-const inventoryCounts = Object.fromEntries(HOTBAR_BLOCKS.map((type) => [type, 0]));
+const inventoryCounts = Object.fromEntries(
+  HOTBAR_BLOCKS.map((type) => [type, STARTER_INVENTORY[type] ?? 0])
+);
 
 function getInventoryCount(type) {
   return inventoryCounts[type] ?? 0;
@@ -247,6 +355,10 @@ const breakState = {
   startedAt: 0,
   blockType: BlockType.AIR,
 };
+const actionFeedbackEl = document.getElementById('action-feedback');
+const breakProgressEl = document.getElementById('break-progress');
+const breakProgressFillEl = document.getElementById('break-progress-fill');
+let feedbackTimeout = null;
 
 function getBlockKey(blockPos) {
   return `${blockPos.x},${blockPos.y},${blockPos.z}`;
@@ -258,6 +370,10 @@ function resetBreaking() {
   breakState.startedAt = 0;
   breakState.blockType = BlockType.AIR;
   breakOverlayMesh.visible = false;
+  if (breakProgressEl && breakProgressFillEl) {
+    breakProgressEl.style.display = 'none';
+    breakProgressFillEl.style.width = '0%';
+  }
 }
 
 function setBreakOverlayStage(stageIndex) {
@@ -270,17 +386,43 @@ function setBreakOverlayStage(stageIndex) {
   }
 }
 
+function showActionFeedback(message, durationMs = 1200) {
+  if (!actionFeedbackEl) return;
+  actionFeedbackEl.textContent = message;
+  actionFeedbackEl.style.opacity = '1';
+
+  if (feedbackTimeout) {
+    clearTimeout(feedbackTimeout);
+  }
+  feedbackTimeout = setTimeout(() => {
+    actionFeedbackEl.style.opacity = '0';
+    feedbackTimeout = null;
+  }, durationMs);
+}
+
 function tryPlaceBlock(now) {
   if (now - lastPlaceTime < PLACE_COOLDOWN) return;
 
   const hit = world.raycast(player.getEyePosition(), player.getDirection());
-  if (!hit) return;
+  if (!hit) {
+    showActionFeedback('設置失敗: 射程外です');
+    sound.playError();
+    return;
+  }
 
   const placeType = HOTBAR_BLOCKS[selectedSlot];
-  if (getInventoryCount(placeType) <= 0) return;
+  if (getInventoryCount(placeType) <= 0) {
+    showActionFeedback('設置失敗: 所持数が不足しています');
+    sound.playError();
+    return;
+  }
 
   const pp = hit.placePos;
-  if (player.intersectsBlock(pp.x, pp.y, pp.z)) return;
+  if (player.intersectsBlock(pp.x, pp.y, pp.z)) {
+    showActionFeedback('設置失敗: プレイヤーと衝突します');
+    sound.playError();
+    return;
+  }
 
   lastPlaceTime = now;
 
@@ -311,6 +453,10 @@ function updateBreaking(hit, now) {
   breakOverlayMesh.visible = true;
   breakOverlayMesh.position.set(hit.blockPos.x + 0.5, hit.blockPos.y + 0.5, hit.blockPos.z + 0.5);
   setBreakOverlayStage(stageIndex);
+  if (breakProgressEl && breakProgressFillEl) {
+    breakProgressEl.style.display = 'block';
+    breakProgressFillEl.style.width = `${Math.floor(progress * 100)}%`;
+  }
 
   if (progress >= 1) {
     addToInventory(hit.blockType, 1);
@@ -354,17 +500,112 @@ document.addEventListener('contextmenu', (e) => e.preventDefault());
 // ---- Start Screen ----
 const startScreen = document.getElementById('start-screen');
 const startBtn = document.getElementById('start-btn');
+const settingsPanel = document.getElementById('settings-panel');
+const settingSensitivity = document.getElementById('setting-sensitivity');
+const settingSensitivityValue = document.getElementById('setting-sensitivity-value');
+const settingBgm = document.getElementById('setting-bgm');
+const settingBgmValue = document.getElementById('setting-bgm-value');
+const settingSe = document.getElementById('setting-se');
+const settingSeValue = document.getElementById('setting-se-value');
+const settingRenderDistance = document.getElementById('setting-render-distance');
+const settingRenderDistanceValue = document.getElementById('setting-render-distance-value');
 const loadingScreen = document.getElementById('loading-screen');
 const loadingText = document.getElementById('loading-text');
 const gameTitle = document.getElementById('game-title');
 const resumeHint = document.getElementById('resume-hint');
 const waterOverlay = document.getElementById('water-overlay');
+const mobileWarning = document.getElementById('mobile-warning');
 let gameStarted = false;
+
+if (mobileWarning && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+  mobileWarning.style.display = 'block';
+}
+
+function updateSettingsPanelValues() {
+  if (
+    !settingSensitivity ||
+    !settingSensitivityValue ||
+    !settingBgm ||
+    !settingBgmValue ||
+    !settingSe ||
+    !settingSeValue ||
+    !settingRenderDistance ||
+    !settingRenderDistanceValue
+  ) {
+    return;
+  }
+
+  settingSensitivity.value = (settings.sensitivity * 1000).toFixed(1);
+  settingSensitivityValue.textContent = Number(settingSensitivity.value).toFixed(1);
+
+  settingBgm.value = String(Math.round(settings.bgmVolume * 100));
+  settingBgmValue.textContent = settingBgm.value;
+
+  settingSe.value = String(Math.round(settings.seVolume * 100));
+  settingSeValue.textContent = settingSe.value;
+
+  settingRenderDistance.value = String(settings.renderDistance);
+  settingRenderDistanceValue.textContent = settingRenderDistance.value;
+}
+
+function applySettings(persist = true) {
+  player.setMouseSensitivity(settings.sensitivity);
+  world.setRenderDistance(settings.renderDistance);
+  sound.setSEVolume(settings.seVolume);
+  sound.setBGMVolume(settings.bgmVolume);
+
+  if (persist) {
+    saveSettings(settings);
+  }
+}
+
+updateSettingsPanelValues();
+applySettings(false);
+
+if (settingSensitivity && settingSensitivityValue) {
+  settingSensitivity.addEventListener('input', () => {
+    settings.sensitivity = clamp(Number(settingSensitivity.value) / 1000, 0.0005, 0.004);
+    settingSensitivityValue.textContent = Number(settingSensitivity.value).toFixed(1);
+    applySettings();
+  });
+}
+
+if (settingBgm && settingBgmValue) {
+  settingBgm.addEventListener('input', () => {
+    settings.bgmVolume = clamp(Number(settingBgm.value) / 100, 0, 1);
+    settingBgmValue.textContent = settingBgm.value;
+    applySettings();
+  });
+}
+
+if (settingSe && settingSeValue) {
+  settingSe.addEventListener('input', () => {
+    settings.seVolume = clamp(Number(settingSe.value) / 100, 0, 1);
+    settingSeValue.textContent = settingSe.value;
+    applySettings();
+  });
+}
+
+if (settingRenderDistance && settingRenderDistanceValue) {
+  settingRenderDistance.addEventListener('input', () => {
+    settings.renderDistance = clamp(Math.floor(Number(settingRenderDistance.value)), 2, 8);
+    settingRenderDistanceValue.textContent = String(settings.renderDistance);
+    applySettings();
+  });
+}
 
 if (gameTitle) {
   gameTitle.textContent = `AiCraft v${GAME_VERSION}`;
 }
 document.title = `AiCraft v${GAME_VERSION}`;
+
+document.addEventListener('keydown', (e) => {
+  if (e.code !== 'KeyP' || !settingsPanel) return;
+  settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block';
+  if (settingsPanel.style.display === 'block' && document.pointerLockElement === document.body) {
+    document.exitPointerLock();
+  }
+});
 
 startBtn.addEventListener('click', () => {
   if (gameStarted) return;

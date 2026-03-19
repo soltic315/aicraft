@@ -6,15 +6,22 @@ import { Noise } from './noise.js';
 const CHUNK_SIZE = 16;
 const WORLD_HEIGHT = 64;
 const SEA_LEVEL = 20;
-const RENDER_DISTANCE = 5;
+const DEFAULT_RENDER_DISTANCE = 5;
 
 export class World {
-  constructor(scene, blockMaterials) {
+  constructor(scene, blockMaterials, options = {}) {
     this.scene = scene;
     this.blockMaterials = blockMaterials;
     this.chunks = new Map();
     this.noise = new Noise(Math.floor(Math.random() * 100000));
     this.treePlaced = new Set();
+    this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
+  }
+
+  setRenderDistance(distance) {
+    const next = Math.floor(Number(distance));
+    if (!Number.isFinite(next)) return;
+    this.renderDistance = Math.min(Math.max(next, 2), 8);
   }
 
   _chunkKey(cx, cz) {
@@ -350,8 +357,8 @@ export class World {
     const pcz = Math.floor(playerZ / CHUNK_SIZE);
 
     // Load chunks in range
-    for (let dx = -RENDER_DISTANCE; dx <= RENDER_DISTANCE; dx++) {
-      for (let dz = -RENDER_DISTANCE; dz <= RENDER_DISTANCE; dz++) {
+    for (let dx = -this.renderDistance; dx <= this.renderDistance; dx++) {
+      for (let dz = -this.renderDistance; dz <= this.renderDistance; dz++) {
         const cx = pcx + dx;
         const cz = pcz + dz;
         const key = this._chunkKey(cx, cz);
@@ -367,7 +374,10 @@ export class World {
     // Unload far chunks
     for (const [key, chunk] of this.chunks) {
       const [cx, cz] = key.split(',').map(Number);
-      if (Math.abs(cx - pcx) > RENDER_DISTANCE + 2 || Math.abs(cz - pcz) > RENDER_DISTANCE + 2) {
+      if (
+        Math.abs(cx - pcx) > this.renderDistance + 2 ||
+        Math.abs(cz - pcz) > this.renderDistance + 2
+      ) {
         if (chunk.mesh) {
           this.scene.remove(chunk.mesh);
           chunk.mesh.geometry.dispose();

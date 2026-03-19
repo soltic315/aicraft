@@ -36,6 +36,18 @@ npm run dev
 ブラウザで `http://localhost:5173` が自動的に開きます。
 ファイル変更時は HMR で即座に反映されます。
 
+### 開発チェックフロー
+
+実装後は最低限、以下の順で確認します。
+
+```bash
+npm run build
+npm run preview
+```
+
+- `npm run build` でビルドが通ることを確認
+- `npm run preview` で成果物起動後、主要操作（移動・採掘・設置・設定変更）を確認
+
 ## ビルド
 
 ```bash
@@ -77,3 +89,10 @@ aicraft/
 
 - [GAME_DESIGN.md](GAME_DESIGN.md) — ゲーム仕様
 - [CHANGELOG.md](CHANGELOG.md) — 変更履歴
+- [SAVE_SCHEMA.md](SAVE_SCHEMA.md) — セーブ形式設計メモ（JSON スキーマ草案）
+
+## 追加済み設定（ゲーム内）
+
+- `P` キーで設定パネルを開閉
+- 調整可能項目: 感度、BGM 音量、SE 音量、描画距離
+- 設定は `localStorage` に保存され、再起動後も復元

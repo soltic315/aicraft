@@ -82,6 +82,103 @@
       line-height: 1.6;
     }
 
+    #settings-panel {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: min(280px, calc(100vw - 20px));
+      background: rgba(10, 20, 32, 0.76);
+      border: 1px solid rgba(255,255,255,0.24);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #d7e7ff;
+      font-family: monospace;
+      font-size: 12px;
+      z-index: 12;
+      backdrop-filter: blur(3px);
+      display: none;
+    }
+    #settings-panel h2 {
+      font-size: 12px;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+    #settings-panel .setting {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    #settings-panel label {
+      color: rgba(235, 245, 255, 0.9);
+    }
+    #settings-panel input[type='range'] {
+      width: 140px;
+      accent-color: #7cc8ff;
+    }
+    #settings-panel .setting-value {
+      min-width: 36px;
+      text-align: right;
+      color: #fff;
+    }
+    #settings-panel .setting-hint {
+      margin-top: 4px;
+      color: rgba(215, 231, 255, 0.78);
+      font-size: 11px;
+    }
+
+    #action-feedback {
+      position: fixed;
+      left: 50%;
+      top: calc(50% + 42px);
+      transform: translateX(-50%);
+      z-index: 14;
+      color: #fff3cf;
+      font-family: 'Segoe UI', sans-serif;
+      font-size: 14px;
+      letter-spacing: 0.3px;
+      text-shadow: 0 2px 6px rgba(0,0,0,0.8);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+
+    #break-progress {
+      position: fixed;
+      left: 50%;
+      top: calc(50% + 18px);
+      transform: translateX(-50%);
+      width: 140px;
+      height: 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.45);
+      background: rgba(0,0,0,0.45);
+      overflow: hidden;
+      z-index: 13;
+      pointer-events: none;
+      display: none;
+    }
+    #break-progress-fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #ffcf7d, #ffdba0);
+      transition: width 60ms linear;
+    }
+
+    #mobile-warning {
+      margin-top: 16px;
+      padding: 8px 12px;
+      border: 1px solid rgba(255, 208, 141, 0.5);
+      border-radius: 6px;
+      color: #ffd8a2;
+      background: rgba(79, 41, 0, 0.35);
+      font-size: 12px;
+      text-align: center;
+      display: none;
+    }
+
     #resume-hint {
       position: fixed;
       top: 50%;
@@ -190,6 +287,7 @@
     <h1 id="game-title">AiCraft</h1>
     <p>Minecraft風ブラウザゲーム</p>
     <button class="start-btn" id="start-btn">ゲーム開始</button>
+    <div id="mobile-warning">このバージョンはモバイル操作に最適化されていません（PC 推奨）</div>
     <div class="controls">
       WASD：移動　｜　スペース：ジャンプ　｜　Shift：降下<br>
       左クリック：ブロック破壊　｜　右クリック：ブロック設置<br>
@@ -203,8 +301,42 @@
   </div>
   <div id="water-overlay"></div>
   <div id="crosshair"></div>
+  <div id="break-progress" aria-hidden="true"><div id="break-progress-fill"></div></div>
+  <div id="action-feedback" aria-live="polite"></div>
   <div id="resume-hint">クリックしてゲームに戻る</div>
   <div id="info"></div>
+  <div id="settings-panel" aria-label="設定パネル">
+    <h2>設定（P で表示切替）</h2>
+    <div class="setting">
+      <label for="setting-sensitivity">感度</label>
+      <div>
+        <input id="setting-sensitivity" type="range" min="0.5" max="4" step="0.1" value="2" />
+        <span id="setting-sensitivity-value" class="setting-value">2.0</span>
+      </div>
+    </div>
+    <div class="setting">
+      <label for="setting-bgm">BGM 音量</label>
+      <div>
+        <input id="setting-bgm" type="range" min="0" max="100" step="1" value="35" />
+        <span id="setting-bgm-value" class="setting-value">35</span>
+      </div>
+    </div>
+    <div class="setting">
+      <label for="setting-se">SE 音量</label>
+      <div>
+        <input id="setting-se" type="range" min="0" max="100" step="1" value="55" />
+        <span id="setting-se-value" class="setting-value">55</span>
+      </div>
+    </div>
+    <div class="setting">
+      <label for="setting-render-distance">描画距離</label>
+      <div>
+        <input id="setting-render-distance" type="range" min="2" max="8" step="1" value="5" />
+        <span id="setting-render-distance-value" class="setting-value">5</span>
+      </div>
+    </div>
+    <p class="setting-hint">描画距離変更は負荷に応じて調整してください。</p>
+  </div>
   <div id="hud"></div>
   <script type="module" src="/src/main.js"></script>
 </body>

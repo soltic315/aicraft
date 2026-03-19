@@ -8,11 +8,11 @@ const GRAVITY = 20;
 const PLAYER_HEIGHT = 1.62;
 const PLAYER_RADIUS = 0.3;
 const PLAYER_COLLISION_HEIGHT = 1.8;
-const MOUSE_SENSITIVITY = 0.002;
+const DEFAULT_MOUSE_SENSITIVITY = 0.002;
 const COLLISION_EPSILON = 0.001;
 
 export class Player {
-  constructor(camera, world) {
+  constructor(camera, world, options = {}) {
     this.camera = camera;
     this.world = world;
 
@@ -24,6 +24,7 @@ export class Player {
     this.onGround = false;
     this.keys = {};
     this.locked = false;
+    this.mouseSensitivity = options.mouseSensitivity ?? DEFAULT_MOUSE_SENSITIVITY;
 
     this._initControls();
   }
@@ -37,8 +38,8 @@ export class Player {
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
-      this.yaw -= e.movementX * MOUSE_SENSITIVITY;
-      this.pitch -= e.movementY * MOUSE_SENSITIVITY;
+      this.yaw -= e.movementX * this.mouseSensitivity;
+      this.pitch -= e.movementY * this.mouseSensitivity;
       this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
     });
 
@@ -257,5 +258,11 @@ export class Player {
       bounds.minZ < blockMaxZ &&
       bounds.maxZ > blockMinZ
     );
+  }
+
+  setMouseSensitivity(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return;
+    this.mouseSensitivity = Math.min(Math.max(num, 0.0005), 0.008);
   }
 }
