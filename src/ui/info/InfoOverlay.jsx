@@ -4,8 +4,10 @@ import { useGameStore } from '../../stores/gameStore.js';
 import { useDayNightStore } from '../../stores/dayNightStore.js';
 import { usePlayerStore } from '../../stores/playerStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
+import { useToolStore } from '../../stores/toolStore.js';
 import { HOTBAR_BLOCKS } from '../../config.js';
 import { BLOCK_NAMES } from '../../blocks.js';
+import { TOOL_NAMES } from '../../tools.js';
 
 export function InfoOverlay() {
   const elRef = useRef(null);
@@ -20,17 +22,20 @@ export function InfoOverlay() {
       const { cycleRatio, isDay } = useDayNightStore.getState();
       const { position, health, maxHealth } = usePlayerStore.getState();
       const { selectedSlot, counts } = useInventoryStore.getState();
+      const { selectedTool } = useToolStore.getState();
 
       const blockType = HOTBAR_BLOCKS[selectedSlot];
       const blockName = BLOCK_NAMES[blockType] || '';
       const selectedCount = counts[blockType] ?? 0;
+      const toolName = TOOL_NAMES[selectedTool] || '-';
 
       el.innerHTML =
         `FPS: ${fps}<br>` +
         `時刻: ${isDay ? '昼' : '夜'} (${Math.floor(cycleRatio * 24).toString().padStart(2, '0')}:00)<br>` +
         `座標: ${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)}<br>` +
         `体力: ${Math.round(health)} / ${maxHealth}<br>` +
-        `選択: ${blockName} x${selectedCount}`;
+        `選択: ${blockName} x${selectedCount}<br>` +
+        `道具: ${toolName}`;
     };
 
     const unsubs = [
@@ -38,6 +43,7 @@ export function InfoOverlay() {
       useDayNightStore.subscribe(update),
       usePlayerStore.subscribe(update),
       useInventoryStore.subscribe(update),
+      useToolStore.subscribe(update),
     ];
 
     update();

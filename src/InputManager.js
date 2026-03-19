@@ -1,5 +1,6 @@
 // Keyboard and mouse input capture
 import { HOTBAR_BLOCKS } from './config.js';
+import { ToolType } from './tools.js';
 
 export class InputManager {
   constructor(eventBus) {
@@ -56,6 +57,11 @@ export class InputManager {
       if (e.code === 'KeyP') this.eventBus.emit('toggle-settings');
       if (e.code === 'KeyC') this.eventBus.emit('toggle-craft');
       if (e.code === 'KeyE') this.eventBus.emit('interact-chest');
+
+      // Tool selection
+      if (e.code === 'KeyZ') this.eventBus.emit('tool-selected', ToolType.PICKAXE);
+      if (e.code === 'KeyX') this.eventBus.emit('tool-selected', ToolType.AXE);
+      if (e.code === 'KeyV') this.eventBus.emit('tool-selected', ToolType.SHOVEL);
     });
 
     document.addEventListener('wheel', (e) => {

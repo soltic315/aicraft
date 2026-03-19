@@ -41,6 +41,8 @@ import { useGameStore } from './stores/gameStore.js';
 import { useDayNightStore } from './stores/dayNightStore.js';
 import { useBreakStore } from './stores/breakStore.js';
 import { useUIStore } from './stores/uiStore.js';
+import { useToolStore } from './stores/toolStore.js';
+import { TOOL_NAMES, getToolBreakMultiplier, isToolType } from './tools.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -152,6 +154,9 @@ export class GameController {
         this.savedGame.player.inventory,
         this.savedGame.player.selectedSlot,
       );
+      if (isToolType(this.savedGame.player.selectedTool)) {
+        useToolStore.getState().setTool(this.savedGame.player.selectedTool);
+      }
     }
 
     // Chest storage (restore from save via store)
@@ -167,6 +172,7 @@ export class GameController {
       duration: 0,
       startedAt: 0,
       blockType: BlockType.AIR,
+      toolType: null,
     };
 
     // Game loop state
@@ -252,6 +258,12 @@ export class GameController {
     this.eventBus.on('slot-scroll', (deltaY) => {
       if (!this.player.locked) return;
       useInventoryStore.getState().scrollSlot(deltaY);
+    });
+
+    this.eventBus.on('tool-selected', (toolType) => {
+      if (!isToolType(toolType)) return;
+      useToolStore.getState().setTool(toolType);
+      useUIStore.getState().showFeedback(`道具切替: ${TOOL_NAMES[toolType]}`, 900);
     });
 
     this.eventBus.on('toggle-settings', () => {
@@ -370,6 +382,7 @@ export class GameController {
   _saveGame({ showFeedback = true } = {}) {
     try {
       const { counts: inventoryCounts, selectedSlot } = useInventoryStore.getState();
+      const { selectedTool } = useToolStore.getState();
       const inventory = {};
       Object.entries(inventoryCounts).forEach(([key, value]) => {
         inventory[key] = Number(value) || 0;
@@ -392,6 +405,7 @@ export class GameController {
           pitch: this.player.pitch,
           inventory,
           selectedSlot,
+          selectedTool,
         },
         settings: {
           sensitivity: settings.sensitivity,
@@ -508,6 +522,7 @@ export class GameController {
     this.breakState.duration = 0;
     this.breakState.startedAt = 0;
     this.breakState.blockType = BlockType.AIR;
+    this.breakState.toolType = null;
     this.breakOverlayMesh.visible = false;
     useBreakStore.getState().reset();
   }
@@ -558,14 +573,18 @@ export class GameController {
   }
 
   _updateBreaking(hit, now) {
-    const key = getPosKey(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
-    const duration = BLOCK_BREAK_DURATIONS[hit.blockType] ?? 0.5;
+    const selectedTool = useToolStore.getState().selectedTool;
+    const key = `${getPosKey(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)}|${selectedTool}`;
+    const baseDuration = BLOCK_BREAK_DURATIONS[hit.blockType] ?? 0.5;
+    const multiplier = getToolBreakMultiplier(selectedTool, hit.blockType);
+    const duration = Math.max(0.08, baseDuration / multiplier);
 
     if (this.breakState.key !== key) {
       this.breakState.key = key;
       this.breakState.duration = duration;
       this.breakState.startedAt = now;
       this.breakState.blockType = hit.blockType;
+      this.breakState.toolType = selectedTool;
     }
 
     const elapsed = (now - this.breakState.startedAt) / 1000;
