@@ -39,6 +39,53 @@ export class World {
     // ブロック編集によりメッシュ再構築が必要なチャンクのキュー（次フレームで処理）
     this.dirtyChunks = new Set();
 
+    // チャンクデータ生成用ワーカープール（メインスレッドのフレームをブロックしない）
+    this._inFlightChunks = new Set();    // ワーカーで生成中のチャンクキー
+    this._pendingMeshBuilds = [];        // { cx, cz, flatBlocks } メッシュ構築待ち
+    this._lastPcx = 0;
+    this._lastPcz = 0;
+    const workerCount = Math.max(1, Math.min(4, (navigator.hardwareConcurrency ?? 4) - 1));
+    this._workers = [];
+    this._freeWorkerIndices = [];
+    for (let i = 0; i < workerCount; i++) {
+      const idx = i;
+      const worker = new Worker(new URL('./chunkWorker.js', import.meta.url), { type: 'module' });
+      worker.onmessage = ({ data }) => {
+        const { cx, cz, flatBlocks, maxY } = data;
+        const key = this._chunkKey(cx, cz);
+        this._inFlightChunks.delete(key);
+        this._freeWorkerIndices.push(idx);
+        if (!this.chunks.has(key)) {
+          this._pendingMeshBuilds.push({ cx, cz, flatBlocks, maxY });
+        }
+        this._dispatchToFreeWorkers(this._lastPcx, this._lastPcz);
+      };
+      this._workers.push(worker);
+      this._freeWorkerIndices.push(i);
+    }
+
+    // メッシュ構築用ワーカープール（ジオメトリ計算をメインスレッドから分離）
+    this._pendingMeshDispatch = [];   // { cx, cz } メッシュワーカーへの送信待ちキュー
+    this._inFlightMeshes = new Set(); // メッシュワーカーで処理中のチャンクキー
+    this._completedMeshes = [];       // { cx, cz, geoData } 完成したジオメトリ
+    const meshWorkerCount = Math.max(1, Math.min(2, Math.floor((navigator.hardwareConcurrency ?? 4) / 2)));
+    this._meshWorkers = [];
+    this._freeMeshWorkerIndices = [];
+    for (let i = 0; i < meshWorkerCount; i++) {
+      const midx = i;
+      const mw = new Worker(new URL('./meshWorker.js', import.meta.url), { type: 'module' });
+      mw.onmessage = ({ data }) => {
+        const { cx, cz, geoData } = data;
+        const key = this._chunkKey(cx, cz);
+        this._inFlightMeshes.delete(key);
+        this._freeMeshWorkerIndices.push(midx);
+        this._completedMeshes.push({ cx, cz, geoData });
+        this._dispatchToFreeMeshWorkers();
+      };
+      this._meshWorkers.push(mw);
+      this._freeMeshWorkerIndices.push(i);
+    }
+
     // 面方向別明るさを適用したマテリアルのキャッシュ
     this._dimmedMaterialCache = new Map();
   }
@@ -59,6 +106,11 @@ export class World {
     this.pendingBorderRebuilds.clear();
     this.dirtyChunks.clear();
     this.treePlaced.clear();
+    this._inFlightChunks.clear();
+    this._pendingMeshBuilds = [];
+    this._pendingMeshDispatch = [];
+    this._inFlightMeshes.clear();
+    this._completedMeshes = [];
 
     // 新しいシードで地形ノイズを再生成
     this.seed = Math.floor(Math.random() * 100000);
@@ -170,7 +222,7 @@ export class World {
 
   _queueChunkLoad(cx, cz) {
     const key = this._chunkKey(cx, cz);
-    if (this.chunks.has(key) || this.pendingChunkSet.has(key)) return;
+    if (this.chunks.has(key) || this.pendingChunkSet.has(key) || this._inFlightChunks.has(key)) return;
     this.pendingChunkLoads.push({ cx, cz, key });
     this.pendingChunkSet.add(key);
   }
@@ -193,6 +245,152 @@ export class World {
     const [next] = this.pendingChunkLoads.splice(nearestIndex, 1);
     this.pendingChunkSet.delete(next.key);
     return next;
+  }
+
+  // 空きワーカーへチャンク生成ジョブをディスパッチする
+  _dispatchToFreeWorkers(pcx, pcz) {
+    while (this._freeWorkerIndices.length > 0 && this.pendingChunkLoads.length > 0) {
+      const next = this._dequeueNearestChunkLoad(pcx, pcz);
+      if (!next) break;
+      const workerIdx = this._freeWorkerIndices.pop();
+      this._inFlightChunks.add(next.key);
+      const chunkEditsMap = this.chunkEdits.get(next.key);
+      const chunkEdits = chunkEditsMap ? [...chunkEditsMap.values()] : null;
+      this._workers[workerIdx].postMessage({ cx: next.cx, cz: next.cz, seed: this.seed, chunkEdits });
+    }
+  }
+
+  // ワーカーから受け取ったフラット Uint8Array をチャンクの blocks 構造へ変換する
+  _unflattenBlocks(flat) {
+    const blocks = new Array(CHUNK_SIZE);
+    const strideX = WORLD_HEIGHT * CHUNK_SIZE;
+    const strideY = CHUNK_SIZE;
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      blocks[x] = new Array(WORLD_HEIGHT);
+      for (let y = 0; y < WORLD_HEIGHT; y++) {
+        const offset = x * strideX + y * strideY;
+        blocks[x][y] = flat.subarray(offset, offset + CHUNK_SIZE);
+      }
+    }
+    return blocks;
+  }
+
+  // チャンクのフラット Uint8Array を取得（なければ 3D blocks から遅延生成してキャッシュ）
+  _getChunkFlatBlocks(cx, cz) {
+    const chunk = this.chunks.get(this._chunkKey(cx, cz));
+    if (!chunk) return null;
+    if (chunk.flatBlocks) return chunk.flatBlocks;
+    // プリロードパスのチャンクは flatBlocks を持たないため変換して保存
+    const flat = new Uint8Array(CHUNK_SIZE * WORLD_HEIGHT * CHUNK_SIZE);
+    for (let x = 0; x < CHUNK_SIZE; x++) {
+      for (let y = 0; y < WORLD_HEIGHT; y++) {
+        flat.set(chunk.blocks[x][y], x * WORLD_HEIGHT * CHUNK_SIZE + y * CHUNK_SIZE);
+      }
+    }
+    chunk.flatBlocks = flat;
+    return flat;
+  }
+
+  // 空きメッシュワーカーへジオメトリ構築ジョブをディスパッチする
+  _dispatchToFreeMeshWorkers() {
+    const stillPending = [];
+    for (const item of this._pendingMeshDispatch) {
+      if (this._freeMeshWorkerIndices.length === 0) {
+        stillPending.push(item);
+        continue;
+      }
+      const { cx, cz } = item;
+      const key = this._chunkKey(cx, cz);
+
+      if (!this.chunks.has(key)) continue; // 範囲外になったので破棄
+
+      if (this._inFlightMeshes.has(key)) {
+        stillPending.push(item); // 処理中 → 後回し
+        continue;
+      }
+
+      const chunk = this.chunks.get(key);
+      const workerIdx = this._freeMeshWorkerIndices.pop();
+      this._inFlightMeshes.add(key);
+
+      // 各チャンクのフラット配列をコピーして転送（元のバッファは保持）
+      const selfFlat  = this._getChunkFlatBlocks(cx, cz).slice();
+      const rightFlat = this._getChunkFlatBlocks(cx + 1, cz)?.slice() ?? null;
+      const leftFlat  = this._getChunkFlatBlocks(cx - 1, cz)?.slice() ?? null;
+      const frontFlat = this._getChunkFlatBlocks(cx, cz + 1)?.slice() ?? null;
+      const backFlat  = this._getChunkFlatBlocks(cx, cz - 1)?.slice() ?? null;
+
+      const transfers = [selfFlat.buffer];
+      if (rightFlat) transfers.push(rightFlat.buffer);
+      if (leftFlat)  transfers.push(leftFlat.buffer);
+      if (frontFlat) transfers.push(frontFlat.buffer);
+      if (backFlat)  transfers.push(backFlat.buffer);
+
+      this._meshWorkers[workerIdx].postMessage({
+        cx, cz,
+        maxY:        chunk.maxY,
+        selfBlocks:  selfFlat,
+        rightBlocks: rightFlat,
+        leftBlocks:  leftFlat,
+        frontBlocks: frontFlat,
+        backBlocks:  backFlat,
+      }, transfers);
+    }
+    this._pendingMeshDispatch = stillPending;
+  }
+
+  // メッシュワーカーから受け取ったジオメトリデータを Three.js メッシュに変換してシーンへ追加
+  _applyGeoData(cx, cz, geoData) {
+    const key = this._chunkKey(cx, cz);
+    const chunk = this.chunks.get(key);
+    if (!chunk) return;
+
+    if (chunk.mesh) {
+      this.scene.remove(chunk.mesh);
+      chunk.mesh.geometry.dispose();
+      chunk.mesh = null;
+    }
+
+    if (!geoData || geoData.positions.length === 0) return;
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(geoData.positions, 3));
+    geometry.setAttribute('normal',   new THREE.BufferAttribute(geoData.normals,   3));
+    geometry.setAttribute('uv',       new THREE.BufferAttribute(geoData.uvs,       2));
+    geometry.setAttribute('color',    new THREE.BufferAttribute(geoData.colors,    3));
+    geometry.setIndex(new THREE.BufferAttribute(geoData.indices, 1));
+
+    for (const g of geoData.groups) {
+      geometry.addGroup(g.start, g.count, g.materialIndex);
+    }
+
+    const FACE_BRIGHTNESS = {
+      top: 1.0, front: 0.85, back: 0.85, right: 0.75, left: 0.75, bottom: 0.60,
+    };
+
+    const materials = geoData.materialKeys.map(mkey => {
+      const [typeStr, face] = mkey.split('_');
+      const type = Number(typeStr);
+      const faceKey = (face === 'top' || face === 'bottom') ? face : 'side';
+      const baseMat = this.blockMaterials[type]?.[faceKey] || this.blockMaterials[BlockType.STONE].side;
+      const brightness = FACE_BRIGHTNESS[face] ?? 1.0;
+      if (brightness === 1.0) return baseMat;
+      const cacheKey = `${mkey}_dim`;
+      if (this._dimmedMaterialCache.has(cacheKey)) return this._dimmedMaterialCache.get(cacheKey);
+      const mat = baseMat.clone();
+      mat.color.setRGB(brightness, brightness, brightness);
+      this._dimmedMaterialCache.set(cacheKey, mat);
+      return mat;
+    });
+
+    const mesh = new THREE.Mesh(geometry, materials);
+    mesh.name = `chunk_${cx}_${cz}`;
+    chunk.mesh = mesh;
+
+    if (chunk.boundingBox && this._hasFrustum) {
+      mesh.visible = this._frustum.intersectsBox(chunk.boundingBox);
+    }
+    this.scene.add(mesh);
   }
 
   // バイオームを取得（温度・湿度ノイズで分類）
@@ -255,6 +453,10 @@ export class World {
 
     if (y < 0 || y >= WORLD_HEIGHT) return;
     chunk.blocks[lx][y][lz] = type;
+    // flatBlocks が存在する場合は同期して更新（メッシュワーカーが参照するため）
+    if (chunk.flatBlocks) {
+      chunk.flatBlocks[lx * WORLD_HEIGHT * CHUNK_SIZE + y * CHUNK_SIZE + lz] = type;
+    }
 
     // メッシュ再構築をキューへ（同期実行するとフリーズするため次フレームで処理）
     this.dirtyChunks.add(this._chunkKey(cx, cz));
@@ -530,7 +732,20 @@ export class World {
       }
     }
 
-    return { blocks };
+    // 最高非空気ブロックのY座標を計算（メッシュ構築のY走査上限に使用）
+    let maxY = 0;
+    outer: for (let y = WORLD_HEIGHT - 1; y > 0; y--) {
+      for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+        for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+          if (blocks[lx][y][lz] !== BlockType.AIR) {
+            maxY = y;
+            break outer;
+          }
+        }
+      }
+    }
+
+    return { blocks, maxY };
   }
 
   _buildChunkMesh(cx, cz) {
@@ -538,11 +753,44 @@ export class World {
     const chunk = this.chunks.get(key);
     if (!chunk) return null;
 
+    // 最高非空気Y+2 までしか走査しない（空気のみの上部をスキップ）
+    const meshMaxY = Math.min((chunk.maxY ?? WORLD_HEIGHT - 1) + 2, WORLD_HEIGHT - 1);
+
+    // 隣接チャンクを事前取得して Map ルックアップを最小化
+    const cRight = this.chunks.get(this._chunkKey(cx + 1, cz));
+    const cLeft  = this.chunks.get(this._chunkKey(cx - 1, cz));
+    const cFront = this.chunks.get(this._chunkKey(cx, cz + 1));
+    const cBack  = this.chunks.get(this._chunkKey(cx, cz - 1));
+
+    // キャッシュ済みチャンク参照を使った高速ブロック取得
+    const getBlock = (wx, wy, wz) => {
+      if (wy < 0 || wy >= WORLD_HEIGHT) return BlockType.AIR;
+      const lx = ((wx % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      const lz = ((wz % CHUNK_SIZE) + CHUNK_SIZE) % CHUNK_SIZE;
+      const bcx = Math.floor(wx / CHUNK_SIZE);
+      const bcz = Math.floor(wz / CHUNK_SIZE);
+      let ch;
+      if (bcx === cx) {
+        if (bcz === cz)      ch = chunk;
+        else if (bcz === cz + 1) ch = cFront;
+        else if (bcz === cz - 1) ch = cBack;
+        else ch = this.chunks.get(this._chunkKey(bcx, bcz));
+      } else if (bcz === cz) {
+        if (bcx === cx + 1)  ch = cRight;
+        else if (bcx === cx - 1) ch = cLeft;
+        else ch = this.chunks.get(this._chunkKey(bcx, bcz));
+      } else {
+        ch = this.chunks.get(this._chunkKey(bcx, bcz));
+      }
+      if (!ch) return BlockType.AIR;
+      return ch.blocks[lx][wy][lz];
+    };
+
     const groups = {};
 
     // AO計算ヘルパー
     const isSolid = (wx, wy, wz) => {
-      const b = this.getBlock(wx, wy, wz);
+      const b = getBlock(wx, wy, wz);
       return b !== BlockType.AIR && b !== BlockType.WATER && b != null;
     };
     // 隣接ブロックがこれらの場合は面を描画する（透明・半透明ブロック）
@@ -625,8 +873,8 @@ export class World {
       }
     };
 
-    // Top / bottom faces
-    for (let y = 0; y < WORLD_HEIGHT; y++) {
+    // Top / bottom faces（meshMaxY より上はスキップ）
+    for (let y = 0; y <= meshMaxY; y++) {
       const topMask = Array.from({ length: CHUNK_SIZE }, () => new Array(CHUNK_SIZE).fill(null));
       const bottomMask = Array.from({ length: CHUNK_SIZE }, () => new Array(CHUNK_SIZE).fill(null));
 
@@ -637,15 +885,8 @@ export class World {
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
-          const above = this.getBlock(wx, y + 1, wz);
-          if (isTransparentNeighbor(above)) {
-            topMask[lx][lz] = block;
-          }
-
-          const below = this.getBlock(wx, y - 1, wz);
-          if (isTransparentNeighbor(below)) {
-            bottomMask[lx][lz] = block;
-          }
+          if (isTransparentNeighbor(getBlock(wx, y + 1, wz))) topMask[lx][lz] = block;
+          if (isTransparentNeighbor(getBlock(wx, y - 1, wz))) bottomMask[lx][lz] = block;
         }
       }
 
@@ -657,82 +898,66 @@ export class World {
       });
     }
 
-    // Front / back faces
+    // Front / back faces（meshMaxY より上はスキップ）
+    const yCount = meshMaxY + 1;
     for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-      const frontMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
-      const backMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
+      const frontMask = Array.from({ length: CHUNK_SIZE }, () => new Array(yCount).fill(null));
+      const backMask  = Array.from({ length: CHUNK_SIZE }, () => new Array(yCount).fill(null));
       const wz = cz * CHUNK_SIZE + lz;
 
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-        for (let y = 0; y < WORLD_HEIGHT; y++) {
+        for (let y = 0; y < yCount; y++) {
           const wx = cx * CHUNK_SIZE + lx;
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
-          const frontNeighbor = this.getBlock(wx, y, wz + 1);
-          if (isTransparentNeighbor(frontNeighbor)) {
-            frontMask[lx][y] = block;
-          }
-
-          const backNeighbor = this.getBlock(wx, y, wz - 1);
-          if (isTransparentNeighbor(backNeighbor)) {
-            backMask[lx][y] = block;
-          }
+          if (isTransparentNeighbor(getBlock(wx, y, wz + 1))) frontMask[lx][y] = block;
+          if (isTransparentNeighbor(getBlock(wx, y, wz - 1))) backMask[lx][y]  = block;
         }
       }
 
-      emitMaskFaces(frontMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, blockType) => {
+      emitMaskFaces(frontMask, CHUNK_SIZE, yCount, (lx, y, blockType) => {
         addQuad(blockType, 'front', cx * CHUNK_SIZE + lx, y, wz, 1, 1);
       });
-      emitMaskFaces(backMask, CHUNK_SIZE, WORLD_HEIGHT, (lx, y, blockType) => {
+      emitMaskFaces(backMask, CHUNK_SIZE, yCount, (lx, y, blockType) => {
         addQuad(blockType, 'back', cx * CHUNK_SIZE + lx, y, wz, 1, 1);
       });
     }
 
-    // Right / left faces
+    // Right / left faces（meshMaxY より上はスキップ）
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
-      const rightMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
-      const leftMask = Array.from({ length: CHUNK_SIZE }, () => new Array(WORLD_HEIGHT).fill(null));
+      const rightMask = Array.from({ length: CHUNK_SIZE }, () => new Array(yCount).fill(null));
+      const leftMask  = Array.from({ length: CHUNK_SIZE }, () => new Array(yCount).fill(null));
       const wx = cx * CHUNK_SIZE + lx;
 
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
-        for (let y = 0; y < WORLD_HEIGHT; y++) {
+        for (let y = 0; y < yCount; y++) {
           const wz = cz * CHUNK_SIZE + lz;
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
-          const rightNeighbor = this.getBlock(wx + 1, y, wz);
-          if (isTransparentNeighbor(rightNeighbor)) {
-            rightMask[lz][y] = block;
-          }
-
-          const leftNeighbor = this.getBlock(wx - 1, y, wz);
-          if (isTransparentNeighbor(leftNeighbor)) {
-            leftMask[lz][y] = block;
-          }
+          if (isTransparentNeighbor(getBlock(wx + 1, y, wz))) rightMask[lz][y] = block;
+          if (isTransparentNeighbor(getBlock(wx - 1, y, wz))) leftMask[lz][y]  = block;
         }
       }
 
-      emitMaskFaces(rightMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, blockType) => {
+      emitMaskFaces(rightMask, CHUNK_SIZE, yCount, (lz, y, blockType) => {
         addQuad(blockType, 'right', wx, y, cz * CHUNK_SIZE + lz, 1, 1);
       });
-      emitMaskFaces(leftMask, CHUNK_SIZE, WORLD_HEIGHT, (lz, y, blockType) => {
+      emitMaskFaces(leftMask, CHUNK_SIZE, yCount, (lz, y, blockType) => {
         addQuad(blockType, 'left', wx, y, cz * CHUNK_SIZE + lz, 1, 1);
       });
     }
 
-    // Water surfaces
-    for (let y = 0; y < WORLD_HEIGHT; y++) {
+    // Water surfaces（meshMaxY より上はスキップ）
+    for (let y = 0; y <= meshMaxY; y++) {
       const waterMask = Array.from({ length: CHUNK_SIZE }, () => new Array(CHUNK_SIZE).fill(null));
       for (let lx = 0; lx < CHUNK_SIZE; lx++) {
         for (let lz = 0; lz < CHUNK_SIZE; lz++) {
           const wx = cx * CHUNK_SIZE + lx;
           const wz = cz * CHUNK_SIZE + lz;
           if (chunk.blocks[lx][y][lz] !== BlockType.WATER) continue;
-          const above = this.getBlock(wx, y + 1, wz);
-          if (above === BlockType.AIR) {
-            waterMask[lx][lz] = BlockType.WATER;
-          }
+          if (getBlock(wx, y + 1, wz) === BlockType.AIR) waterMask[lx][lz] = BlockType.WATER;
         }
       }
       emitMaskFaces(waterMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz) => {
@@ -740,18 +965,18 @@ export class World {
       });
     }
 
-    // Water side/bottom faces（AIRに隣接する場合のみ側面・底面を表示）
+    // Water side/bottom faces（meshMaxY より上はスキップ）
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const wx = cx * CHUNK_SIZE + lx;
         const wz = cz * CHUNK_SIZE + lz;
-        for (let y = 0; y < WORLD_HEIGHT; y++) {
+        for (let y = 0; y <= meshMaxY; y++) {
           if (chunk.blocks[lx][y][lz] !== BlockType.WATER) continue;
-          if (this.getBlock(wx, y, wz + 1) === BlockType.AIR) addQuad(BlockType.WATER, 'front', wx, y, wz, 1, 1);
-          if (this.getBlock(wx, y, wz - 1) === BlockType.AIR) addQuad(BlockType.WATER, 'back', wx, y, wz, 1, 1);
-          if (this.getBlock(wx + 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'right', wx, y, wz, 1, 1);
-          if (this.getBlock(wx - 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'left', wx, y, wz, 1, 1);
-          if (this.getBlock(wx, y - 1, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'bottom', wx, y, wz, 1, 1);
+          if (getBlock(wx, y, wz + 1) === BlockType.AIR) addQuad(BlockType.WATER, 'front', wx, y, wz, 1, 1);
+          if (getBlock(wx, y, wz - 1) === BlockType.AIR) addQuad(BlockType.WATER, 'back',  wx, y, wz, 1, 1);
+          if (getBlock(wx + 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'right', wx, y, wz, 1, 1);
+          if (getBlock(wx - 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'left',  wx, y, wz, 1, 1);
+          if (getBlock(wx, y - 1, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'bottom',wx, y, wz, 1, 1);
         }
       }
     }
@@ -981,6 +1206,9 @@ export class World {
   update(playerX, playerZ, camera = null) {
     const pcx = Math.floor(playerX / CHUNK_SIZE);
     const pcz = Math.floor(playerZ / CHUNK_SIZE);
+    // ワーカーのコールバックで使用するため最新のプレイヤーチャンク位置を記憶
+    this._lastPcx = pcx;
+    this._lastPcz = pcz;
 
     // ブロック編集によるダーティチャンクを最優先で再構築（フレーム先頭で処理）
     for (const key of this.dirtyChunks) {
@@ -1018,43 +1246,60 @@ export class World {
       return inRange;
     });
 
-    // Load a small fixed number per frame to prevent generation spikes.
-    for (let i = 0; i < CHUNK_LOADS_PER_FRAME; i++) {
-      const next = this._dequeueNearestChunkLoad(pcx, pcz);
-      if (!next) break;
-      if (this.chunks.has(next.key)) continue;
-
-      const data = this._generateChunkData(next.cx, next.cz);
+    // チャンクワーカーが完了したデータをチャンクマップに登録し、メッシュワーカーへディスパッチ
+    // （毎フレーム最大4件: チャンク登録は軽量なので増やしてもフレームに影響しない）
+    const CHUNK_REGISTERS_PER_FRAME = 4;
+    let regCount = 0;
+    while (regCount < CHUNK_REGISTERS_PER_FRAME && this._pendingMeshBuilds.length > 0) {
+      const { cx, cz, flatBlocks, maxY } = this._pendingMeshBuilds.shift();
+      const key = this._chunkKey(cx, cz);
+      // すでにロード済み or 描画範囲外になった場合はスキップ
+      if (this.chunks.has(key)) continue;
+      if (Math.abs(cx - pcx) > this.renderDistance + 1 || Math.abs(cz - pcz) > this.renderDistance + 1) continue;
+      const blocks = this._unflattenBlocks(flatBlocks);
       const boundingBox = new THREE.Box3(
-        new THREE.Vector3(next.cx * CHUNK_SIZE, 0, next.cz * CHUNK_SIZE),
-        new THREE.Vector3((next.cx + 1) * CHUNK_SIZE, WORLD_HEIGHT, (next.cz + 1) * CHUNK_SIZE)
+        new THREE.Vector3(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE),
+        new THREE.Vector3((cx + 1) * CHUNK_SIZE, WORLD_HEIGHT, (cz + 1) * CHUNK_SIZE)
       );
-
-      this.chunks.set(next.key, { ...data, mesh: null, boundingBox });
-      this._rebuildChunkMesh(next.cx, next.cz, false);
-
-      // 新チャンクがロードされると、隣接済みチャンクの境界面が古くなる
-      // （隣が未ロードのとき AIR として面を生成しているため）
-      // → 隣接ロード済みチャンクを境界再構築キューへ追加
+      // flatBlocks をチャンクに保存（メッシュワーカーへのディスパッチ時に使用）
+      this.chunks.set(key, { blocks, flatBlocks, mesh: null, boundingBox, maxY: maxY ?? WORLD_HEIGHT - 1 });
+      // メッシュ構築をワーカーへ委譲
+      this._pendingMeshDispatch.push({ cx, cz });
+      // 隣接チャンクの境界メッシュも再構築キューへ
       for (const [ndx, ndz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-        const nKey = this._chunkKey(next.cx + ndx, next.cz + ndz);
-        if (this.chunks.has(nKey)) {
-          this.pendingBorderRebuilds.add(nKey);
-        }
+        const nKey = this._chunkKey(cx + ndx, cz + ndz);
+        if (this.chunks.has(nKey)) this.pendingBorderRebuilds.add(nKey);
       }
+      regCount++;
     }
 
-    // 境界再構築キューを毎フレーム少しずつ処理
-    // （一括処理によるフレームヒッチを防ぐため分散させる）
-    const BORDER_REBUILDS_PER_FRAME = 3;
+    // 完了したメッシュジオメトリをシーンへ適用（毎フレーム最大4件）
+    const MESH_APPLIES_PER_FRAME = 4;
+    let applyCount = 0;
+    while (applyCount < MESH_APPLIES_PER_FRAME && this._completedMeshes.length > 0) {
+      const { cx, cz, geoData } = this._completedMeshes.shift();
+      this._applyGeoData(cx, cz, geoData);
+      applyCount++;
+    }
+
+    // 新チャンクをチャンクワーカーへディスパッチ
+    this._dispatchToFreeWorkers(pcx, pcz);
+    // メッシュワーカーへもディスパッチ（登録済みジョブを処理）
+    this._dispatchToFreeMeshWorkers();
+
+    // 境界再構築キューをメッシュワーカーへ委譲（毎フレーム最大4件）
+    // ワーカーが既に処理中のチャンクは _dispatchToFreeMeshWorkers 内でスキップされる
+    const BORDER_REBUILDS_PER_FRAME = 4;
     let borderCount = 0;
     for (const key of this.pendingBorderRebuilds) {
       if (borderCount >= BORDER_REBUILDS_PER_FRAME) break;
       this.pendingBorderRebuilds.delete(key);
       const [bx, bz] = key.split(',').map(Number);
-      this._rebuildChunkMesh(bx, bz, false);
+      if (this.chunks.has(key)) this._pendingMeshDispatch.push({ cx: bx, cz: bz });
       borderCount++;
     }
+    // 境界再構築ジョブをメッシュワーカーへ送信
+    if (borderCount > 0) this._dispatchToFreeMeshWorkers();
 
     // Update chunk visibility based on frustum
     if (frustum) {
