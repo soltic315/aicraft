@@ -7,6 +7,7 @@ export const useUIStore = create((set, get) => ({
   inventoryOpen: false,
   resumeHintVisible: false,
   waterOverlay: false,
+  hitFlashCount: 0,   // インクリメントするたびに被弾エフェクトが再生される
   actionFeedback: '',
   feedbackTimer: null,
 
@@ -54,6 +55,11 @@ export const useUIStore = create((set, get) => ({
 
   setWaterOverlay(visible) {
     set({ waterOverlay: visible });
+  },
+
+  /** 被弾時に呼ぶ。カウンターをインクリメントして HitOverlay をリトリガーする。 */
+  showHitFlash() {
+    set((s) => ({ hitFlashCount: s.hitFlashCount + 1 }));
   },
 
   showFeedback(message, durationMs = 1200) {

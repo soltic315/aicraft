@@ -46,6 +46,12 @@ import {
   HUNGER_STARVE_DAMAGE,
   APPLE_HUNGER_RESTORE,
   CHEST_AUTO_CLOSE_DISTANCE,
+  PLAYER_ATTACK_REACH,
+  PLAYER_ATTACK_DAMAGE_BASE,
+  PLAYER_ATTACK_DAMAGE_TOOL,
+  PLAYER_ATTACK_COOLDOWN,
+  KNOCKBACK_MOB_FORCE,
+  KNOCKBACK_PLAYER_FORCE,
 } from './config.js';
 import { useSettingsStore } from './stores/settingsStore.js';
 import { useInventoryStore } from './stores/inventoryStore.js';
@@ -58,6 +64,7 @@ import { useUIStore } from './stores/uiStore.js';
 import { useToolStore } from './stores/toolStore.js';
 import { useHungerStore } from './stores/hungerStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
+import { MobManager } from './mobs.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -184,6 +191,10 @@ export class GameController {
     }
 
     this.lastPlaceTime = 0;
+    this._attackCooldown = 0;
+
+    // モブマネージャー
+    this.mobManager = new MobManager(this.scene, this.world);
 
     // Break state (internal tracking for game loop)
     this.breakState = {
@@ -389,6 +400,7 @@ export class GameController {
       this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
       this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
       this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
+      this.mobManager.removeAll();
       this.player.spawn();
       this.player.lock();
     });
@@ -500,6 +512,7 @@ export class GameController {
     useToolStore.getState().clearTool();
     useHungerStore.getState().reset();
     useBreakStore.getState().reset();
+    this.mobManager.removeAll();
     // ストアをタイトル状態へ（設定パネルも閉じる）
     if (useUIStore.getState().settingsOpen) {
       useUIStore.getState().toggleSettings();
@@ -859,6 +872,45 @@ export class GameController {
     }
   }
 
+  // ---- モブシステム ----
+
+  _updateMobs(dt, isDay) {
+    if (useGameStore.getState().isDead) return;
+
+    this.mobManager.update(dt, this.player.position, isDay, (damage, mobX, mobZ) => {
+      const actualDamage = this.player.applyDamage(damage);
+      if (actualDamage > 0) {
+        this.player.applyKnockback(mobX, mobZ, KNOCKBACK_PLAYER_FORCE);
+        useUIStore.getState().showHitFlash();
+        useUIStore.getState().showFeedback(`ゾンビに攻撃された！ -${actualDamage} HP`, 900);
+        this.sound.playError();
+        if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+          useGameStore.getState().setDead(true);
+          document.exitPointerLock();
+        }
+      }
+    });
+  }
+
+  /** プレイヤーがモブを攻撃する */
+  _attackMob(mob) {
+    if (this._attackCooldown > 0) return;
+
+    const { selectedTool } = useToolStore.getState();
+    const damage = selectedTool != null ? PLAYER_ATTACK_DAMAGE_TOOL : PLAYER_ATTACK_DAMAGE_BASE;
+
+    mob.takeDamage(damage);
+    mob.flashHit();
+    mob.applyKnockback(this.player.position.x, this.player.position.z, KNOCKBACK_MOB_FORCE);
+
+    this._attackCooldown = PLAYER_ATTACK_COOLDOWN;
+    this.sound.playBreak(); // 打撃音として流用
+
+    if (!mob.isAlive) {
+      useUIStore.getState().showFeedback('ゾンビを倒した！', 1200);
+    }
+  }
+
   // ---- Day/Night ----
 
   _updateDayNightCycle(elapsedSeconds) {
@@ -944,25 +996,48 @@ export class GameController {
       this.world.update(this.player.position.x, this.player.position.z, this.camera);
       this._validateOpenedChest();
 
-      // ブロックハイライト・採掘はポインターロック時のみ
+      // 攻撃クールダウン更新
+      this._attackCooldown = Math.max(0, this._attackCooldown - dt);
+
+      // ブロックハイライト・採掘・モブ攻撃はポインターロック時のみ
       if (this.player.locked) {
-        const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
-        if (hit) {
+        const eyePos = this.player.getEyePosition();
+        const dir = this.player.getDirection();
+        const blockHit = this.world.raycast(eyePos, dir);
+
+        // モブへのレイキャスト（攻撃リーチ内のみ）
+        const mobHit = this.mobManager.raycastMobs(eyePos, dir, PLAYER_ATTACK_REACH);
+
+        // ブロックとモブの距離を比較してモブが手前にいるか判定
+        let blockDist = Infinity;
+        if (blockHit) {
+          const bx = blockHit.blockPos.x + 0.5 - eyePos.x;
+          const by = blockHit.blockPos.y + 0.5 - eyePos.y;
+          const bz = blockHit.blockPos.z + 0.5 - eyePos.z;
+          blockDist = Math.sqrt(bx * bx + by * by + bz * bz);
+        }
+        const targetMob = mobHit && mobHit.distance < blockDist ? mobHit.mob : null;
+
+        if (blockHit && !targetMob) {
+          // ブロックをターゲット
           this.highlightMesh.visible = true;
           this.highlightMesh.position.set(
-            hit.blockPos.x + 0.5,
-            hit.blockPos.y + 0.5,
-            hit.blockPos.z + 0.5
+            blockHit.blockPos.x + 0.5,
+            blockHit.blockPos.y + 0.5,
+            blockHit.blockPos.z + 0.5
           );
-
           if (this.input.isBreaking) {
-            this._updateBreaking(hit, time);
+            this._updateBreaking(blockHit, time);
           } else {
             this._resetBreaking();
           }
         } else {
+          // モブをターゲット（または何もない）
           this.highlightMesh.visible = false;
           this._resetBreaking();
+          if (targetMob && this.input.isBreaking) {
+            this._attackMob(targetMob);
+          }
         }
       } else {
         this.highlightMesh.visible = false;
@@ -983,6 +1058,7 @@ export class GameController {
       useUIStore.getState().setWaterOverlay(eyeBlock === BlockType.WATER);
 
       this._updateSurvivalSystems(dt);
+      this._updateMobs(dt, dayNight.isDay);
     } else {
       // タイトル画面
       useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);

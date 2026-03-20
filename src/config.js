@@ -57,6 +57,34 @@ export const DAY_NIGHT_CYCLE_SECONDS = 240;
 export const CHEST_STORAGE_LIMIT = 90;
 export const PLACE_COOLDOWN = 150;
 
+// プレイヤー攻撃
+export const PLAYER_ATTACK_REACH        = 3.5;  // 攻撃リーチ（ブロック）
+export const PLAYER_ATTACK_DAMAGE_BASE  = 1;    // 素手ダメージ
+export const PLAYER_ATTACK_DAMAGE_TOOL  = 3;    // ツール装備時ダメージ
+export const PLAYER_ATTACK_COOLDOWN     = 0.5;  // 攻撃クールダウン（秒）
+
+// ノックバック
+export const KNOCKBACK_MOB_FORCE        = 8;    // モブへのノックバック水平力（m/s）
+export const KNOCKBACK_PLAYER_FORCE     = 6;    // プレイヤーへのノックバック水平力（m/s）
+export const KNOCKBACK_PLAYER_VERTICAL  = 3;    // プレイヤーへのノックバック上向き力（m/s）
+
+// モブシステム
+export const MOB_MAX_COUNT          = 8;    // 同時存在できるモブの最大数
+export const MOB_SPAWN_INTERVAL     = 15;   // スポーン試行間隔（秒）
+export const MOB_SPAWN_MIN_DIST     = 8;    // スポーン最小距離（ブロック）
+export const MOB_SPAWN_MAX_DIST     = 24;   // スポーン最大距離（ブロック）
+export const MOB_DESPAWN_DIST       = 64;   // デスポーン距離（ブロック）
+export const MOB_SEA_LEVEL_MIN      = 20;   // この高度以下にはスポーンしない
+
+// ゾンビ
+export const ZOMBIE_HP                  = 10;
+export const ZOMBIE_SPEED               = 2.0;   // ブロック/秒
+export const ZOMBIE_VIEW_RANGE          = 16;    // 追尾開始距離（ブロック）
+export const ZOMBIE_ATTACK_RANGE        = 1.5;   // 攻撃射程（ブロック）
+export const ZOMBIE_ATTACK_DAMAGE       = 2;     // 1回の攻撃ダメージ
+export const ZOMBIE_ATTACK_INTERVAL     = 1.5;   // 攻撃間隔（秒）
+export const ZOMBIE_BURN_DAMAGE_PER_SEC = 4;     // 昼間の日光ダメージ（HP/秒）
+
 export const DAY_SKY_COLOR = new THREE.Color(0x87CEEB);
 export const NIGHT_SKY_COLOR = new THREE.Color(0x071020);
 export const DAY_FOG_COLOR = new THREE.Color(0x87CEEB);

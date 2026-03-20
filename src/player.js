@@ -47,6 +47,9 @@ export class Player {
     this.healthRegenCooldown = 0;
     this.regenEnabled = true;
 
+    // ノックバック速度（攻撃を受けたときに加算、毎フレーム減衰）
+    this.knockbackVelocity = new THREE.Vector3();
+
     this._initControls();
   }
 
@@ -114,6 +117,15 @@ export class Player {
     // Horizontal velocity
     this.velocity.x = moveDir.x * speed;
     this.velocity.z = moveDir.z * speed;
+
+    // ノックバック加算・減衰（1秒でほぼ消える）
+    if (this.knockbackVelocity.lengthSq() > 0.01) {
+      this.velocity.x += this.knockbackVelocity.x;
+      this.velocity.z += this.knockbackVelocity.z;
+      this.velocity.y = Math.max(this.velocity.y, this.knockbackVelocity.y);
+      this.knockbackVelocity.multiplyScalar(Math.pow(0.08, dt));
+      if (this.knockbackVelocity.lengthSq() < 0.01) this.knockbackVelocity.set(0, 0, 0);
+    }
 
     if (this.isInWater) {
       // 水中: Spaceで浮上、浮力で上昇減速
@@ -346,6 +358,19 @@ export class Player {
     const num = Number(value);
     if (!Number.isFinite(num)) return;
     this.mouseSensitivity = Math.min(Math.max(num, 0.0005), 0.008);
+  }
+
+  /** モブ側の位置から弾き飛ばされる方向にノックバックを適用 */
+  applyKnockback(fromX, fromZ, force) {
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) return;
+    this.knockbackVelocity.set(
+      (dx / len) * force,
+      force * 0.5,   // 少し上に飛ぶ
+      (dz / len) * force,
+    );
   }
 
   applyDamage(amount) {

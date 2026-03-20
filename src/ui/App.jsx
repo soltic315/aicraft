@@ -13,6 +13,7 @@ import { InventoryPanel } from './panels/InventoryPanel.jsx';
 import { BreakProgress } from './overlays/BreakProgress.jsx';
 import { ActionFeedback } from './overlays/ActionFeedback.jsx';
 import { WaterOverlay } from './overlays/WaterOverlay.jsx';
+import { HitOverlay } from './overlays/HitOverlay.jsx';
 import { KeyHints } from './overlays/KeyHints.jsx';
 export function App() {
   return (
@@ -21,6 +22,7 @@ export function App() {
       <LoadingScreen />
       <DeathScreen />
       <WaterOverlay />
+      <HitOverlay />
       <BreakProgress />
       <ActionFeedback />
       <InfoOverlay />

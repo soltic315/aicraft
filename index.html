@@ -456,6 +456,24 @@
       );
     }
 
+    #hit-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 11;
+      background: radial-gradient(
+        ellipse at center,
+        transparent 35%,
+        rgba(220, 0, 0, 0.65) 100%
+      );
+      animation: hitFlash 0.45s ease-out forwards;
+    }
+
+    @keyframes hitFlash {
+      0%   { opacity: 1; }
+      100% { opacity: 0; }
+    }
+
     #start-screen {
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
