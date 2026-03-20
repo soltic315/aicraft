@@ -53,6 +53,18 @@ export const BlockType = {
   IRON_PICKAXE: 22,
   IRON_AXE: 23,
   IRON_SHOVEL: 24,
+  // 新素材アイテム
+  LEATHER: 43,   // 革（牛からドロップ）
+  BONE: 44,      // 骨（スケルトンからドロップ）
+  ARROW: 45,     // 矢（スケルトンからドロップ）
+  BOW: 46,       // 弓（クラフト可能）
+  // ダイヤモンドティアツール
+  DIAMOND_PICKAXE: 47,
+  DIAMOND_AXE: 48,
+  DIAMOND_SHOVEL: 49,
+  // バイオームブロック
+  JUNGLE_WOOD: 50,    // ジャングル木材
+  JUNGLE_LEAVES: 51,  // ジャングル葉
 };
 
 export const BLOCK_NAMES = {
@@ -98,6 +110,15 @@ export const BLOCK_NAMES = {
   [BlockType.IRON_PICKAXE]: 'ツルハシ（鉄）',
   [BlockType.IRON_AXE]: '斧（鉄）',
   [BlockType.IRON_SHOVEL]: 'シャベル（鉄）',
+  [BlockType.LEATHER]: '革',
+  [BlockType.BONE]: '骨',
+  [BlockType.ARROW]: '矢',
+  [BlockType.BOW]: '弓',
+  [BlockType.DIAMOND_PICKAXE]: 'ツルハシ（ダイヤ）',
+  [BlockType.DIAMOND_AXE]: '斧（ダイヤ）',
+  [BlockType.DIAMOND_SHOVEL]: 'シャベル（ダイヤ）',
+  [BlockType.JUNGLE_WOOD]: 'ジャングル木材',
+  [BlockType.JUNGLE_LEAVES]: 'ジャングルの葉',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -124,6 +145,8 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.FLOWER]: 0.1,
   [BlockType.MUSHROOM]: 0.15,
   [BlockType.ICE]: 0.5,
+  [BlockType.JUNGLE_WOOD]: 0.9,
+  [BlockType.JUNGLE_LEAVES]: 0.2,
 };
 
 // ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
@@ -318,6 +341,20 @@ const BLOCK_COLORS = {
     bottom: '#161616',
     topDetail: '#323232',
     sideDetail: '#2a2a2a',
+  },
+  [BlockType.JUNGLE_WOOD]: {
+    top: '#8a6040',
+    side: '#4e2e18',
+    bottom: '#8a6040',
+    topDetail: '#6e4c30',
+    sideDetail: '#3a2010',
+  },
+  [BlockType.JUNGLE_LEAVES]: {
+    top: '#1a6018',
+    side: '#1a6018',
+    bottom: '#1a6018',
+    topDetail: '#0e4a0e',
+    sideDetail: '#0e4a0e',
   },
 };
 
@@ -524,6 +561,24 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
       ctx.fillStyle = rand() > 0.5 ? '#20c8d0' : '#10a8b8';
       ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
     }
+  } else if (pattern === 'jungle_wood_side') {
+    // ジャングル木材側面: 暗い縦縞
+    for (let y = 0; y < 16; y++) {
+      if (y % 3 === 0) {
+        ctx.fillStyle = '#3a2010';
+        ctx.fillRect(0, y * pixelSize, size, pixelSize * 0.6);
+      }
+    }
+    ctx.fillStyle = '#2a1008';
+    ctx.fillRect(pixelSize * 6, 0, pixelSize * 2, size);
+  } else if (pattern === 'jungle_leaves') {
+    // ジャングル葉: 濃い緑のランダムパターン
+    for (let i = 0; i < 35; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#0e4a0e' : '#268026';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
   } else if (pattern === 'chest_side') {
     for (let y = 1; y < 16; y += 3) {
       ctx.fillStyle = y % 2 === 0 ? '#7f4f26' : '#9a6532';
@@ -650,6 +705,8 @@ export function generateTextures() {
     [BlockType.DIAMOND_ORE]: { top: 'diamond_ore', side: 'diamond_ore', bottom: 'diamond_ore' },
     [BlockType.ICE]: { top: 'glass', side: 'glass', bottom: 'glass' },
     [BlockType.BEDROCK]: { top: 'cobblestone', side: 'cobblestone', bottom: 'cobblestone' },
+    [BlockType.JUNGLE_WOOD]: { top: 'wood_top', side: 'jungle_wood_side', bottom: 'wood_top' },
+    [BlockType.JUNGLE_LEAVES]: { top: 'jungle_leaves', side: 'jungle_leaves', bottom: 'jungle_leaves' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -888,6 +945,106 @@ function generateIronIngotIcon() {
   return c;
 }
 
+// 革アイコン
+function generateLeatherIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#8B5A2B';
+  ctx.beginPath();
+  ctx.roundRect(5, 8, 22, 16, 4);
+  ctx.fill();
+  ctx.fillStyle = '#6B3E1E';
+  ctx.fillRect(8, 11, 16, 3);
+  ctx.fillRect(8, 18, 16, 3);
+  ctx.fillStyle = '#A0724A';
+  ctx.fillRect(6, 9, 20, 2);
+  return c;
+}
+
+// 骨アイコン
+function generateBoneIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#f0ece0';
+  // 本体（斜め棒）
+  ctx.save();
+  ctx.translate(16, 16);
+  ctx.rotate(Math.PI / 4);
+  ctx.fillRect(-2, -10, 4, 20);
+  ctx.restore();
+  // 端の丸み
+  const ends = [[7, 7], [25, 25], [7, 25], [25, 7]];
+  for (const [ex, ey] of ends) {
+    ctx.beginPath();
+    ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return c;
+}
+
+// 矢アイコン
+function generateArrowIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 矢柄（茶色）
+  ctx.strokeStyle = '#8B6914';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(6, 26);
+  ctx.lineTo(24, 8);
+  ctx.stroke();
+  // 矢じり（灰色）
+  ctx.fillStyle = '#a0a8b0';
+  ctx.beginPath();
+  ctx.moveTo(24, 8);
+  ctx.lineTo(20, 10);
+  ctx.lineTo(22, 14);
+  ctx.closePath();
+  ctx.fill();
+  // 羽根（白）
+  ctx.fillStyle = '#e8e8e8';
+  ctx.beginPath();
+  ctx.moveTo(6, 26);
+  ctx.lineTo(4, 20);
+  ctx.lineTo(10, 22);
+  ctx.closePath();
+  ctx.fill();
+  return c;
+}
+
+// 弓アイコン
+function generateBowIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 弓本体（弧）
+  ctx.strokeStyle = '#8B5E3C';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(20, 16, 12, Math.PI * 0.6, Math.PI * 1.4);
+  ctx.stroke();
+  // 弦（細い線）
+  ctx.strokeStyle = '#e8e8d0';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(11, 7);
+  ctx.lineTo(11, 25);
+  ctx.stroke();
+  // 矢（弦に添える）
+  ctx.strokeStyle = '#a0784a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(11, 16);
+  ctx.lineTo(22, 16);
+  ctx.stroke();
+  return c;
+}
+
 // Generate a small icon canvas for hotbar display
 export function generateBlockIcon(type) {
   if (type === BlockType.APPLE)       return generateAppleIcon();
@@ -906,6 +1063,13 @@ export function generateBlockIcon(type) {
   if (type === BlockType.IRON_PICKAXE)  return generatePickaxeIcon('#d0d8e0');
   if (type === BlockType.IRON_AXE)      return generateAxeIcon('#d0d8e0');
   if (type === BlockType.IRON_SHOVEL)   return generateShovelIcon('#d0d8e0');
+  if (type === BlockType.LEATHER)         return generateLeatherIcon();
+  if (type === BlockType.BONE)            return generateBoneIcon();
+  if (type === BlockType.ARROW)           return generateArrowIcon();
+  if (type === BlockType.BOW)             return generateBowIcon();
+  if (type === BlockType.DIAMOND_PICKAXE) return generatePickaxeIcon('#60e8f0');
+  if (type === BlockType.DIAMOND_AXE)     return generateAxeIcon('#60e8f0');
+  if (type === BlockType.DIAMOND_SHOVEL)  return generateShovelIcon('#60e8f0');
 
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;

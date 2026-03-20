@@ -23,6 +23,21 @@ import {
   ZOMBIE_ATTACK_DAMAGE,
   ZOMBIE_ATTACK_INTERVAL,
   ZOMBIE_BURN_DAMAGE_PER_SEC,
+  SKELETON_HP,
+  SKELETON_SPEED,
+  SKELETON_VIEW_RANGE,
+  SKELETON_ATTACK_RANGE,
+  SKELETON_ATTACK_DAMAGE,
+  SKELETON_ATTACK_INTERVAL,
+  SKELETON_BURN_DAMAGE_PER_SEC,
+  SKELETON_SAFE_RANGE,
+  CREEPER_HP,
+  CREEPER_SPEED,
+  CREEPER_VIEW_RANGE,
+  CREEPER_FUSE_RANGE,
+  CREEPER_FUSE_TIME,
+  CREEPER_EXPLOSION_RADIUS,
+  CREEPER_EXPLOSION_DAMAGE,
   ANIMAL_MAX_COUNT,
   ANIMAL_SPAWN_INTERVAL,
   COW_HP,
@@ -114,6 +129,7 @@ const HIT_FLASH_DURATION = 0.18; // 秒
 
 class Zombie {
   constructor(scene, position) {
+    this.name = 'ゾンビ';
     this.scene = scene;
     this.position = position.clone();
     this.health = ZOMBIE_HP;
@@ -171,6 +187,13 @@ class Zombie {
     } else {
       this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
     }
+  }
+
+  /** 死亡時ドロップ */
+  drops() {
+    const items = [{ type: BlockType.BEEF, count: 1 }];
+    if (Math.random() < 0.2) items.push({ type: BlockType.BONE, count: 1 });
+    return items;
   }
 
   _die() {
@@ -501,6 +524,439 @@ class Cow {
   }
 }
 
+// ---- スケルトンメッシュ生成 ----
+
+function createSkeletonMesh() {
+  const boneMat = new THREE.MeshLambertMaterial({ color: 0xdde8e0 });
+  const jointMat = new THREE.MeshLambertMaterial({ color: 0xc0ccc4 });
+
+  const group = new THREE.Group();
+
+  // 頭（やや細長い）
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.44, 0.44), boneMat);
+  head.position.set(0, 1.35, 0);
+  group.add(head);
+
+  // 胴体（細い）
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.7, 0.18), boneMat);
+  body.position.set(0, 0.72, 0);
+  group.add(body);
+
+  // 腕（細い）
+  const armGeo = new THREE.BoxGeometry(0.14, 0.6, 0.14);
+  const leftArm = new THREE.Mesh(armGeo, jointMat);
+  leftArm.position.set(-0.28, 0.72, 0);
+  group.add(leftArm);
+
+  const rightArm = new THREE.Mesh(armGeo, jointMat);
+  rightArm.position.set(0.28, 0.72, 0);
+  group.add(rightArm);
+
+  // 脚（細い）
+  const legGeo = new THREE.BoxGeometry(0.16, 0.65, 0.16);
+  const leftLeg = new THREE.Mesh(legGeo, boneMat);
+  leftLeg.position.set(-0.1, 0.325, 0);
+  group.add(leftLeg);
+
+  const rightLeg = new THREE.Mesh(legGeo, boneMat);
+  rightLeg.position.set(0.1, 0.325, 0);
+  group.add(rightLeg);
+
+  // 弓（右腕に取り付け）
+  const bowMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
+  const bowGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6);
+  const bow = new THREE.Mesh(bowGeo, bowMat);
+  bow.position.set(0.38, 0.72, 0.1);
+  bow.rotation.z = Math.PI * 0.1;
+  group.add(bow);
+
+  return { group, mats: { bone: boneMat, joint: jointMat } };
+}
+
+// ---- Skeleton クラス ----
+
+class Skeleton {
+  constructor(scene, position) {
+    this.name = 'スケルトン';
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = SKELETON_HP;
+    this.maxHealth = SKELETON_HP;
+    this.isAlive = true;
+    this.attackCooldown = 0;
+    this._walkTime = 0;
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+
+    const { group, mats } = createSkeletonMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      bone: mats.bone.color.clone(),
+      joint: mats.joint.color.clone(),
+    };
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.bone.color.copy(HIT_FLASH_COLOR);
+    this._mats.joint.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+    }
+  }
+
+  /** 死亡時ドロップ */
+  drops() {
+    const drops = [{ type: BlockType.BONE, count: 1 + Math.floor(Math.random() * 2) }];
+    if (Math.random() < 0.6) drops.push({ type: BlockType.ARROW, count: 1 + Math.floor(Math.random() * 3) });
+    return drops;
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.bone.dispose();
+    this._mats.joint.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.bone.color.copy(this._origColors.bone);
+    this._mats.joint.color.copy(this._origColors.joint);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    // ヒットフラッシュ更新
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+
+    // 昼間は日光ダメージ
+    if (isDay) {
+      this.takeDamage(SKELETON_BURN_DAMAGE_PER_SEC * dt);
+      return null;
+    }
+
+    const dx = playerPos.x - this.position.x;
+    const dz = playerPos.z - this.position.z;
+    const horizDist = Math.sqrt(dx * dx + dz * dz);
+
+    if (horizDist < SKELETON_VIEW_RANGE && horizDist > 0.05) {
+      const nx = dx / horizDist;
+      const nz = dz / horizDist;
+
+      // 近づきすぎたら後退（弓使いは距離を保つ）
+      let speed = 0;
+      if (horizDist < SKELETON_SAFE_RANGE) {
+        speed = -SKELETON_SPEED; // 後退
+      } else if (horizDist > SKELETON_ATTACK_RANGE * 0.7) {
+        speed = SKELETON_SPEED; // 接近
+      }
+
+      if (speed !== 0) {
+        const moveX = nx * speed * dt;
+        const moveZ = nz * speed * dt;
+        const bodyY = Math.floor(this.position.y);
+
+        const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+        const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+        if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
+
+        const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+        const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+        if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+      }
+
+      // プレイヤー方向を向く
+      this.mesh.rotation.y = Math.atan2(dx, dz);
+
+      // 歩行アニメーション
+      if (Math.abs(speed) > 0) {
+        this._walkTime += dt * 5;
+        const swing = Math.sin(this._walkTime) * 0.35;
+        this.mesh.children[4].rotation.x =  swing;
+        this.mesh.children[5].rotation.x = -swing;
+      }
+    }
+
+    // ノックバック適用
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bodyY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    // 地形高度に追従
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 1;
+    this.mesh.position.copy(this.position);
+
+    // 弓攻撃判定（射程内ならダメージ）
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    const dy = playerPos.y - this.position.y;
+    const fullDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (fullDist < SKELETON_ATTACK_RANGE && this.attackCooldown <= 0) {
+      this.attackCooldown = SKELETON_ATTACK_INTERVAL;
+      return { type: 'attack', damage: SKELETON_ATTACK_DAMAGE, mobX: this.position.x, mobZ: this.position.z };
+    }
+
+    return null;
+  }
+}
+
+// ---- クリーパーメッシュ生成 ----
+
+function createCreeperMesh() {
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2a8a2a });
+  const faceMat = new THREE.MeshLambertMaterial({ color: 0x1e6a1e });
+
+  const group = new THREE.Group();
+
+  // 頭（ほぼ正方形）
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), bodyMat);
+  head.position.set(0, 1.4, 0);
+  group.add(head);
+
+  // 胴体
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.7, 0.25), bodyMat);
+  body.position.set(0, 0.75, 0);
+  group.add(body);
+
+  // 4本の脚（短め）
+  const legGeo = new THREE.BoxGeometry(0.2, 0.38, 0.2);
+  for (const [x, z] of [[-0.12, 0.1], [0.12, 0.1], [-0.12, -0.1], [0.12, -0.1]]) {
+    const leg = new THREE.Mesh(legGeo, faceMat);
+    leg.position.set(x, 0.19, z);
+    group.add(leg);
+  }
+
+  return { group, mats: { body: bodyMat, face: faceMat } };
+}
+
+// ---- Creeper クラス ----
+
+class Creeper {
+  constructor(scene, position) {
+    this.name = 'クリーパー';
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = CREEPER_HP;
+    this.maxHealth = CREEPER_HP;
+    this.isAlive = true;
+    this._walkTime = 0;
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+
+    // 起爆タイマー
+    this._fuseActive = false;
+    this._fuseTimer = 0;
+    this._fuseFlashTimer = 0;
+
+    const { group, mats } = createCreeperMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      body: mats.body.color.clone(),
+      face: mats.face.color.clone(),
+    };
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.body.color.copy(HIT_FLASH_COLOR);
+    this._mats.face.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+    }
+    // 攻撃を受けたら起爆解除
+    this._fuseActive = false;
+    this._fuseTimer = 0;
+  }
+
+  drops() {
+    return []; // クリーパーはドロップなし（爆発で消滅）
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.body.dispose();
+    this._mats.face.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.body.color.copy(this._origColors.body);
+    this._mats.face.color.copy(this._origColors.face);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    // ヒットフラッシュ更新
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0 && !this._fuseActive) this._restoreColors();
+    }
+
+    const dx = playerPos.x - this.position.x;
+    const dz = playerPos.z - this.position.z;
+    const horizDist = Math.sqrt(dx * dx + dz * dz);
+
+    // 起爆処理
+    if (this._fuseActive) {
+      this._fuseTimer -= dt;
+      // 白黒点滅エフェクト
+      this._fuseFlashTimer -= dt;
+      if (this._fuseFlashTimer <= 0) {
+        this._fuseFlashTimer = 0.15;
+        const flashVal = Math.sin(this._fuseTimer * 20) > 0;
+        if (flashVal) {
+          this._mats.body.color.setRGB(1, 1, 1);
+          this._mats.face.color.setRGB(1, 1, 1);
+        } else {
+          this._restoreColors();
+        }
+      }
+
+      // 距離が離れたら起爆解除
+      if (horizDist > CREEPER_FUSE_RANGE * 1.5) {
+        this._fuseActive = false;
+        this._fuseTimer = 0;
+        this._restoreColors();
+      }
+
+      // 起爆！
+      if (this._fuseTimer <= 0) {
+        this._die();
+        return {
+          type: 'explosion',
+          x: Math.floor(this.position.x),
+          y: Math.floor(this.position.y),
+          z: Math.floor(this.position.z),
+          radius: CREEPER_EXPLOSION_RADIUS,
+          damage: CREEPER_EXPLOSION_DAMAGE,
+        };
+      }
+      return null;
+    }
+
+    // 追尾
+    if (horizDist < CREEPER_VIEW_RANGE && horizDist > 0.05) {
+      const nx = dx / horizDist;
+      const nz = dz / horizDist;
+      const moveX = nx * CREEPER_SPEED * dt;
+      const moveZ = nz * CREEPER_SPEED * dt;
+      const bodyY = Math.floor(this.position.y);
+
+      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
+
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+
+      this.mesh.rotation.y = Math.atan2(dx, dz);
+
+      // 歩行アニメーション
+      this._walkTime += dt * 6;
+      const swing = Math.sin(this._walkTime) * 0.3;
+      this.mesh.children[2].rotation.x =  swing;
+      this.mesh.children[3].rotation.x = -swing;
+      this.mesh.children[4].rotation.x = -swing;
+      this.mesh.children[5].rotation.x =  swing;
+
+      // 起爆範囲に入ったら起爆開始
+      if (horizDist < CREEPER_FUSE_RANGE) {
+        this._fuseActive = true;
+        this._fuseTimer = CREEPER_FUSE_TIME;
+        this._fuseFlashTimer = 0;
+      }
+    }
+
+    // ノックバック適用
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bodyY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    // 地形高度に追従
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 1;
+    this.mesh.position.copy(this.position);
+
+    return null;
+  }
+}
+
 // ---- MobManager クラス ----
 
 export class MobManager {
@@ -548,9 +1004,10 @@ export class MobManager {
   /**
    * ゲームループから毎フレーム呼ぶ
    * @param {(damage: number, mobX: number, mobZ: number) => void} onMobAttack
+   * @param {(x: number, y: number, z: number, radius: number, damage: number) => void} onExplosion
    */
-  update(dt, playerPos, isDay, onMobAttack) {
-    // 夜間スポーン（ゾンビ）
+  update(dt, playerPos, isDay, onMobAttack, onExplosion) {
+    // 夜間スポーン（ゾンビ・スケルトン・クリーパー）
     if (!isDay) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
@@ -591,6 +1048,12 @@ export class MobManager {
       const result = mob.update(dt, playerPos, this.world, isDay);
       if (result?.type === 'attack') {
         onMobAttack(result.damage, result.mobX, result.mobZ);
+      } else if (result?.type === 'explosion') {
+        if (onExplosion) {
+          onExplosion(result.x, result.y, result.z, result.radius, result.damage);
+        }
+        // 爆発後はモブ除去
+        this.mobs.splice(i, 1);
       }
     }
   }
@@ -625,7 +1088,17 @@ export class MobManager {
 
     if (groundY <= MOB_SEA_LEVEL_MIN) return;
 
-    this.mobs.push(new Zombie(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+    // ランダムにモブ種別を選択（ゾンビ50%・スケルトン30%・クリーパー20%）
+    const roll = Math.random();
+    let mob;
+    if (roll < 0.5) {
+      mob = new Zombie(this.scene, new THREE.Vector3(x, groundY + 1, z));
+    } else if (roll < 0.8) {
+      mob = new Skeleton(this.scene, new THREE.Vector3(x, groundY + 1, z));
+    } else {
+      mob = new Creeper(this.scene, new THREE.Vector3(x, groundY + 1, z));
+    }
+    this.mobs.push(mob);
   }
 
   removeAll() {

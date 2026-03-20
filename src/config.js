@@ -26,6 +26,9 @@ export const ALL_ITEM_TYPES = [
   BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL,
   BlockType.STONE_PICKAXE, BlockType.STONE_AXE, BlockType.STONE_SHOVEL,
   BlockType.IRON_PICKAXE, BlockType.IRON_AXE, BlockType.IRON_SHOVEL,
+  BlockType.LEATHER, BlockType.BONE, BlockType.ARROW, BlockType.BOW,
+  BlockType.DIAMOND_PICKAXE, BlockType.DIAMOND_AXE, BlockType.DIAMOND_SHOVEL,
+  BlockType.JUNGLE_WOOD, BlockType.JUNGLE_LEAVES,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
@@ -102,6 +105,25 @@ export const COW_FLEE_SPEED         = 2.5;  // 逃走速度（ブロック/秒�
 export const COW_FLEE_DURATION      = 3.0;  // 逃走継続時間（秒）
 export const COW_WANDER_INTERVAL    = 3.0;  // 方向転換間隔（秒）
 
+// スケルトン
+export const SKELETON_HP                = 8;
+export const SKELETON_SPEED             = 1.5;   // ブロック/秒（弓を使うので遅め）
+export const SKELETON_VIEW_RANGE        = 20;    // 追尾開始距離（ブロック）
+export const SKELETON_ATTACK_RANGE      = 16;    // 弓の射程（ブロック）
+export const SKELETON_ATTACK_DAMAGE     = 2;     // 矢1本のダメージ
+export const SKELETON_ATTACK_INTERVAL   = 2.5;   // 射撃間隔（秒）
+export const SKELETON_BURN_DAMAGE_PER_SEC = 4;   // 昼間の日光ダメージ（HP/秒）
+export const SKELETON_SAFE_RANGE        = 5;     // この距離以内は後退する（近づかれないため）
+
+// クリーパー
+export const CREEPER_HP                 = 8;
+export const CREEPER_SPEED              = 2.2;   // ブロック/秒
+export const CREEPER_VIEW_RANGE         = 14;    // 追尾開始距離
+export const CREEPER_FUSE_RANGE         = 2.5;   // 起爆開始距離（ブロック）
+export const CREEPER_FUSE_TIME          = 1.5;   // 起爆までの時間（秒）
+export const CREEPER_EXPLOSION_RADIUS   = 3;     // 爆発半径（ブロック）
+export const CREEPER_EXPLOSION_DAMAGE   = 6;     // 爆発ダメージ（プレイヤーへ）
+
 // ゾンビ
 export const ZOMBIE_HP                  = 10;
 export const ZOMBIE_SPEED               = 2.0;   // ブロック/秒
@@ -135,15 +157,19 @@ export const STACK_LIMIT = 64;
 
 // ツール類はスタック上限 1（耐久値管理のため）
 export const ITEM_STACK_LIMITS = {
-  [BlockType.PICKAXE]:       1,
-  [BlockType.AXE]:           1,
-  [BlockType.SHOVEL]:        1,
-  [BlockType.STONE_PICKAXE]: 1,
-  [BlockType.STONE_AXE]:     1,
-  [BlockType.STONE_SHOVEL]:  1,
-  [BlockType.IRON_PICKAXE]:  1,
-  [BlockType.IRON_AXE]:      1,
-  [BlockType.IRON_SHOVEL]:   1,
+  [BlockType.PICKAXE]:          1,
+  [BlockType.AXE]:              1,
+  [BlockType.SHOVEL]:           1,
+  [BlockType.STONE_PICKAXE]:    1,
+  [BlockType.STONE_AXE]:        1,
+  [BlockType.STONE_SHOVEL]:     1,
+  [BlockType.IRON_PICKAXE]:     1,
+  [BlockType.IRON_AXE]:         1,
+  [BlockType.IRON_SHOVEL]:      1,
+  [BlockType.DIAMOND_PICKAXE]:  1,
+  [BlockType.DIAMOND_AXE]:      1,
+  [BlockType.DIAMOND_SHOVEL]:   1,
+  [BlockType.BOW]:              1,
 };
 
 export function getStackLimit(type) {
@@ -158,7 +184,10 @@ export const TOOL_ITEMS = new Set([
   BlockType.PICKAXE,       BlockType.AXE,       BlockType.SHOVEL,
   BlockType.STONE_PICKAXE, BlockType.STONE_AXE, BlockType.STONE_SHOVEL,
   BlockType.IRON_PICKAXE,  BlockType.IRON_AXE,  BlockType.IRON_SHOVEL,
+  BlockType.DIAMOND_PICKAXE, BlockType.DIAMOND_AXE, BlockType.DIAMOND_SHOVEL,
+  BlockType.BOW, BlockType.ARROW,
   BlockType.IRON_INGOT, BlockType.COAL, BlockType.GOLD_INGOT, BlockType.DIAMOND,
+  BlockType.LEATHER, BlockType.BONE,
   BlockType.LAVA, // 溶岩は設置不可（液体は破壊のみ）
 ]);
 
@@ -197,6 +226,15 @@ export const STARTER_INVENTORY = {
   [BlockType.IRON_PICKAXE]: 0,
   [BlockType.IRON_AXE]: 0,
   [BlockType.IRON_SHOVEL]: 0,
+  [BlockType.LEATHER]: 0,
+  [BlockType.BONE]: 0,
+  [BlockType.ARROW]: 0,
+  [BlockType.BOW]: 0,
+  [BlockType.DIAMOND_PICKAXE]: 0,
+  [BlockType.DIAMOND_AXE]: 0,
+  [BlockType.DIAMOND_SHOVEL]: 0,
+  [BlockType.JUNGLE_WOOD]: 0,
+  [BlockType.JUNGLE_LEAVES]: 0,
 };
 
 export const CRAFT_RECIPES = [
@@ -386,6 +424,72 @@ export const CRAFT_RECIPES = [
     requiresCraftingTable: true,
     consumes: { [BlockType.COBBLESTONE]: 4 },
     produces: { [BlockType.FURNACE]: 1 },
+  },
+  // 弓クラフト（板材 x3 → 弓 x1）
+  {
+    id: 'bow_from_plank',
+    label: '板材 x3 -> 弓 x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.PLANK]: 3 },
+    produces: { [BlockType.BOW]: 1 },
+  },
+  // 矢クラフト（骨 x1 -> 矢 x4）
+  {
+    id: 'arrow_from_bone',
+    label: '骨 x1 -> 矢 x4',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.BONE]: 1 },
+    produces: { [BlockType.ARROW]: 4 },
+  },
+  // ダイヤモンドツールレシピ（ダイヤモンド x2）
+  {
+    id: 'diamond_pickaxe',
+    label: 'ダイヤモンド x2 -> ツルハシ（ダイヤ） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 2 },
+    produces: { [BlockType.DIAMOND_PICKAXE]: 1 },
+  },
+  {
+    id: 'diamond_axe',
+    label: 'ダイヤモンド x2 -> 斧（ダイヤ） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 2 },
+    produces: { [BlockType.DIAMOND_AXE]: 1 },
+  },
+  {
+    id: 'diamond_shovel',
+    label: 'ダイヤモンド x2 -> シャベル（ダイヤ） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 2 },
+    produces: { [BlockType.DIAMOND_SHOVEL]: 1 },
+  },
+  // ダイヤモンドツール修理レシピ（ダイヤモンド x1 -> 耐久 +200）
+  {
+    id: 'repair_diamond_pickaxe',
+    label: 'ツルハシ（ダイヤ）修理（ダイヤ x1 -> 耐久 +200）',
+    requiresRepairTable: true,
+    consumes: { [BlockType.DIAMOND_PICKAXE]: 1, [BlockType.DIAMOND]: 1 },
+    produces: { [BlockType.DIAMOND_PICKAXE]: 1 },
+    repairTool: 'diamond_pickaxe',
+    repairAmount: 200,
+  },
+  {
+    id: 'repair_diamond_axe',
+    label: '斧（ダイヤ）修理（ダイヤ x1 -> 耐久 +200）',
+    requiresRepairTable: true,
+    consumes: { [BlockType.DIAMOND_AXE]: 1, [BlockType.DIAMOND]: 1 },
+    produces: { [BlockType.DIAMOND_AXE]: 1 },
+    repairTool: 'diamond_axe',
+    repairAmount: 200,
+  },
+  {
+    id: 'repair_diamond_shovel',
+    label: 'シャベル（ダイヤ）修理（ダイヤ x1 -> 耐久 +200）',
+    requiresRepairTable: true,
+    consumes: { [BlockType.DIAMOND_SHOVEL]: 1, [BlockType.DIAMOND]: 1 },
+    produces: { [BlockType.DIAMOND_SHOVEL]: 1 },
+    repairTool: 'diamond_shovel',
+    repairAmount: 200,
   },
 ];
 

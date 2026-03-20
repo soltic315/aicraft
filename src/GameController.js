@@ -130,6 +130,7 @@ export class GameController {
         if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; matOptions.depthWrite = false; }
         if (type === BlockType.GLASS) { matOptions.transparent = true; matOptions.opacity = 0.42; }
         if (type === BlockType.LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
+        if (type === BlockType.JUNGLE_LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
         if (type === BlockType.ICE)   { matOptions.transparent = true; matOptions.opacity = 0.92; matOptions.depthWrite = false; }
 
         this.blockMaterials[type][face] = new THREE.MeshLambertMaterial(matOptions);
@@ -795,6 +796,50 @@ export class GameController {
     }
   }
 
+  // ---- 弓射撃 ----
+
+  _tryFireBow(now) {
+    if (now - this.lastPlaceTime < 600) return; // 弓は0.6秒のクールダウン
+
+    // 矢が必要
+    const arrowCount = useInventoryStore.getState().getCount(BlockType.ARROW);
+    if (arrowCount <= 0) {
+      useUIStore.getState().showFeedback('矢がありません！', 800);
+      this.sound.playError();
+      return;
+    }
+
+    const eyePos = this.player.getEyePosition();
+    const dir = this.player.getDirection();
+    const BOW_RANGE = 24;
+
+    // 射程内のモブへレイキャスト
+    const mobHit = this.mobManager.raycastMobs(eyePos, dir, BOW_RANGE);
+
+    this.lastPlaceTime = now;
+    this._consumeFromInventory(BlockType.ARROW);
+
+    if (mobHit) {
+      const { mob, distance } = mobHit;
+      // 距離に応じてダメージ減衰（近距離ほど強い）
+      const dmg = Math.max(2, Math.round(5 * (1 - distance / BOW_RANGE)));
+      mob.takeDamage(dmg);
+      mob.flashHit();
+      if (!mob.isAlive && typeof mob.drops === 'function') {
+        for (const { type, count } of mob.drops()) {
+          this.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
+        }
+        const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
+        useUIStore.getState().showFeedback(`弓で${name}を倒した！`, 1200);
+      } else {
+        useUIStore.getState().showFeedback(`弓攻撃命中！ -${dmg} HP`, 700);
+      }
+    } else {
+      useUIStore.getState().showFeedback('弓を放った（空振り）', 700);
+    }
+    this.sound.playBreak();
+  }
+
   // ---- 食料消費 ----
 
   _tryEatFood(foodType) {
@@ -863,6 +908,12 @@ export class GameController {
     // 食料アイテムはブロックを見ていなくても右クリックで食べる
     if (placeType != null && FOOD_ITEMS.has(placeType)) {
       this._tryEatFood(placeType);
+      return;
+    }
+
+    // 弓: 矢を消費して遠距離攻撃
+    if (placeType === BlockType.BOW) {
+      this._tryFireBow(now);
       return;
     }
 
@@ -1005,7 +1056,7 @@ export class GameController {
       const dropType = BLOCK_DROP_OVERRIDES[hit.blockType] ?? hit.blockType;
       this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, dropType, 1);
       // 葉ブロック破壊時に30%の確率でリンゴをドロップ
-      if (hit.blockType === BlockType.LEAVES && Math.random() < 0.3) {
+      if ((hit.blockType === BlockType.LEAVES || hit.blockType === BlockType.JUNGLE_LEAVES) && Math.random() < 0.3) {
         this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.APPLE, 1);
       }
       // 破壊パーティクルを生成（ブロックの上面マテリアルを使用）
@@ -1160,19 +1211,62 @@ export class GameController {
   _updateMobs(dt, isDay) {
     if (useGameStore.getState().isDead) return;
 
-    this.mobManager.update(dt, this.player.position, isDay, (damage, mobX, mobZ) => {
-      const actualDamage = this.player.applyDamage(damage);
-      if (actualDamage > 0) {
-        this.player.applyKnockback(mobX, mobZ, KNOCKBACK_PLAYER_FORCE);
-        useUIStore.getState().showHitFlash();
-        useUIStore.getState().showFeedback(`ゾンビに攻撃された！ -${actualDamage} HP`, 900);
-        this.sound.playError();
-        if (this.player.health <= 0 && !useGameStore.getState().isDead) {
-          useGameStore.getState().setDead(true);
-          document.exitPointerLock();
+    this.mobManager.update(
+      dt,
+      this.player.position,
+      isDay,
+      // 通常攻撃コールバック
+      (damage, mobX, mobZ) => {
+        const actualDamage = this.player.applyDamage(damage);
+        if (actualDamage > 0) {
+          this.player.applyKnockback(mobX, mobZ, KNOCKBACK_PLAYER_FORCE);
+          useUIStore.getState().showHitFlash();
+          useUIStore.getState().showFeedback(`モブに攻撃された！ -${actualDamage} HP`, 900);
+          this.sound.playError();
+          if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+            useGameStore.getState().setDead(true);
+            document.exitPointerLock();
+          }
+        }
+      },
+      // 爆発コールバック
+      (ex, ey, ez, radius, damage) => {
+        // 爆発範囲のブロックを除去
+        const r = Math.ceil(radius);
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dy = -r; dy <= r; dy++) {
+            for (let dz = -r; dz <= r; dz++) {
+              if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+              const bx = ex + dx, by = ey + dy, bz = ez + dz;
+              const bt = this.world.getBlock(bx, by, bz);
+              if (bt !== BlockType.AIR && bt !== BlockType.BEDROCK) {
+                this.world.setBlockWithDiff(bx, by, bz, BlockType.AIR);
+              }
+            }
+          }
+        }
+        // プレイヤーへのダメージ
+        const pdx = this.player.position.x - ex;
+        const pdy = this.player.position.y - ey;
+        const pdz = this.player.position.z - ez;
+        const pdist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
+        if (pdist < radius + 2) {
+          const scaledDamage = Math.round(damage * Math.max(0, 1 - pdist / (radius + 2)));
+          if (scaledDamage > 0) {
+            const actualDamage = this.player.applyDamage(scaledDamage);
+            if (actualDamage > 0) {
+              useUIStore.getState().showHitFlash();
+              useUIStore.getState().showFeedback(`クリーパーが爆発した！ -${actualDamage} HP`, 1200);
+              this.sound.playError();
+              if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+                useGameStore.getState().setDead(true);
+                document.exitPointerLock();
+              }
+            }
+          }
         }
       }
-    });
+    );
   }
 
   // ---- ドロップアイテムシステム ----
@@ -1235,7 +1329,7 @@ export class GameController {
           this.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
         }
       }
-      const name = mob.isAnimal ? (mob.name ?? '動物') : 'ゾンビ';
+      const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
       useUIStore.getState().showFeedback(`${name}を倒した！`, 1200);
     }
   }

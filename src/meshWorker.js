@@ -46,7 +46,7 @@ const isSolid = (wx, wy, wz) => {
 const isTransparentNeighbor = (b) =>
   b === BlockType.AIR || b === BlockType.WATER ||
   b === BlockType.ICE || b === BlockType.GLASS ||
-  b === BlockType.LEAVES;
+  b === BlockType.LEAVES || b === BlockType.JUNGLE_LEAVES;
 
 // ブロックがその隣接ブロックに向けて面を描画すべきか判定
 // ICE・GLASS は同種ブロックと隣接するとき内部面を生成しない（透過の積み重ねを防止）
@@ -67,7 +67,7 @@ const toBright = (v) => 0.72 + 0.28 * (v / 3);
 
 function computeAO(blockType, face, x, y, z) {
   if (blockType === BlockType.WATER || blockType === BlockType.GLASS ||
-      blockType === BlockType.LEAVES) {
+      blockType === BlockType.LEAVES || blockType === BlockType.JUNGLE_LEAVES) {
     return [1, 1, 1, 1];
   }
   switch (face) {
