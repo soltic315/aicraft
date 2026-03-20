@@ -3,6 +3,12 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [3.31.0] - 2026-03-20
+
+### Changed
+
+- クラフト/修理テーブル要件を改修: 作業台は右クリックで作業台専用クラフト画面、修理台は右クリックで修理専用クラフト画面を開くように変更。離れたら自動閉じも実装。
+
 ## [3.30.0] - 2026-03-20
 
 ### Changed

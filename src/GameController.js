@@ -145,6 +145,10 @@ export class GameController {
     }
     this.player = new Player(this.camera, this.world, { mouseSensitivity: this.settings.sensitivity });
 
+    // 作業台・修理台専用クラフト用の開かれたテーブル位置保持
+    this.openedCraftingTablePos = null;
+    this.openedRepairTablePos = null;
+
     // Highlight wireframe
     const highlightGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
     const highlightMat = new THREE.MeshBasicMaterial({
@@ -672,6 +676,52 @@ export class GameController {
     const dz = this.player.position.z - (chestPos.z + 0.5);
     if (dx * dx + dy * dy + dz * dz > CHEST_AUTO_CLOSE_DISTANCE * CHEST_AUTO_CLOSE_DISTANCE) {
       this._closeChestPanel('チェストから離れました');
+      return;
+    }
+  }
+
+  _validateOpenedTable() {
+    const craftOpen = useUIStore.getState().craftOpen;
+    const craftMode = useUIStore.getState().craftMode;
+
+    if (craftOpen && craftMode === 'crafting_table' && this.openedCraftingTablePos) {
+      const tablePos = this.openedCraftingTablePos;
+      if (this.world.getBlock(tablePos.x, tablePos.y, tablePos.z) !== BlockType.CRAFTING_TABLE) {
+        useUIStore.getState().closeCraftPanel();
+        this.openedCraftingTablePos = null;
+        useUIStore.getState().showFeedback('作業台が破壊されました');
+        return;
+      }
+
+      const dx = this.player.position.x - (tablePos.x + 0.5);
+      const dy = this.player.position.y - (tablePos.y + 0.5);
+      const dz = this.player.position.z - (tablePos.z + 0.5);
+      if (dx * dx + dy * dy + dz * dz > CHEST_AUTO_CLOSE_DISTANCE * CHEST_AUTO_CLOSE_DISTANCE) {
+        useUIStore.getState().closeCraftPanel();
+        this.openedCraftingTablePos = null;
+        useUIStore.getState().showFeedback('作業台から離れました');
+        return;
+      }
+    }
+
+    if (craftOpen && craftMode === 'repair_table' && this.openedRepairTablePos) {
+      const tablePos = this.openedRepairTablePos;
+      if (this.world.getBlock(tablePos.x, tablePos.y, tablePos.z) !== BlockType.REPAIR_TABLE) {
+        useUIStore.getState().closeCraftPanel();
+        this.openedRepairTablePos = null;
+        useUIStore.getState().showFeedback('修理台が破壊されました');
+        return;
+      }
+
+      const dx = this.player.position.x - (tablePos.x + 0.5);
+      const dy = this.player.position.y - (tablePos.y + 0.5);
+      const dz = this.player.position.z - (tablePos.z + 0.5);
+      if (dx * dx + dy * dy + dz * dz > CHEST_AUTO_CLOSE_DISTANCE * CHEST_AUTO_CLOSE_DISTANCE) {
+        useUIStore.getState().closeCraftPanel();
+        this.openedRepairTablePos = null;
+        useUIStore.getState().showFeedback('修理台から離れました');
+        return;
+      }
     }
   }
 
@@ -761,6 +811,28 @@ export class GameController {
     }
 
     const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
+
+    // 右クリックで作業台クラフトパネルを開く（手が空でも可）
+    if (hit && hit.blockType === BlockType.CRAFTING_TABLE) {
+      useUIStore.getState().openCraftPanel('crafting_table');
+      this.openedCraftingTablePos = hit.blockPos;
+      this.openedRepairTablePos = null;
+      if (document.pointerLockElement === document.body) {
+        document.exitPointerLock();
+      }
+      return;
+    }
+
+    // 右クリックで修理台クラフトパネルを開く（手が空でも可）
+    if (hit && hit.blockType === BlockType.REPAIR_TABLE) {
+      useUIStore.getState().openCraftPanel('repair_table');
+      this.openedRepairTablePos = hit.blockPos;
+      this.openedCraftingTablePos = null;
+      if (document.pointerLockElement === document.body) {
+        document.exitPointerLock();
+      }
+      return;
+    }
 
     // 右クリックでチェストを開く（手が空でも可）
     if (hit && hit.blockType === BlockType.CHEST) {
@@ -1181,6 +1253,7 @@ export class GameController {
 
       this.world.update(this.player.position.x, this.player.position.z, this.camera);
       this._validateOpenedChest();
+      this._validateOpenedTable();
 
       // 攻撃クールダウン更新
       this._attackCooldown = Math.max(0, this._attackCooldown - dt);

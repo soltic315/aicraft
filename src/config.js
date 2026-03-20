@@ -219,6 +219,12 @@ export const CRAFT_RECIPES = [
     produces: { [BlockType.CRAFTING_TABLE]: 1 },
   },
   {
+    id: 'repair_table_from_plank',
+    label: '板材 x4 -> 修理台 x1',
+    consumes: { [BlockType.PLANK]: 4 },
+    produces: { [BlockType.REPAIR_TABLE]: 1 },
+  },
+  {
     id: 'chest_from_plank',
     label: '板材 x8 -> チェスト x1',
     consumes: { [BlockType.PLANK]: 8 },
@@ -227,18 +233,21 @@ export const CRAFT_RECIPES = [
   {
     id: 'pickaxe_from_plank',
     label: '板材 x2 -> ツルハシ x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.PLANK]: 2 },
     produces: { [BlockType.PICKAXE]: 1 },
   },
   {
     id: 'axe_from_plank',
     label: '板材 x2 -> 斧 x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.PLANK]: 2 },
     produces: { [BlockType.AXE]: 1 },
   },
   {
     id: 'shovel_from_plank',
     label: '板材 x2 -> シャベル x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.PLANK]: 2 },
     produces: { [BlockType.SHOVEL]: 1 },
   },
@@ -246,6 +255,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_pickaxe',
     label: 'ツルハシ（木）修理（板材 x1 -> 耐久 +30）',
+    requiresRepairTable: true,
     consumes: { [BlockType.PICKAXE]: 1, [BlockType.PLANK]: 1 },
     produces: { [BlockType.PICKAXE]: 1 },
     repairTool: 'pickaxe',
@@ -254,6 +264,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_axe',
     label: '斧（木）修理（板材 x1 -> 耐久 +30）',
+    requiresRepairTable: true,
     consumes: { [BlockType.AXE]: 1, [BlockType.PLANK]: 1 },
     produces: { [BlockType.AXE]: 1 },
     repairTool: 'axe',
@@ -262,6 +273,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_shovel',
     label: 'シャベル（木）修理（板材 x1 -> 耐久 +30）',
+    requiresRepairTable: true,
     consumes: { [BlockType.SHOVEL]: 1, [BlockType.PLANK]: 1 },
     produces: { [BlockType.SHOVEL]: 1 },
     repairTool: 'shovel',
@@ -271,18 +283,21 @@ export const CRAFT_RECIPES = [
   {
     id: 'stone_pickaxe',
     label: '丸石 x2 -> ツルハシ（石） x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.COBBLESTONE]: 2 },
     produces: { [BlockType.STONE_PICKAXE]: 1 },
   },
   {
     id: 'stone_axe',
     label: '丸石 x2 -> 斧（石） x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.COBBLESTONE]: 2 },
     produces: { [BlockType.STONE_AXE]: 1 },
   },
   {
     id: 'stone_shovel',
     label: '丸石 x2 -> シャベル（石） x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.COBBLESTONE]: 2 },
     produces: { [BlockType.STONE_SHOVEL]: 1 },
   },
@@ -290,6 +305,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_stone_pickaxe',
     label: 'ツルハシ（石）修理（丸石 x1 -> 耐久 +66）',
+    requiresRepairTable: true,
     consumes: { [BlockType.STONE_PICKAXE]: 1, [BlockType.COBBLESTONE]: 1 },
     produces: { [BlockType.STONE_PICKAXE]: 1 },
     repairTool: 'stone_pickaxe',
@@ -298,6 +314,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_stone_axe',
     label: '斧（石）修理（丸石 x1 -> 耐久 +66）',
+    requiresRepairTable: true,
     consumes: { [BlockType.STONE_AXE]: 1, [BlockType.COBBLESTONE]: 1 },
     produces: { [BlockType.STONE_AXE]: 1 },
     repairTool: 'stone_axe',
@@ -306,6 +323,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_stone_shovel',
     label: 'シャベル（石）修理（丸石 x1 -> 耐久 +66）',
+    requiresRepairTable: true,
     consumes: { [BlockType.STONE_SHOVEL]: 1, [BlockType.COBBLESTONE]: 1 },
     produces: { [BlockType.STONE_SHOVEL]: 1 },
     repairTool: 'stone_shovel',
@@ -315,18 +333,21 @@ export const CRAFT_RECIPES = [
   {
     id: 'iron_pickaxe',
     label: '鉄インゴット x2 -> ツルハシ（鉄） x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.IRON_INGOT]: 2 },
     produces: { [BlockType.IRON_PICKAXE]: 1 },
   },
   {
     id: 'iron_axe',
     label: '鉄インゴット x2 -> 斧（鉄） x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.IRON_INGOT]: 2 },
     produces: { [BlockType.IRON_AXE]: 1 },
   },
   {
     id: 'iron_shovel',
     label: '鉄インゴット x2 -> シャベル（鉄） x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.IRON_INGOT]: 2 },
     produces: { [BlockType.IRON_SHOVEL]: 1 },
   },
@@ -334,6 +355,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_iron_pickaxe',
     label: 'ツルハシ（鉄）修理（鉄インゴット x1 -> 耐久 +125）',
+    requiresRepairTable: true,
     consumes: { [BlockType.IRON_PICKAXE]: 1, [BlockType.IRON_INGOT]: 1 },
     produces: { [BlockType.IRON_PICKAXE]: 1 },
     repairTool: 'iron_pickaxe',
@@ -342,6 +364,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_iron_axe',
     label: '斧（鉄）修理（鉄インゴット x1 -> 耐久 +125）',
+    requiresRepairTable: true,
     consumes: { [BlockType.IRON_AXE]: 1, [BlockType.IRON_INGOT]: 1 },
     produces: { [BlockType.IRON_AXE]: 1 },
     repairTool: 'iron_axe',
@@ -350,6 +373,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'repair_iron_shovel',
     label: 'シャベル（鉄）修理（鉄インゴット x1 -> 耐久 +125）',
+    requiresRepairTable: true,
     consumes: { [BlockType.IRON_SHOVEL]: 1, [BlockType.IRON_INGOT]: 1 },
     produces: { [BlockType.IRON_SHOVEL]: 1 },
     repairTool: 'iron_shovel',
@@ -359,6 +383,7 @@ export const CRAFT_RECIPES = [
   {
     id: 'furnace_from_cobblestone',
     label: '丸石 x4 -> かまど x1',
+    requiresCraftingTable: true,
     consumes: { [BlockType.COBBLESTONE]: 4 },
     produces: { [BlockType.FURNACE]: 1 },
   },

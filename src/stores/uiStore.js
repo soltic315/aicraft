@@ -3,6 +3,7 @@ import { create } from 'zustand';
 export const useUIStore = create((set, get) => ({
   settingsOpen: false,
   craftOpen: false,
+  craftMode: 'basic',
   chestOpen: false,
   furnaceOpen: false,
   inventoryOpen: false,
@@ -20,8 +21,16 @@ export const useUIStore = create((set, get) => ({
 
   toggleCraft() {
     const isNow = !get().craftOpen;
-    set({ craftOpen: isNow });
+    set({ craftOpen: isNow, craftMode: 'basic' });
     return isNow;
+  },
+
+  openCraftPanel(mode = 'basic') {
+    set({ craftOpen: true, craftMode: mode });
+  },
+
+  closeCraftPanel() {
+    set({ craftOpen: false, craftMode: 'basic' });
   },
 
   toggleInventory() {
@@ -33,7 +42,7 @@ export const useUIStore = create((set, get) => ({
   // Tab: インベントリ＋クラフトをまとめて開閉
   toggleInventoryWithCraft() {
     const willOpen = !get().inventoryOpen;
-    set({ inventoryOpen: willOpen, craftOpen: willOpen, chestOpen: false });
+    set({ inventoryOpen: willOpen, craftOpen: willOpen, craftMode: 'basic', chestOpen: false });
     return willOpen;
   },
 
@@ -48,10 +57,9 @@ export const useUIStore = create((set, get) => ({
   closeFurnacePanel() {
     set({ furnaceOpen: false });
   },
-
   // インベントリ・クラフト・チェスト・かまどをまとめて閉じる
   closeInventoryPanels() {
-    set({ inventoryOpen: false, craftOpen: false, chestOpen: false, furnaceOpen: false });
+    set({ inventoryOpen: false, craftOpen: false, chestOpen: false, furnaceOpen: false, craftMode: 'basic' });
   },
 
   setChestOpen(open) {

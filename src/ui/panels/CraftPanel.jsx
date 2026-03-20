@@ -8,7 +8,8 @@ import { CRAFT_RECIPES } from '../../config.js';
 
 export function CraftPanel() {
   const craftOpen = useUIStore((s) => s.craftOpen);
-  const slots     = useInventoryStore((s) => s.slots);
+  const craftMode = useUIStore((s) => s.craftMode);
+  const slots = useInventoryStore((s) => s.slots);
   const { panelRef, dragStyle, onHeaderMouseDown } = useDraggable();
 
   // Tab / ESC で全パネル閉じる
@@ -30,16 +31,27 @@ export function CraftPanel() {
   const getCount = (type) => slots.reduce((sum, s) => (s.type === type ? sum + s.count : sum), 0);
   const hasIngredients = (recipe) =>
     Object.entries(recipe.consumes).every(([type, amount]) => getCount(Number(type)) >= amount);
-  const available = CRAFT_RECIPES.filter(hasIngredients).length;
+  const recipes = craftMode === 'crafting_table'
+    ? CRAFT_RECIPES.filter((recipe) => recipe.requiresCraftingTable)
+    : craftMode === 'repair_table'
+      ? CRAFT_RECIPES.filter((recipe) => recipe.requiresRepairTable)
+      : CRAFT_RECIPES.filter((recipe) => !recipe.requiresCraftingTable && !recipe.requiresRepairTable);
+  const available = recipes.filter(hasIngredients).length;
+
+  const headerText = craftMode === 'crafting_table'
+    ? '作業台クラフト（作業台専用）'
+    : craftMode === 'repair_table'
+      ? '修理台クラフト（修理専用）'
+      : 'クラフト（常時クラフト）';
 
   return (
     <div id="craft-panel-window" ref={panelRef} style={dragStyle}>
       <div class="inv-header" onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab' }}>
-        <span>クラフト（作成可能: {available} 件）</span>
-        <button class="inv-close-btn" onClick={() => useUIStore.getState().toggleCraft()}>✕</button>
+        <span>{headerText}（作成可能: {available} 件）</span>
+        <button class="inv-close-btn" onClick={() => useUIStore.getState().closeCraftPanel()}>✕</button>
       </div>
       <div class="inv-craft-list">
-        {CRAFT_RECIPES.map((recipe) => (
+        {recipes.map((recipe) => (
           <div key={recipe.id} class="craft-row">
             <span>{recipe.label}</span>
             <button
