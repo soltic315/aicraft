@@ -283,6 +283,7 @@ export class GameController {
     const tryRelock = () => {
       if (!this.gameStarted || this.player.locked) return;
       if (useGameStore.getState().isDead) return;
+      if (useGameStore.getState().paused) return;
       const ui = useUIStore.getState();
       if (ui.inventoryOpen || ui.craftOpen || ui.settingsOpen || ui.chestOpen) return;
       void this.sound.ensureStarted();
@@ -290,6 +291,15 @@ export class GameController {
     };
     this.renderer.domElement.addEventListener('click', tryRelock);
     document.addEventListener('keydown', tryRelock);
+
+    // フルスクリーン解除時の自動一時停止
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement && this.gameStarted) {
+        useGameStore.getState().setPaused(true);
+        document.exitPointerLock();
+        useUIStore.getState().setResumeHint(true);
+      }
+    });
 
     // Start game loop
     requestAnimationFrame((t) => this._gameLoop(t));
@@ -408,6 +418,19 @@ export class GameController {
           }
         });
       });
+    });
+
+    this.eventBus.on('resume-game', () => {
+      const doResume = () => {
+        useGameStore.getState().setPaused(false);
+        useUIStore.getState().setResumeHint(false);
+        this.player.lock();
+      };
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().then(doResume).catch(doResume);
+      } else {
+        doResume();
+      }
     });
 
     this.eventBus.on('save-clicked', () => {
@@ -1220,7 +1243,7 @@ export class GameController {
 
     const dayNight = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
 
-    if (this.gameStarted) {
+    if (this.gameStarted && !useGameStore.getState().paused) {
       // プレイヤー物理・移動はパネルが開いていても常に更新
       const jumpRequested = Boolean(this.player.keys['Space'] && this.player.onGround);
       const fallingSpeedBeforeUpdate = this.player.velocity.y;

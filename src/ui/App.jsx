@@ -17,6 +17,7 @@ import { ActionFeedback } from './overlays/ActionFeedback.jsx';
 import { WaterOverlay } from './overlays/WaterOverlay.jsx';
 import { HitOverlay } from './overlays/HitOverlay.jsx';
 import { KeyHints } from './overlays/KeyHints.jsx';
+import { ResumeHint } from './overlays/ResumeHint.jsx';
 export function App() {
   const anyPanelOpen = useUIStore((s) =>
     s.inventoryOpen || s.craftOpen || s.settingsOpen || s.chestOpen || s.furnaceOpen
@@ -33,6 +34,7 @@ export function App() {
       <DeathScreen />
       <WaterOverlay />
       <HitOverlay />
+      <ResumeHint />
       <BreakProgress />
       <ActionFeedback />
       <InfoOverlay />

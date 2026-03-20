@@ -6,13 +6,18 @@ export const useGameStore = create((set) => ({
   loading: false,
   loadingMessage: '',
   isDead: false,
+  paused: false,
 
   startGame() {
     set({ gameStarted: true });
   },
 
   returnToTitle() {
-    set({ gameStarted: false, isDead: false });
+    set({ gameStarted: false, isDead: false, paused: false });
+  },
+
+  setPaused(paused) {
+    set({ paused });
   },
 
   setFps(fps) {
