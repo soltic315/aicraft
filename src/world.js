@@ -25,6 +25,8 @@ export class World {
     this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
     this.pendingChunkLoads = [];
     this.pendingChunkSet = new Set();
+    // チャンクロード後に境界メッシュを修正するための再構築キュー
+    this.pendingBorderRebuilds = new Set();
 
     // Frustum culling helpers
     this._frustum = new THREE.Frustum();
@@ -34,6 +36,8 @@ export class World {
     // Chunk-level edits applied after terrain generation.
     // Keyed by chunk key ("cx,cz") and contains an array of {x,y,z,type} edits.
     this.chunkEdits = new Map();
+    // ブロック編集によりメッシュ再構築が必要なチャンクのキュー（次フレームで処理）
+    this.dirtyChunks = new Set();
 
     // 面方向別明るさを適用したマテリアルのキャッシュ
     this._dimmedMaterialCache = new Map();
@@ -52,6 +56,8 @@ export class World {
     this.chunkEdits.clear();
     this.pendingChunkLoads = [];
     this.pendingChunkSet.clear();
+    this.pendingBorderRebuilds.clear();
+    this.dirtyChunks.clear();
     this.treePlaced.clear();
 
     // 新しいシードで地形ノイズを再生成
@@ -196,12 +202,12 @@ export class World {
     if (y < 0 || y >= WORLD_HEIGHT) return;
     chunk.blocks[lx][y][lz] = type;
 
-    // Rebuild this chunk and adjacent if on border
-    this._rebuildChunkMesh(cx, cz);
-    if (lx === 0) this._rebuildChunkMesh(cx - 1, cz);
-    if (lx === CHUNK_SIZE - 1) this._rebuildChunkMesh(cx + 1, cz);
-    if (lz === 0) this._rebuildChunkMesh(cx, cz - 1);
-    if (lz === CHUNK_SIZE - 1) this._rebuildChunkMesh(cx, cz + 1);
+    // メッシュ再構築をキューへ（同期実行するとフリーズするため次フレームで処理）
+    this.dirtyChunks.add(this._chunkKey(cx, cz));
+    if (lx === 0)               this.dirtyChunks.add(this._chunkKey(cx - 1, cz));
+    if (lx === CHUNK_SIZE - 1)  this.dirtyChunks.add(this._chunkKey(cx + 1, cz));
+    if (lz === 0)               this.dirtyChunks.add(this._chunkKey(cx, cz - 1));
+    if (lz === CHUNK_SIZE - 1)  this.dirtyChunks.add(this._chunkKey(cx, cz + 1));
   }
 
   setBlockWithDiff(x, y, z, type) {
@@ -485,6 +491,10 @@ export class World {
       const b = this.getBlock(wx, wy, wz);
       return b !== BlockType.AIR && b !== BlockType.WATER && b != null;
     };
+    // 隣接ブロックがこれらの場合は面を描画する（透明・半透明ブロック）
+    const isTransparentNeighbor = (b) =>
+      b === BlockType.AIR || b === BlockType.WATER ||
+      b === BlockType.ICE || b === BlockType.GLASS;
     const aoVal = (s1, s2, c) => {
       if (s1 && s2) return 0;
       return 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
@@ -574,12 +584,12 @@ export class World {
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
           const above = this.getBlock(wx, y + 1, wz);
-          if (above === BlockType.AIR || above === BlockType.WATER) {
+          if (isTransparentNeighbor(above)) {
             topMask[lx][lz] = block;
           }
 
           const below = this.getBlock(wx, y - 1, wz);
-          if (below === BlockType.AIR || below === BlockType.WATER) {
+          if (isTransparentNeighbor(below)) {
             bottomMask[lx][lz] = block;
           }
         }
@@ -606,12 +616,12 @@ export class World {
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
           const frontNeighbor = this.getBlock(wx, y, wz + 1);
-          if (frontNeighbor === BlockType.AIR || frontNeighbor === BlockType.WATER) {
+          if (isTransparentNeighbor(frontNeighbor)) {
             frontMask[lx][y] = block;
           }
 
           const backNeighbor = this.getBlock(wx, y, wz - 1);
-          if (backNeighbor === BlockType.AIR || backNeighbor === BlockType.WATER) {
+          if (isTransparentNeighbor(backNeighbor)) {
             backMask[lx][y] = block;
           }
         }
@@ -638,12 +648,12 @@ export class World {
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
 
           const rightNeighbor = this.getBlock(wx + 1, y, wz);
-          if (rightNeighbor === BlockType.AIR || rightNeighbor === BlockType.WATER) {
+          if (isTransparentNeighbor(rightNeighbor)) {
             rightMask[lz][y] = block;
           }
 
           const leftNeighbor = this.getBlock(wx - 1, y, wz);
-          if (leftNeighbor === BlockType.AIR || leftNeighbor === BlockType.WATER) {
+          if (isTransparentNeighbor(leftNeighbor)) {
             leftMask[lz][y] = block;
           }
         }
@@ -918,6 +928,13 @@ export class World {
     const pcx = Math.floor(playerX / CHUNK_SIZE);
     const pcz = Math.floor(playerZ / CHUNK_SIZE);
 
+    // ブロック編集によるダーティチャンクを最優先で再構築（フレーム先頭で処理）
+    for (const key of this.dirtyChunks) {
+      const [cx, cz] = key.split(',').map(Number);
+      this._rebuildChunkMesh(cx, cz, false);
+    }
+    this.dirtyChunks.clear();
+
     // Compute view frustum if camera is provided (used for culling chunks outside view)
     let frustum = null;
     this._hasFrustum = false;
@@ -961,6 +978,28 @@ export class World {
 
       this.chunks.set(next.key, { ...data, mesh: null, boundingBox });
       this._rebuildChunkMesh(next.cx, next.cz, false);
+
+      // 新チャンクがロードされると、隣接済みチャンクの境界面が古くなる
+      // （隣が未ロードのとき AIR として面を生成しているため）
+      // → 隣接ロード済みチャンクを境界再構築キューへ追加
+      for (const [ndx, ndz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const nKey = this._chunkKey(next.cx + ndx, next.cz + ndz);
+        if (this.chunks.has(nKey)) {
+          this.pendingBorderRebuilds.add(nKey);
+        }
+      }
+    }
+
+    // 境界再構築キューを毎フレーム少しずつ処理
+    // （一括処理によるフレームヒッチを防ぐため分散させる）
+    const BORDER_REBUILDS_PER_FRAME = 3;
+    let borderCount = 0;
+    for (const key of this.pendingBorderRebuilds) {
+      if (borderCount >= BORDER_REBUILDS_PER_FRAME) break;
+      this.pendingBorderRebuilds.delete(key);
+      const [bx, bz] = key.split(',').map(Number);
+      this._rebuildChunkMesh(bx, bz, false);
+      borderCount++;
     }
 
     // Update chunk visibility based on frustum

@@ -127,10 +127,10 @@ export class GameController {
         texture.wrapT = THREE.RepeatWrapping;
 
         const matOptions = { map: texture, vertexColors: true };
-        if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; }
+        if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; matOptions.depthWrite = false; }
         if (type === BlockType.GLASS) { matOptions.transparent = true; matOptions.opacity = 0.42; }
         if (type === BlockType.LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
-        if (type === BlockType.ICE)   { matOptions.transparent = true; matOptions.opacity = 0.78; }
+        if (type === BlockType.ICE)   { matOptions.transparent = true; matOptions.opacity = 0.92; matOptions.depthWrite = false; }
 
         this.blockMaterials[type][face] = new THREE.MeshLambertMaterial(matOptions);
       }
@@ -149,6 +149,7 @@ export class GameController {
     // 作業台・修理台専用クラフト用の開かれたテーブル位置保持
     this.openedCraftingTablePos = null;
     this.openedRepairTablePos = null;
+    this.openedFurnacePos = null;
 
     // Highlight wireframe
     const highlightGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
@@ -752,6 +753,27 @@ export class GameController {
     }
   }
 
+  _validateOpenedFurnace() {
+    if (!useUIStore.getState().furnaceOpen || !this.openedFurnacePos) return;
+
+    const pos = this.openedFurnacePos;
+    if (this.world.getBlock(pos.x, pos.y, pos.z) !== BlockType.FURNACE) {
+      useUIStore.getState().closeFurnacePanel();
+      this.openedFurnacePos = null;
+      useUIStore.getState().showFeedback('かまどが破壊されました');
+      return;
+    }
+
+    const dx = this.player.position.x - (pos.x + 0.5);
+    const dy = this.player.position.y - (pos.y + 0.5);
+    const dz = this.player.position.z - (pos.z + 0.5);
+    if (dx * dx + dy * dy + dz * dz > CHEST_AUTO_CLOSE_DISTANCE * CHEST_AUTO_CLOSE_DISTANCE) {
+      useUIStore.getState().closeFurnacePanel();
+      this.openedFurnacePos = null;
+      useUIStore.getState().showFeedback('かまどから離れました');
+    }
+  }
+
   // ---- スロット変更時の処理（ツール自動装備） ----
 
   _onSlotChanged() {
@@ -870,6 +892,10 @@ export class GameController {
     // 右クリックでかまどを開く（手が空でも可）
     if (hit && hit.blockType === BlockType.FURNACE) {
       useUIStore.getState().openFurnacePanel();
+      this.openedFurnacePos = hit.blockPos;
+      if (document.pointerLockElement === document.body) {
+        document.exitPointerLock();
+      }
       return;
     }
 
@@ -1307,6 +1333,7 @@ export class GameController {
       this.world.update(this.player.position.x, this.player.position.z, this.camera);
       this._validateOpenedChest();
       this._validateOpenedTable();
+      this._validateOpenedFurnace();
 
       // 攻撃クールダウン更新
       this._attackCooldown = Math.max(0, this._attackCooldown - dt);
@@ -1382,6 +1409,7 @@ export class GameController {
       this.wasOnGround = this.player.onGround;
       usePlayerStore.getState().syncFromPlayer(this.player);
       this._validateOpenedChest();
+      this._validateOpenedFurnace();
     }
 
     this.renderer.render(this.scene, this.camera);

@@ -1,6 +1,14 @@
 // モブシステム: エンティティ管理・AI・レンダリング
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
+
+// 歩行可能ブロック判定（水・背の低い草木などは通過可能）
+const isPassable = (b) =>
+  b === BlockType.AIR ||
+  b === BlockType.WATER ||
+  b === BlockType.TALL_GRASS ||
+  b === BlockType.FLOWER ||
+  b === BlockType.MUSHROOM;
 import {
   MOB_MAX_COUNT,
   MOB_SPAWN_INTERVAL,
@@ -220,7 +228,7 @@ class Zombie {
       const bodyY = Math.floor(this.position.y);
       const blockX = world.getBlock(Math.floor(nextX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
       const blockX2 = world.getBlock(Math.floor(nextX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (blockX === 0 && blockX2 === 0) {
+      if (isPassable(blockX) && isPassable(blockX2)) {
         this.position.x = nextX;
       }
 
@@ -228,7 +236,7 @@ class Zombie {
       const nextZ = this.position.z + moveZ;
       const blockZ = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(nextZ + 0.4 * Math.sign(moveZ)));
       const blockZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(nextZ + 0.4 * Math.sign(moveZ)));
-      if (blockZ === 0 && blockZ2 === 0) {
+      if (isPassable(blockZ) && isPassable(blockZ2)) {
         this.position.z = nextZ;
       }
 
@@ -250,11 +258,11 @@ class Zombie {
 
       const kbBlockX = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
       const kbBlockX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
-      if (kbBlockX === 0 && kbBlockX2 === 0) this.position.x += kbX;
+      if (isPassable(kbBlockX) && isPassable(kbBlockX2)) this.position.x += kbX;
 
       const kbBlockZ = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
       const kbBlockZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (kbBlockZ === 0 && kbBlockZ2 === 0) this.position.z += kbZ;
+      if (isPassable(kbBlockZ) && isPassable(kbBlockZ2)) this.position.z += kbZ;
 
       // 1秒でほぼ消える（~8%残る）
       this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
@@ -447,13 +455,13 @@ class Cow {
     if (moveX !== 0) {
       const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
       const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (bx === 0 && bx2 === 0) this.position.x += moveX;
+      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
       else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
     }
     if (moveZ !== 0) {
       const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
       const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      if (bz === 0 && bz2 === 0) this.position.z += moveZ;
+      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
       else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
     }
 
@@ -464,10 +472,10 @@ class Cow {
       const bkY = Math.floor(this.position.y);
       const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
       const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
-      if (kbBX === 0 && kbBX2 === 0) this.position.x += kbX;
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
       const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
       const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (kbBZ === 0 && kbBZ2 === 0) this.position.z += kbZ;
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
       this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
       if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
     }

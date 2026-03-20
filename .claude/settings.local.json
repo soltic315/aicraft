@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -rn \"TODO\\\\|FIXME\\\\|BUG\" /mnt/c/Users/kille/Documents/git/aicraft/*.md)"
+    ]
+  }
+}
