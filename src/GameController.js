@@ -1297,45 +1297,48 @@ export class GameController {
     }
 
     if (this.gameStarted && !useGameStore.getState().paused) {
-      // プレイヤー物理・移動はパネルが開いていても常に更新
-      const jumpRequested = Boolean(this.player.keys['Space'] && this.player.onGround);
-      const fallingSpeedBeforeUpdate = this.player.velocity.y;
+      // 死亡中はプレイヤー物理・移動を更新しない
+      if (!useGameStore.getState().isDead) {
+        // プレイヤー物理・移動はパネルが開いていても常に更新
+        const jumpRequested = Boolean(this.player.keys['Space'] && this.player.onGround);
+        const fallingSpeedBeforeUpdate = this.player.velocity.y;
 
-      this.player.update(dt);
+        this.player.update(dt);
 
-      if (jumpRequested && !this.player.onGround && this.player.velocity.y > 0) {
-        this.sound.playJump();
-      }
-
-      if (!this.wasOnGround && this.player.onGround && fallingSpeedBeforeUpdate < -1.5) {
-        const landSpeed = Math.abs(fallingSpeedBeforeUpdate);
-        this.sound.playLand(Math.min(landSpeed / 8, 2));
-
-        // 落下着地パーティクル（一定以上の速度の時）
-        if (landSpeed > 5) {
-          const intensity = Math.min((landSpeed - 5) / 10, 2);
-          this.particleManager.spawnLand(
-            this.player.position.x, this.player.position.y,
-            this.player.position.z, intensity
-          );
+        if (jumpRequested && !this.player.onGround && this.player.velocity.y > 0) {
+          this.sound.playJump();
         }
 
-        const damage = calculateFallDamage(fallingSpeedBeforeUpdate);
-        if (damage > 0) {
-          const actualDamage = this.player.applyDamage(damage);
+        if (!this.wasOnGround && this.player.onGround && fallingSpeedBeforeUpdate < -1.5) {
+          const landSpeed = Math.abs(fallingSpeedBeforeUpdate);
+          this.sound.playLand(Math.min(landSpeed / 8, 2));
 
-          if (actualDamage > 0) {
-            useUIStore.getState().showFeedback(`落下ダメージ: -${actualDamage} HP`, 1000);
-            this.sound.playError();
+          // 落下着地パーティクル（一定以上の速度の時）
+          if (landSpeed > 5) {
+            const intensity = Math.min((landSpeed - 5) / 10, 2);
+            this.particleManager.spawnLand(
+              this.player.position.x, this.player.position.y,
+              this.player.position.z, intensity
+            );
           }
 
-          if (this.player.health <= 0 && !useGameStore.getState().isDead) {
-            useGameStore.getState().setDead(true);
-            document.exitPointerLock();
+          const damage = calculateFallDamage(fallingSpeedBeforeUpdate);
+          if (damage > 0) {
+            const actualDamage = this.player.applyDamage(damage);
+
+            if (actualDamage > 0) {
+              useUIStore.getState().showFeedback(`落下ダメージ: -${actualDamage} HP`, 1000);
+              this.sound.playError();
+            }
+
+            if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+              useGameStore.getState().setDead(true);
+              document.exitPointerLock();
+            }
           }
         }
+        this.wasOnGround = this.player.onGround;
       }
-      this.wasOnGround = this.player.onGround;
 
       this.world.update(this.player.position.x, this.player.position.z, this.camera);
       this._validateOpenedChest();

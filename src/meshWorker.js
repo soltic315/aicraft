@@ -45,7 +45,17 @@ const isSolid = (wx, wy, wz) => {
 
 const isTransparentNeighbor = (b) =>
   b === BlockType.AIR || b === BlockType.WATER ||
-  b === BlockType.ICE || b === BlockType.GLASS;
+  b === BlockType.ICE || b === BlockType.GLASS ||
+  b === BlockType.LEAVES;
+
+// ブロックがその隣接ブロックに向けて面を描画すべきか判定
+// ICE・GLASS は同種ブロックと隣接するとき内部面を生成しない（透過の積み重ねを防止）
+const shouldShowFace = (blockType, neighborType) => {
+  if (!isTransparentNeighbor(neighborType)) return false;
+  if (blockType === neighborType &&
+      (blockType === BlockType.ICE || blockType === BlockType.GLASS)) return false;
+  return true;
+};
 
 const aoVal = (s1, s2, c) => {
   if (s1 && s2) return 0;
@@ -173,8 +183,8 @@ function buildMesh(cx, cz, maxY) {
         if (block === BlockType.AIR || block === BlockType.WATER) continue;
         const wx = cx * CHUNK_SIZE + lx;
         const wz = cz * CHUNK_SIZE + lz;
-        if (isTransparentNeighbor(getBlock(wx, y + 1, wz))) addQuad(block, 'top',    wx, y, wz);
-        if (isTransparentNeighbor(getBlock(wx, y - 1, wz))) addQuad(block, 'bottom', wx, y, wz);
+        if (shouldShowFace(block, getBlock(wx, y + 1, wz))) addQuad(block, 'top',    wx, y, wz);
+        if (shouldShowFace(block, getBlock(wx, y - 1, wz))) addQuad(block, 'bottom', wx, y, wz);
       }
     }
   }
@@ -187,8 +197,8 @@ function buildMesh(cx, cz, maxY) {
       for (let y = 0; y < yCount; y++) {
         const block = selfBlocks[B(lx, y, lz)];
         if (block === BlockType.AIR || block === BlockType.WATER) continue;
-        if (isTransparentNeighbor(getBlock(wx, y, wz + 1))) addQuad(block, 'front', wx, y, wz);
-        if (isTransparentNeighbor(getBlock(wx, y, wz - 1))) addQuad(block, 'back',  wx, y, wz);
+        if (shouldShowFace(block, getBlock(wx, y, wz + 1))) addQuad(block, 'front', wx, y, wz);
+        if (shouldShowFace(block, getBlock(wx, y, wz - 1))) addQuad(block, 'back',  wx, y, wz);
       }
     }
   }
@@ -201,8 +211,8 @@ function buildMesh(cx, cz, maxY) {
       for (let y = 0; y < yCount; y++) {
         const block = selfBlocks[B(lx, y, lz)];
         if (block === BlockType.AIR || block === BlockType.WATER) continue;
-        if (isTransparentNeighbor(getBlock(wx + 1, y, wz))) addQuad(block, 'right', wx, y, wz);
-        if (isTransparentNeighbor(getBlock(wx - 1, y, wz))) addQuad(block, 'left',  wx, y, wz);
+        if (shouldShowFace(block, getBlock(wx + 1, y, wz))) addQuad(block, 'right', wx, y, wz);
+        if (shouldShowFace(block, getBlock(wx - 1, y, wz))) addQuad(block, 'left',  wx, y, wz);
       }
     }
   }
