@@ -1,4 +1,5 @@
 import { h } from 'preact';
+import { useEffect } from 'preact/hooks';
 import { useSettingsStore } from '../../stores/settingsStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useDraggable } from '../hooks/useDraggable.js';
@@ -14,21 +15,28 @@ export function SettingsPanel() {
   const highContrast = useSettingsStore((s) => s.highContrast);
   const showDebugInfo = useSettingsStore((s) => s.showDebugInfo);
 
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e) => {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        e.preventDefault();
+        e.stopPropagation();
+        useUIStore.getState().toggleSettings();
+      }
+    };
+    window.addEventListener('keydown', handleKey, true);
+    return () => window.removeEventListener('keydown', handleKey, true);
+  }, [open]);
+
   if (!open) return null;
 
   const displaySens = (sensitivity * 1000).toFixed(1);
 
   return (
-    <div id="settings-panel" ref={panelRef} style={{ display: 'block', ...dragStyle }} aria-label="設定パネル">
-      <div class="panel-drag-header" onMouseDown={onHeaderMouseDown}
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', cursor: 'grab' }}>
-        <h2 style={{ margin: 0 }}>設定（P で表示切替）</h2>
-        <button
-          type="button"
-          onClick={() => useUIStore.getState().toggleSettings()}
-          style={{ background: 'none', border: 'none', color: '#fff', fontSize: '16px', cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
-          aria-label="閉じる"
-        >✕</button>
+    <div id="settings-panel" ref={panelRef} style={dragStyle}>
+      <div class="inv-header" onMouseDown={onHeaderMouseDown} style={{ cursor: 'grab' }}>
+        <span>設定</span>
+        <button class="inv-close-btn" type="button" onClick={() => useUIStore.getState().toggleSettings()}>✕</button>
       </div>
 
       <div class="setting">
@@ -171,7 +179,10 @@ export function SettingsPanel() {
           セーブ削除
         </button>
       </div>
-      <p class="setting-hint">描画距離変更は負荷に応じて調整してください。</p>
+      <div class="inv-hint-bar">
+        <span>描画距離変更は負荷に応じて調整してください。</span>
+        <span>P / ESC: 閉じる</span>
+      </div>
     </div>
   );
 }

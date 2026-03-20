@@ -32,6 +32,28 @@ export class World {
     this.chunkEdits = new Map();
   }
 
+  // 全チャンクを破棄してワールドを初期状態に戻す
+  reset() {
+    // 全チャンクメッシュをシーンから除去
+    for (const chunk of this.chunks.values()) {
+      if (chunk.mesh) {
+        this.scene.remove(chunk.mesh);
+        chunk.mesh.geometry.dispose();
+      }
+    }
+    this.chunks.clear();
+    this.chunkEdits.clear();
+    this.pendingChunkLoads = [];
+    this.pendingChunkSet.clear();
+    this.treePlaced.clear();
+
+    // 新しいシードで地形ノイズを再生成
+    this.seed = Math.floor(Math.random() * 100000);
+    this.noise = new Noise(this.seed);
+    this.treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
+    this._hasFrustum = false;
+  }
+
   setRenderDistance(distance) {
     const next = Math.floor(Number(distance));
     if (!Number.isFinite(next)) return;

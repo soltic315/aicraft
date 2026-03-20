@@ -204,8 +204,25 @@ class Zombie {
     if (horizDist < ZOMBIE_VIEW_RANGE && horizDist > 0.05) {
       const nx = dx / horizDist;
       const nz = dz / horizDist;
-      this.position.x += nx * ZOMBIE_SPEED * dt;
-      this.position.z += nz * ZOMBIE_SPEED * dt;
+      const moveX = nx * ZOMBIE_SPEED * dt;
+      const moveZ = nz * ZOMBIE_SPEED * dt;
+
+      // X軸移動のブロック衝突チェック（胴体の高さ2ブロック分）
+      const nextX = this.position.x + moveX;
+      const bodyY = Math.floor(this.position.y);
+      const blockX = world.getBlock(Math.floor(nextX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const blockX2 = world.getBlock(Math.floor(nextX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (blockX === 0 && blockX2 === 0) {
+        this.position.x = nextX;
+      }
+
+      // Z軸移動のブロック衝突チェック
+      const nextZ = this.position.z + moveZ;
+      const blockZ = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(nextZ + 0.4 * Math.sign(moveZ)));
+      const blockZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(nextZ + 0.4 * Math.sign(moveZ)));
+      if (blockZ === 0 && blockZ2 === 0) {
+        this.position.z = nextZ;
+      }
 
       // プレイヤー方向を向く
       this.mesh.rotation.y = Math.atan2(dx, dz);
@@ -217,10 +234,20 @@ class Zombie {
       this.mesh.children[5].rotation.x = -swing;
     }
 
-    // ノックバック適用・減衰
+    // ノックバック適用・減衰（衝突チェック付き）
     if (this._knockbackVel.lengthSq() > 0.01) {
-      this.position.x += this._knockbackVel.x * dt;
-      this.position.z += this._knockbackVel.z * dt;
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bodyY = Math.floor(this.position.y);
+
+      const kbBlockX = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
+      const kbBlockX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
+      if (kbBlockX === 0 && kbBlockX2 === 0) this.position.x += kbX;
+
+      const kbBlockZ = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      const kbBlockZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      if (kbBlockZ === 0 && kbBlockZ2 === 0) this.position.z += kbZ;
+
       // 1秒でほぼ消える（~8%残る）
       this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
       if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);

@@ -73,19 +73,23 @@ aicraft/
 ├── package.json
 └── src/
     ├── main.js             # エントリポイント（モジュール初期化・Preact 描画）
-    ├── GameController.js   # ゲームループ・シーン管理
+    ├── GameController.js   # ゲームループ・シーン管理・セーブ/ロード
     ├── InputManager.js     # キーボード・マウス入力の捕捉
     ├── SoundManager.js     # 効果音・BGM 管理
     ├── eventBus.js         # Pub/Sub イベントシステム
     ├── config.js           # 定数・ユーティリティ関数
     ├── world.js            # チャンク管理・地形生成・メッシュ構築
     ├── player.js           # プレイヤー操作・物理・衝突判定
+    ├── mobs.js             # モブ管理・AI・レンダリング（MobManager）
     ├── blocks.js           # ブロック定義・テクスチャ生成
+    ├── tools.js            # ツール定義・破壊速度補正
     ├── noise.js            # Perlin ノイズ
     ├── stores/             # Zustand ストア（状態管理）
     │   ├── settingsStore.js
     │   ├── inventoryStore.js
     │   ├── chestStore.js
+    │   ├── toolStore.js
+    │   ├── hungerStore.js
     │   ├── playerStore.js
     │   ├── gameStore.js
     │   ├── dayNightStore.js
@@ -93,12 +97,13 @@ aicraft/
     │   └── uiStore.js
     └── ui/                 # Preact UI コンポーネント
         ├── App.jsx
-        ├── screens/        # 全画面表示（スタート・ローディング）
+        ├── hooks/          # カスタムフック（useDraggable 等）
+        ├── screens/        # 全画面表示（スタート・ローディング・デス）
         ├── hotbar/         # ホットバー
-        ├── health/         # 体力表示
+        ├── health/         # 体力・空腹表示
         ├── info/           # 情報オーバーレイ
-        ├── panels/         # 設定・クラフト・チェストパネル
-        └── overlays/       # 水中・破壊プログレス等
+        ├── panels/         # 設定・クラフト・インベントリ・チェストパネル
+        └── overlays/       # 水中・破壊プログレス・ヒット・キーヒント等
 ```
 
 ## デプロイ
@@ -114,10 +119,4 @@ aicraft/
 - [GAME_DESIGN.md](GAME_DESIGN.md) — ゲーム仕様
 - [CHANGELOG.md](CHANGELOG.md) — 変更履歴
 - [SAVE_SCHEMA.md](SAVE_SCHEMA.md) — セーブ形式設計メモ（JSON スキーマ草案）
-
-## 追加済み設定（ゲーム内）
-
-- `P` キーで設定パネルを開閉
-- 調整可能項目: 感度、BGM 音量、SE 音量、描画距離
-- 設定は `localStorage` に保存され、再起動後も復元
-- ゲーム進行は自動セーブ（30 秒ごと + ブラウザ終了直前）され、次回起動時に続きからプレイ可能
+- [TODO.md](TODO.md) — タスク管理・バックログ

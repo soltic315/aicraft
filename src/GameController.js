@@ -257,6 +257,7 @@ export class GameController {
     // パネルが閉じている状態でのクリック/キー入力で自動再ロック
     const tryRelock = () => {
       if (!this.gameStarted || this.player.locked) return;
+      if (useGameStore.getState().isDead) return;
       const ui = useUIStore.getState();
       if (ui.inventoryOpen || ui.craftOpen || ui.settingsOpen || ui.chestOpen) return;
       void this.sound.ensureStarted();
@@ -513,6 +514,8 @@ export class GameController {
     useHungerStore.getState().reset();
     useBreakStore.getState().reset();
     this.mobManager.removeAll();
+    // ワールドのチャンク・地形データをリセット
+    this.world.reset();
     // ストアをタイトル状態へ（設定パネルも閉じる）
     if (useUIStore.getState().settingsOpen) {
       useUIStore.getState().toggleSettings();
