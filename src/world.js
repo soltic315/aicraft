@@ -480,14 +480,75 @@ export class World {
 
     const groups = {};
 
+    // AO計算ヘルパー
+    const isSolid = (wx, wy, wz) => {
+      const b = this.getBlock(wx, wy, wz);
+      return b !== BlockType.AIR && b !== BlockType.WATER && b != null;
+    };
+    const aoVal = (s1, s2, c) => {
+      if (s1 && s2) return 0;
+      return 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
+    };
+    // AO値(0-3)を明るさ(0.72-1.0)に変換
+    const toBright = (v) => 0.72 + 0.28 * (v / 3);
+
+    const computeAO = (blockType, face, x, y, z) => {
+      if (blockType === BlockType.WATER || blockType === BlockType.GLASS ||
+          blockType === BlockType.LEAVES) {
+        return [1, 1, 1, 1];
+      }
+      switch (face) {
+        case 'top':
+          return [
+            toBright(aoVal(isSolid(x-1,y,z),   isSolid(x,y,z-1),   isSolid(x-1,y,z-1))),
+            toBright(aoVal(isSolid(x-1,y,z),   isSolid(x,y,z+1),   isSolid(x-1,y,z+1))),
+            toBright(aoVal(isSolid(x+1,y,z),   isSolid(x,y,z+1),   isSolid(x+1,y,z+1))),
+            toBright(aoVal(isSolid(x+1,y,z),   isSolid(x,y,z-1),   isSolid(x+1,y,z-1))),
+          ];
+        case 'bottom':
+          return [1, 1, 1, 1]; // 底面はAOなし（ほぼ見えない）
+        case 'front': // +Z
+          return [
+            toBright(aoVal(isSolid(x-1,y,z+1), isSolid(x,y-1,z+1), isSolid(x-1,y-1,z+1))),
+            toBright(aoVal(isSolid(x+1,y,z+1), isSolid(x,y-1,z+1), isSolid(x+1,y-1,z+1))),
+            toBright(aoVal(isSolid(x+1,y,z+1), isSolid(x,y+1,z+1), isSolid(x+1,y+1,z+1))),
+            toBright(aoVal(isSolid(x-1,y,z+1), isSolid(x,y+1,z+1), isSolid(x-1,y+1,z+1))),
+          ];
+        case 'back': // -Z
+          return [
+            toBright(aoVal(isSolid(x+1,y,z),   isSolid(x,y-1,z),   isSolid(x+1,y-1,z))),
+            toBright(aoVal(isSolid(x-1,y,z),   isSolid(x,y-1,z),   isSolid(x-1,y-1,z))),
+            toBright(aoVal(isSolid(x-1,y,z),   isSolid(x,y+1,z),   isSolid(x-1,y+1,z))),
+            toBright(aoVal(isSolid(x+1,y,z),   isSolid(x,y+1,z),   isSolid(x+1,y+1,z))),
+          ];
+        case 'right': // +X
+          return [
+            toBright(aoVal(isSolid(x+1,y,z+1), isSolid(x+1,y-1,z), isSolid(x+1,y-1,z+1))),
+            toBright(aoVal(isSolid(x+1,y,z-1), isSolid(x+1,y-1,z), isSolid(x+1,y-1,z-1))),
+            toBright(aoVal(isSolid(x+1,y,z-1), isSolid(x+1,y+1,z), isSolid(x+1,y+1,z-1))),
+            toBright(aoVal(isSolid(x+1,y,z+1), isSolid(x+1,y+1,z), isSolid(x+1,y+1,z+1))),
+          ];
+        case 'left': // -X
+          return [
+            toBright(aoVal(isSolid(x,y,z-1),   isSolid(x,y-1,z),   isSolid(x,y-1,z-1))),
+            toBright(aoVal(isSolid(x,y,z+1),   isSolid(x,y-1,z),   isSolid(x,y-1,z+1))),
+            toBright(aoVal(isSolid(x,y,z+1),   isSolid(x,y+1,z),   isSolid(x,y+1,z+1))),
+            toBright(aoVal(isSolid(x,y,z-1),   isSolid(x,y+1,z),   isSolid(x,y+1,z-1))),
+          ];
+        default:
+          return [1, 1, 1, 1];
+      }
+    };
+
     const addQuad = (blockType, face, x, y, z, w, h) => {
       const groupKey = `${blockType}_${face}`;
       if (!groups[groupKey]) {
-        groups[groupKey] = { positions: [], normals: [], uvs: [], indices: [], blockType, face };
+        groups[groupKey] = { positions: [], normals: [], uvs: [], colors: [], indices: [], blockType, face };
       }
       const g = groups[groupKey];
       const vi = g.positions.length / 3;
-      this._addQuad(g, x, y, z, w, h, face, vi);
+      const aoValues = computeAO(blockType, face, x, y, z);
+      this._addQuad(g, x, y, z, w, h, face, vi, aoValues);
     };
 
     const emitMaskFaces = (mask, sizeX, sizeY, emitFace) => {
@@ -638,6 +699,7 @@ export class World {
     const allPositions = [];
     const allNormals = [];
     const allUvs = [];
+    const allColors = [];
     const allIndices = [];
     const materialList = [];
     const geoGroups = [];
@@ -655,6 +717,7 @@ export class World {
       allPositions.push(...g.positions);
       allNormals.push(...g.normals);
       allUvs.push(...g.uvs);
+      allColors.push(...g.colors);
 
       const reindexed = g.indices.map(i => i + vertexOffset);
       allIndices.push(...reindexed);
@@ -672,6 +735,7 @@ export class World {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(allPositions, 3));
     geometry.setAttribute('normal', new THREE.Float32BufferAttribute(allNormals, 3));
     geometry.setAttribute('uv', new THREE.Float32BufferAttribute(allUvs, 2));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(allColors, 3));
     geometry.setIndex(allIndices);
 
     for (const g of geoGroups) {
@@ -710,11 +774,16 @@ export class World {
     return mesh;
   }
 
-  _addQuad(g, x, y, z, w, h, dir, vi) {
+  _addQuad(g, x, y, z, w, h, dir, vi, aoValues) {
     const p = g.positions;
     const n = g.normals;
     const u = g.uvs;
+    const c = g.colors;
     const idx = g.indices;
+
+    // 頂点カラー（AO暗化）: 4頂点分を RGB で格納
+    const [ao0, ao1, ao2, ao3] = aoValues ?? [1, 1, 1, 1];
+    // colors は後で _addQuad の各 case の後にまとめて追加する
 
     switch (dir) {
       case 'top':
@@ -780,10 +849,18 @@ export class World {
     }
 
     idx.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+
+    // 頂点カラー（AO）: 各頂点に RGB (ao, ao, ao) を格納
+    c.push(
+      ao0, ao0, ao0,
+      ao1, ao1, ao1,
+      ao2, ao2, ao2,
+      ao3, ao3, ao3,
+    );
   }
 
   _addFace(g, x, y, z, dir, vi) {
-    this._addQuad(g, x, y, z, 1, 1, dir, vi);
+    this._addQuad(g, x, y, z, 1, 1, dir, vi, [1, 1, 1, 1]);
   }
 
   _rebuildChunkMesh(cx, cz, rebuildNeighbors = true) {

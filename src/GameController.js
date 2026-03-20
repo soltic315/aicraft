@@ -70,6 +70,7 @@ import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL
 import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './DroppedItemManager.js';
 import { ParticleManager } from './particles.js';
+import { SkyDome } from './sky.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -125,7 +126,7 @@ export class GameController {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
 
-        const matOptions = { map: texture };
+        const matOptions = { map: texture, vertexColors: true };
         if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; }
         if (type === BlockType.GLASS) { matOptions.transparent = true; matOptions.opacity = 0.42; }
         if (type === BlockType.LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
@@ -216,6 +217,9 @@ export class GameController {
 
     // パーティクルマネージャー
     this.particleManager = new ParticleManager(this.scene);
+
+    // スカイドーム（太陽・月・星・雲）
+    this.skyDome = new SkyDome(this.scene);
 
     // Break state (internal tracking for game loop)
     this.breakState = {
@@ -906,6 +910,13 @@ export class GameController {
     if (placeType === BlockType.CHEST) {
       useChestStore.getState().getChestData(pp, true);
     }
+
+    // 設置パーティクル
+    const placeMat = this.blockMaterials[placeType]?.top ?? this.blockMaterials[1]?.top;
+    if (placeMat) {
+      this.particleManager.spawnPlace(pp.x, pp.y, pp.z, placeMat.clone());
+    }
+
     this.sound.playPlace();
   }
 
@@ -968,6 +979,10 @@ export class GameController {
       const breakMat = this.blockMaterials[hit.blockType]?.top ?? this.blockMaterials[1]?.top;
       if (breakMat) {
         this.particleManager.spawnBreak(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
+        // 葉ブロックはゆっくり落下する葉パーティクルを追加
+        if (hit.blockType === BlockType.LEAVES) {
+          this.particleManager.spawnLeafFall(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
+        }
       }
 
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
@@ -1221,7 +1236,7 @@ export class GameController {
       Math.sin(sunAngle) * 65,
     );
 
-    return { cycleRatio, isDay: daylight >= 0.5 };
+    return { cycleRatio, sunAngle, daylight, isDay: daylight >= 0.5 };
   }
 
   // ---- Game Loop ----
@@ -1243,6 +1258,11 @@ export class GameController {
 
     const dayNight = this._updateDayNightCycle((time - this.cycleStartTime) / 1000);
 
+    // スカイドーム更新（常時）
+    if (this.gameStarted) {
+      this.skyDome.update(dayNight.sunAngle, dayNight.daylight, this.player.position, dt);
+    }
+
     if (this.gameStarted && !useGameStore.getState().paused) {
       // プレイヤー物理・移動はパネルが開いていても常に更新
       const jumpRequested = Boolean(this.player.keys['Space'] && this.player.onGround);
@@ -1255,7 +1275,17 @@ export class GameController {
       }
 
       if (!this.wasOnGround && this.player.onGround && fallingSpeedBeforeUpdate < -1.5) {
-        this.sound.playLand(Math.min(Math.abs(fallingSpeedBeforeUpdate) / 8, 2));
+        const landSpeed = Math.abs(fallingSpeedBeforeUpdate);
+        this.sound.playLand(Math.min(landSpeed / 8, 2));
+
+        // 落下着地パーティクル（一定以上の速度の時）
+        if (landSpeed > 5) {
+          const intensity = Math.min((landSpeed - 5) / 10, 2);
+          this.particleManager.spawnLand(
+            this.player.position.x, this.player.position.y,
+            this.player.position.z, intensity
+          );
+        }
 
         const damage = calculateFallDamage(fallingSpeedBeforeUpdate);
         if (damage > 0) {
