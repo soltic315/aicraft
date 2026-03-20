@@ -97,7 +97,15 @@ function generateChunk(cx, cz, chunkEdits) {
             flatBlocks[idx] = BlockType.STONE;
           }
         } else if (y < height) {
-          flatBlocks[idx] = BlockType.DIRT;
+          // 砂漠の地下は砂岩が混じる
+          if (biome === 'desert' && y >= height - 4) {
+            flatBlocks[idx] = BlockType.SANDSTONE;
+          // 沼地の地下は苔石が混じる
+          } else if (biome === 'swamp' && y < height - 1 && y >= height - 4 && oreNoise.noise2D(wx * 0.3 + 77, wz * 0.3 + 77) > 0.6) {
+            flatBlocks[idx] = BlockType.MOSSY_COBBLESTONE;
+          } else {
+            flatBlocks[idx] = BlockType.DIRT;
+          }
         } else if (y === height) {
           if (height <= SEA_LEVEL) {
             flatBlocks[idx] = BlockType.SAND;
@@ -321,7 +329,8 @@ function generateChunk(cx, cz, chunkEdits) {
         const block = flatBlocks[B(lx, y, lz)];
         if (block !== BlockType.STONE && block !== BlockType.IRON_ORE &&
             block !== BlockType.COAL_ORE && block !== BlockType.GOLD_ORE &&
-            block !== BlockType.DIAMOND_ORE) continue;
+            block !== BlockType.DIAMOND_ORE && block !== BlockType.SANDSTONE &&
+            block !== BlockType.MOSSY_COBBLESTONE) continue;
 
         const n1 = caveNoise.noise3D(wx * CAVE_SCALE_H, y * CAVE_SCALE_V, wz * CAVE_SCALE_H);
         const n2 = caveNoise.noise3D(

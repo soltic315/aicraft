@@ -45,6 +45,18 @@ import {
   COW_FLEE_SPEED,
   COW_FLEE_DURATION,
   COW_WANDER_INTERVAL,
+  SPIDER_HP,
+  SPIDER_SPEED,
+  SPIDER_VIEW_RANGE,
+  SPIDER_ATTACK_RANGE,
+  SPIDER_ATTACK_DAMAGE,
+  SPIDER_ATTACK_INTERVAL,
+  SPIDER_NEUTRAL_RANGE_DAY,
+  PIG_HP,
+  PIG_SPEED,
+  PIG_FLEE_SPEED,
+  PIG_FLEE_DURATION,
+  PIG_WANDER_INTERVAL,
 } from './config.js';
 
 // ---- スラブ法によるレイ-AABB 交差判定 ----
@@ -957,6 +969,433 @@ class Creeper {
   }
 }
 
+// ---- クモメッシュ生成 ----
+
+function createSpiderMesh() {
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+  const eyeMat  = new THREE.MeshLambertMaterial({ color: 0xff2020 });
+
+  const group = new THREE.Group();
+
+  // 腹部（大きめの楕円形状）
+  const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.6), bodyMat);
+  abdomen.position.set(0, 0.4, -0.2);
+  group.add(abdomen);
+
+  // 頭胸部
+  const thorax = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.28, 0.38), bodyMat);
+  thorax.position.set(0, 0.42, 0.22);
+  group.add(thorax);
+
+  // 目（赤い小さな球体 x2）
+  const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.06);
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.1, 0.52, 0.42);
+  group.add(leftEye);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.1, 0.52, 0.42);
+  group.add(rightEye);
+
+  // 脚（8本: 左4・右4）
+  const legMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+  const legGeo = new THREE.BoxGeometry(0.08, 0.08, 0.6);
+  const legAngles = [-0.5, -0.2, 0.2, 0.5];
+  for (const ang of legAngles) {
+    const leftLeg = new THREE.Mesh(legGeo, legMat);
+    leftLeg.position.set(-0.4, 0.3, 0.05 + ang * 0.3);
+    leftLeg.rotation.z = 0.7;
+    leftLeg.rotation.y = ang * 1.2;
+    group.add(leftLeg);
+
+    const rightLeg = new THREE.Mesh(legGeo, legMat);
+    rightLeg.position.set(0.4, 0.3, 0.05 + ang * 0.3);
+    rightLeg.rotation.z = -0.7;
+    rightLeg.rotation.y = ang * 1.2;
+    group.add(rightLeg);
+  }
+
+  return { group, mats: { body: bodyMat, eye: eyeMat, leg: legMat } };
+}
+
+// ---- Spider クラス ----
+
+class Spider {
+  constructor(scene, position) {
+    this.name = 'クモ';
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = SPIDER_HP;
+    this.maxHealth = SPIDER_HP;
+    this.isAlive = true;
+    this.attackCooldown = 0;
+    this._walkTime = 0;
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+    // 昼間に攻撃を受けると敵対状態になる
+    this._aggroed = false;
+
+    const { group, mats } = createSpiderMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      body: mats.body.color.clone(),
+      eye:  mats.eye.color.clone(),
+      leg:  mats.leg.color.clone(),
+    };
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    // 攻撃されたら敵対状態に
+    this._aggroed = true;
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.body.color.copy(HIT_FLASH_COLOR);
+    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+    }
+  }
+
+  drops() {
+    return [{ type: BlockType.STRING, count: 1 + Math.floor(Math.random() * 2) }];
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.body.dispose();
+    this._mats.eye.dispose();
+    this._mats.leg.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.body.color.copy(this._origColors.body);
+    this._mats.leg.color.copy(this._origColors.leg);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+
+    const dx = playerPos.x - this.position.x;
+    const dz = playerPos.z - this.position.z;
+    const horizDist = Math.sqrt(dx * dx + dz * dz);
+
+    // 昼間は一定距離以内に近づくか敵対状態になったときのみ攻撃
+    const isHostile = !isDay || this._aggroed || horizDist < SPIDER_NEUTRAL_RANGE_DAY;
+
+    if (isHostile && horizDist < SPIDER_VIEW_RANGE && horizDist > 0.05) {
+      const nx = dx / horizDist;
+      const nz = dz / horizDist;
+      const moveX = nx * SPIDER_SPEED * dt;
+      const moveZ = nz * SPIDER_SPEED * dt;
+      const bodyY = Math.floor(this.position.y);
+
+      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.35 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.35 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
+
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.35 * Math.sign(moveZ)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.35 * Math.sign(moveZ)));
+      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+
+      this.mesh.rotation.y = Math.atan2(dx, dz);
+
+      // 脚のスクリット動き
+      this._walkTime += dt * 10;
+      const swing = Math.sin(this._walkTime) * 0.2;
+      // 脚インデックス（5〜12）をまとめて動かす
+      for (let li = 5; li < Math.min(this.mesh.children.length, 13); li++) {
+        this.mesh.children[li].rotation.y += swing * 0.05 * (li % 2 === 0 ? 1 : -1);
+      }
+    } else if (isDay && !this._aggroed) {
+      // 昼間・非敵対: ゆっくり離れる
+      if (horizDist < SPIDER_NEUTRAL_RANGE_DAY && horizDist > 0.05) {
+        const nx = dx / horizDist;
+        const nz = dz / horizDist;
+        this.position.x -= nx * SPIDER_SPEED * 0.5 * dt;
+        this.position.z -= nz * SPIDER_SPEED * 0.5 * dt;
+      }
+    }
+
+    // ノックバック適用
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bodyY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.35 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.35 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.35 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.35 * Math.sign(kbZ)));
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 0.6; // クモは低め
+    this.mesh.position.copy(this.position);
+
+    // 攻撃判定
+    this.attackCooldown = Math.max(0, this.attackCooldown - dt);
+    if (isHostile) {
+      const dy = playerPos.y - this.position.y;
+      const fullDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (fullDist < SPIDER_ATTACK_RANGE && this.attackCooldown <= 0) {
+        this.attackCooldown = SPIDER_ATTACK_INTERVAL;
+        return { type: 'attack', damage: SPIDER_ATTACK_DAMAGE, mobX: this.position.x, mobZ: this.position.z };
+      }
+    }
+
+    return null;
+  }
+}
+
+// ---- 豚メッシュ生成 ----
+
+function createPigMesh() {
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0xf0a0a0 });
+  const snoutMat = new THREE.MeshLambertMaterial({ color: 0xe88080 });
+  const legMat   = new THREE.MeshLambertMaterial({ color: 0xe07070 });
+
+  const group = new THREE.Group();
+
+  // 胴体（横長）
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.5, 0.48), bodyMat);
+  body.position.set(0, 0.72, 0);
+  group.add(body);
+
+  // 頭
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.42, 0.42), bodyMat);
+  head.position.set(0, 0.88, 0.46);
+  group.add(head);
+
+  // 鼻（丸みのある四角）
+  const snout = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.12), snoutMat);
+  snout.position.set(0, 0.82, 0.69);
+  group.add(snout);
+
+  // 耳（小さな三角っぽいもの）
+  const earGeo = new THREE.BoxGeometry(0.14, 0.14, 0.06);
+  const leftEar = new THREE.Mesh(earGeo, snoutMat);
+  leftEar.position.set(-0.16, 1.07, 0.44);
+  group.add(leftEar);
+  const rightEar = new THREE.Mesh(earGeo, snoutMat);
+  rightEar.position.set(0.16, 1.07, 0.44);
+  group.add(rightEar);
+
+  // 4本の脚
+  const legGeo = new THREE.BoxGeometry(0.18, 0.4, 0.18);
+  for (const [x, z] of [[-0.28, 0.16], [0.28, 0.16], [-0.28, -0.16], [0.28, -0.16]]) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(x, 0.2, z);
+    group.add(leg);
+  }
+
+  return { group, mats: { body: bodyMat, snout: snoutMat, leg: legMat } };
+}
+
+// ---- Pig クラス ----
+
+class Pig {
+  constructor(scene, position) {
+    this.name = '豚';
+    this.isAnimal = true;
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = PIG_HP;
+    this.maxHealth = PIG_HP;
+    this.isAlive = true;
+
+    this._walkTime = 0;
+    this._wanderDirX = 0;
+    this._wanderDirZ = 0;
+    this._wanderTimer = Math.random() * PIG_WANDER_INTERVAL;
+
+    this._fleeing = false;
+    this._fleeTimer = 0;
+    this._fleeDirX = 0;
+    this._fleeDirZ = 0;
+
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+
+    const { group, mats } = createPigMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      body:  mats.body.color.clone(),
+      snout: mats.snout.color.clone(),
+      leg:   mats.leg.color.clone(),
+    };
+
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.body.color.copy(HIT_FLASH_COLOR);
+    this._mats.snout.color.copy(HIT_FLASH_COLOR);
+    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+      this._fleeDirX = 1; this._fleeDirZ = 0;
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+      this._fleeDirX = dx / len;
+      this._fleeDirZ = dz / len;
+    }
+    this._fleeing = true;
+    this._fleeTimer = PIG_FLEE_DURATION;
+  }
+
+  drops() {
+    const count = 1 + (Math.random() < 0.5 ? 1 : 0);
+    return [{ type: BlockType.PORK_CHOP, count }];
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.body.dispose();
+    this._mats.snout.dispose();
+    this._mats.leg.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.body.color.copy(this._origColors.body);
+    this._mats.snout.color.copy(this._origColors.snout);
+    this._mats.leg.color.copy(this._origColors.leg);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+
+    let moveX = 0;
+    let moveZ = 0;
+
+    if (this._fleeing) {
+      this._fleeTimer -= dt;
+      if (this._fleeTimer <= 0) {
+        this._fleeing = false;
+      } else {
+        moveX = this._fleeDirX * PIG_FLEE_SPEED * dt;
+        moveZ = this._fleeDirZ * PIG_FLEE_SPEED * dt;
+      }
+    } else {
+      this._wanderTimer -= dt;
+      if (this._wanderTimer <= 0) {
+        this._wanderTimer = PIG_WANDER_INTERVAL * (0.5 + Math.random());
+        const angle = Math.random() * Math.PI * 2;
+        const moving = Math.random() > 0.3;
+        this._wanderDirX = moving ? Math.cos(angle) : 0;
+        this._wanderDirZ = moving ? Math.sin(angle) : 0;
+      }
+      moveX = this._wanderDirX * PIG_SPEED * dt;
+      moveZ = this._wanderDirZ * PIG_SPEED * dt;
+    }
+
+    const bodyY = Math.floor(this.position.y);
+    if (moveX !== 0) {
+      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
+      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    }
+    if (moveZ !== 0) {
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
+    }
+
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bkY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 1;
+    this.mesh.position.copy(this.position);
+
+    if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
+      this.mesh.rotation.y = Math.atan2(moveX, moveZ);
+      this._walkTime += dt * 5;
+      const swing = Math.sin(this._walkTime) * 0.35;
+      // 脚インデックス（5〜8）
+      for (let li = 5; li <= 8; li++) {
+        const child = this.mesh.children[li];
+        if (child) child.rotation.x = (li % 2 === 1 ? swing : -swing);
+      }
+    }
+
+    return null;
+  }
+}
+
 // ---- MobManager クラス ----
 
 export class MobManager {
@@ -1074,7 +1513,15 @@ export class MobManager {
     const surfaceBlock = this.world.getBlock(Math.floor(x), groundY, Math.floor(z));
     if (surfaceBlock !== BlockType.GRASS) return;
 
-    this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+    // 牛または豚（バイオームに関係なく均等）
+    const biome = this.world.getBiome ? this.world.getBiome(Math.floor(x), Math.floor(z)) : 'plains';
+    // ジャングルは豚が多め、森・草原は均等
+    const spawnPig = biome === 'jungle' ? Math.random() < 0.7 : Math.random() < 0.5;
+    if (spawnPig) {
+      this.mobs.push(new Pig(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+    } else {
+      this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+    }
   }
 
   _trySpawn(playerPos) {
@@ -1088,15 +1535,17 @@ export class MobManager {
 
     if (groundY <= MOB_SEA_LEVEL_MIN) return;
 
-    // ランダムにモブ種別を選択（ゾンビ50%・スケルトン30%・クリーパー20%）
+    // ランダムにモブ種別を選択（ゾンビ40%・スケルトン25%・クリーパー15%・クモ20%）
     const roll = Math.random();
     let mob;
-    if (roll < 0.5) {
+    if (roll < 0.4) {
       mob = new Zombie(this.scene, new THREE.Vector3(x, groundY + 1, z));
-    } else if (roll < 0.8) {
+    } else if (roll < 0.65) {
       mob = new Skeleton(this.scene, new THREE.Vector3(x, groundY + 1, z));
-    } else {
+    } else if (roll < 0.8) {
       mob = new Creeper(this.scene, new THREE.Vector3(x, groundY + 1, z));
+    } else {
+      mob = new Spider(this.scene, new THREE.Vector3(x, groundY + 0.6, z));
     }
     this.mobs.push(mob);
   }

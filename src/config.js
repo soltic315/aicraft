@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.40.0';
+export const GAME_VERSION = '3.42.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -29,6 +29,8 @@ export const ALL_ITEM_TYPES = [
   BlockType.LEATHER, BlockType.BONE, BlockType.ARROW, BlockType.BOW,
   BlockType.DIAMOND_PICKAXE, BlockType.DIAMOND_AXE, BlockType.DIAMOND_SHOVEL,
   BlockType.JUNGLE_WOOD, BlockType.JUNGLE_LEAVES,
+  BlockType.PORK_CHOP, BlockType.COOKED_PORK, BlockType.STRING,
+  BlockType.SANDSTONE, BlockType.MOSSY_COBBLESTONE,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
@@ -67,6 +69,8 @@ export const FOOD_STATS = {
   [BlockType.APPLE]:       { restore: 4, name: 'リンゴ' },
   [BlockType.BEEF]:        { restore: 3, name: '生肉' },
   [BlockType.COOKED_BEEF]: { restore: 6, name: '焼き肉' },
+  [BlockType.PORK_CHOP]:   { restore: 3, name: '豚肉' },
+  [BlockType.COOKED_PORK]: { restore: 6, name: '焼き豚肉' },
 };
 
 export const FALL_DAMAGE_SAFE_SPEED = 12;
@@ -124,6 +128,22 @@ export const CREEPER_FUSE_TIME          = 1.5;   // 起爆までの時間（秒�
 export const CREEPER_EXPLOSION_RADIUS   = 3;     // 爆発半径（ブロック）
 export const CREEPER_EXPLOSION_DAMAGE   = 6;     // 爆発ダメージ（プレイヤーへ）
 
+// クモ
+export const SPIDER_HP                  = 8;
+export const SPIDER_SPEED               = 2.8;   // ブロック/秒（速め）
+export const SPIDER_VIEW_RANGE          = 18;    // 追尾開始距離（ブロック）
+export const SPIDER_ATTACK_RANGE        = 1.5;   // 攻撃射程（ブロック）
+export const SPIDER_ATTACK_DAMAGE       = 2;     // 1回の攻撃ダメージ
+export const SPIDER_ATTACK_INTERVAL     = 2.0;   // 攻撃間隔（秒）
+export const SPIDER_NEUTRAL_RANGE_DAY   = 5;     // 昼間はこの距離内に近づくと攻撃
+
+// 豚
+export const PIG_HP                     = 10;
+export const PIG_SPEED                  = 1.5;   // 通常移動速度（ブロック/秒）
+export const PIG_FLEE_SPEED             = 3.0;   // 逃走速度（ブロック/秒）
+export const PIG_FLEE_DURATION          = 4.0;   // 逃走継続時間（秒）
+export const PIG_WANDER_INTERVAL        = 3.0;   // 方向転換間隔（秒）
+
 // ゾンビ
 export const ZOMBIE_HP                  = 10;
 export const ZOMBIE_SPEED               = 2.0;   // ブロック/秒
@@ -177,7 +197,10 @@ export function getStackLimit(type) {
 }
 
 // 食料アイテムのセット（設置不可・右クリックで食べる）
-export const FOOD_ITEMS = new Set([BlockType.APPLE, BlockType.BEEF, BlockType.COOKED_BEEF]);
+export const FOOD_ITEMS = new Set([
+  BlockType.APPLE, BlockType.BEEF, BlockType.COOKED_BEEF,
+  BlockType.PORK_CHOP, BlockType.COOKED_PORK,
+]);
 
 // 設置不可アイテムのセット（ツール類 + 素材アイテム）
 export const TOOL_ITEMS = new Set([
@@ -187,7 +210,7 @@ export const TOOL_ITEMS = new Set([
   BlockType.DIAMOND_PICKAXE, BlockType.DIAMOND_AXE, BlockType.DIAMOND_SHOVEL,
   BlockType.BOW, BlockType.ARROW,
   BlockType.IRON_INGOT, BlockType.COAL, BlockType.GOLD_INGOT, BlockType.DIAMOND,
-  BlockType.LEATHER, BlockType.BONE,
+  BlockType.LEATHER, BlockType.BONE, BlockType.STRING,
   BlockType.LAVA, // 溶岩は設置不可（液体は破壊のみ）
 ]);
 
@@ -235,6 +258,11 @@ export const STARTER_INVENTORY = {
   [BlockType.DIAMOND_SHOVEL]: 0,
   [BlockType.JUNGLE_WOOD]: 0,
   [BlockType.JUNGLE_LEAVES]: 0,
+  [BlockType.PORK_CHOP]: 0,
+  [BlockType.COOKED_PORK]: 0,
+  [BlockType.STRING]: 0,
+  [BlockType.SANDSTONE]: 0,
+  [BlockType.MOSSY_COBBLESTONE]: 0,
 };
 
 export const CRAFT_RECIPES = [
@@ -425,12 +453,12 @@ export const CRAFT_RECIPES = [
     consumes: { [BlockType.COBBLESTONE]: 4 },
     produces: { [BlockType.FURNACE]: 1 },
   },
-  // 弓クラフト（板材 x3 → 弓 x1）
+  // 弓クラフト（板材 x2 + 糸 x1 → 弓 x1）
   {
     id: 'bow_from_plank',
-    label: '板材 x3 -> 弓 x1',
+    label: '板材 x2 + 糸 x1 -> 弓 x1',
     requiresCraftingTable: true,
-    consumes: { [BlockType.PLANK]: 3 },
+    consumes: { [BlockType.PLANK]: 2, [BlockType.STRING]: 1 },
     produces: { [BlockType.BOW]: 1 },
   },
   // 矢クラフト（骨 x1 -> 矢 x4）
@@ -524,6 +552,14 @@ export const SMELT_RECIPES = [
     inputType: BlockType.BEEF,
     inputCount: 1,
     outputType: BlockType.COOKED_BEEF,
+    outputCount: 1,
+  },
+  {
+    id: 'smelt_pork',
+    label: '豚肉 -> 焼き豚肉',
+    inputType: BlockType.PORK_CHOP,
+    inputCount: 1,
+    outputType: BlockType.COOKED_PORK,
     outputCount: 1,
   },
 ];

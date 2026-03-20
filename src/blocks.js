@@ -65,6 +65,14 @@ export const BlockType = {
   // バイオームブロック
   JUNGLE_WOOD: 50,    // ジャングル木材
   JUNGLE_LEAVES: 51,  // ジャングル葉
+  // 豚肉・調理済み豚肉
+  PORK_CHOP: 52,      // 豚肉（豚からドロップ）
+  COOKED_PORK: 53,    // 焼き豚肉（かまどで精錬）
+  // 糸（クモからドロップ）
+  STRING: 54,
+  // 追加バイオームブロック
+  SANDSTONE: 55,      // 砂岩（砂漠の地下）
+  MOSSY_COBBLESTONE: 56, // 苔石（沼地）
 };
 
 export const BLOCK_NAMES = {
@@ -119,6 +127,11 @@ export const BLOCK_NAMES = {
   [BlockType.DIAMOND_SHOVEL]: 'シャベル（ダイヤ）',
   [BlockType.JUNGLE_WOOD]: 'ジャングル木材',
   [BlockType.JUNGLE_LEAVES]: 'ジャングルの葉',
+  [BlockType.PORK_CHOP]: '豚肉',
+  [BlockType.COOKED_PORK]: '焼き豚肉',
+  [BlockType.STRING]: '糸',
+  [BlockType.SANDSTONE]: '砂岩',
+  [BlockType.MOSSY_COBBLESTONE]: '苔石',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -147,6 +160,8 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.ICE]: 0.5,
   [BlockType.JUNGLE_WOOD]: 0.9,
   [BlockType.JUNGLE_LEAVES]: 0.2,
+  [BlockType.SANDSTONE]: 1.2,
+  [BlockType.MOSSY_COBBLESTONE]: 1.8,
 };
 
 // ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
@@ -355,6 +370,20 @@ const BLOCK_COLORS = {
     bottom: '#1a6018',
     topDetail: '#0e4a0e',
     sideDetail: '#0e4a0e',
+  },
+  [BlockType.SANDSTONE]: {
+    top: '#d4b870',
+    side: '#c8aa5a',
+    bottom: '#c0a050',
+    topDetail: '#b89040',
+    sideDetail: '#a87c30',
+  },
+  [BlockType.MOSSY_COBBLESTONE]: {
+    top: '#5a7040',
+    side: '#566840',
+    bottom: '#525e38',
+    topDetail: '#3e5028',
+    sideDetail: '#3a4820',
   },
 };
 
@@ -579,6 +608,45 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
       ctx.fillStyle = rand() > 0.5 ? '#0e4a0e' : '#268026';
       ctx.fillRect(px, py, pixelSize, pixelSize);
     }
+  } else if (pattern === 'sandstone_top') {
+    // 砂岩上面: 砂粒パターン＋水平ライン
+    for (let i = 0; i < 12; i++) {
+      const px = Math.floor(rand() * 14) * pixelSize;
+      const py = Math.floor(rand() * 14) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#c8a848' : '#e0c070';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize);
+    }
+    for (let y = 4; y < 16; y += 4) {
+      ctx.fillStyle = '#a88830';
+      ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.5));
+    }
+  } else if (pattern === 'sandstone_side') {
+    // 砂岩側面: 横ストライプ
+    for (let y = 0; y < 16; y += 2) {
+      ctx.fillStyle = y % 4 === 0 ? '#b89040' : '#caa850';
+      ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.8));
+    }
+    for (let i = 0; i < 6; i++) {
+      const px = Math.floor(rand() * 14) * pixelSize;
+      const py = Math.floor(rand() * 14) * pixelSize;
+      ctx.fillStyle = '#a07828';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+  } else if (pattern === 'mossy_cobblestone') {
+    // 苔石: 丸石に苔色のスポット
+    for (let i = 0; i < 10; i++) {
+      const sx = Math.floor(rand() * 13) * pixelSize;
+      const sy = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#4e4e4e' : '#7a7a7a';
+      ctx.fillRect(sx, sy, pixelSize * (2 + Math.floor(rand() * 2)), pixelSize * (2 + Math.floor(rand() * 2)));
+    }
+    // 苔スポット（緑）
+    for (let i = 0; i < 8; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#3a6028' : '#508040';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
+    }
   } else if (pattern === 'chest_side') {
     for (let y = 1; y < 16; y += 3) {
       ctx.fillStyle = y % 2 === 0 ? '#7f4f26' : '#9a6532';
@@ -707,6 +775,8 @@ export function generateTextures() {
     [BlockType.BEDROCK]: { top: 'cobblestone', side: 'cobblestone', bottom: 'cobblestone' },
     [BlockType.JUNGLE_WOOD]: { top: 'wood_top', side: 'jungle_wood_side', bottom: 'wood_top' },
     [BlockType.JUNGLE_LEAVES]: { top: 'jungle_leaves', side: 'jungle_leaves', bottom: 'jungle_leaves' },
+    [BlockType.SANDSTONE]: { top: 'sandstone_top', side: 'sandstone_side', bottom: 'sandstone_top' },
+    [BlockType.MOSSY_COBBLESTONE]: { top: 'mossy_cobblestone', side: 'mossy_cobblestone', bottom: 'mossy_cobblestone' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -1045,6 +1115,77 @@ function generateBowIcon() {
   return c;
 }
 
+// 豚肉アイコン
+function generatePorkChopIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 肉本体（ピンク系）
+  ctx.fillStyle = '#d06878';
+  ctx.beginPath();
+  ctx.roundRect(6, 10, 20, 14, 3);
+  ctx.fill();
+  ctx.fillStyle = '#f0a8a8';
+  ctx.fillRect(8, 12, 16, 4);
+  ctx.fillStyle = '#b04858';
+  ctx.fillRect(7, 18, 18, 4);
+  // 骨
+  ctx.fillStyle = '#f2eedc';
+  ctx.fillRect(6, 11, 3, 10);
+  ctx.beginPath();
+  ctx.arc(7.5, 11, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+// 焼き豚肉アイコン
+function generateCookedPorkIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 焼けた肉（暗い茶）
+  ctx.fillStyle = '#703018';
+  ctx.beginPath();
+  ctx.roundRect(6, 10, 20, 14, 3);
+  ctx.fill();
+  ctx.fillStyle = '#5a2010';
+  ctx.fillRect(8, 14, 16, 4);
+  ctx.fillStyle = '#8a4020';
+  ctx.fillRect(7, 10, 18, 4);
+  // 骨
+  ctx.fillStyle = '#f2eedc';
+  ctx.fillRect(6, 11, 3, 10);
+  ctx.beginPath();
+  ctx.arc(7.5, 11, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+// 糸アイコン
+function generateStringIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.strokeStyle = '#e8e8d8';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  // 糸を縦に3本
+  for (let i = 0; i < 3; i++) {
+    const x = 8 + i * 8;
+    ctx.beginPath();
+    ctx.moveTo(x, 4);
+    ctx.bezierCurveTo(x - 3, 12, x + 3, 20, x, 28);
+    ctx.stroke();
+  }
+  return c;
+}
+
 // Generate a small icon canvas for hotbar display
 export function generateBlockIcon(type) {
   if (type === BlockType.APPLE)       return generateAppleIcon();
@@ -1070,6 +1211,9 @@ export function generateBlockIcon(type) {
   if (type === BlockType.DIAMOND_PICKAXE) return generatePickaxeIcon('#60e8f0');
   if (type === BlockType.DIAMOND_AXE)     return generateAxeIcon('#60e8f0');
   if (type === BlockType.DIAMOND_SHOVEL)  return generateShovelIcon('#60e8f0');
+  if (type === BlockType.PORK_CHOP)   return generatePorkChopIcon();
+  if (type === BlockType.COOKED_PORK) return generateCookedPorkIcon();
+  if (type === BlockType.STRING)      return generateStringIcon();
 
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;

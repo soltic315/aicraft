@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /mnt/c/Users/kille/Documents/git/aicraft -name \"package.json\" -exec head -30 {})"
+    ]
+  }
+}

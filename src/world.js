@@ -514,7 +514,15 @@ export class World {
               blocks[lx][y][lz] = BlockType.STONE;
             }
           } else if (y < height) {
-            blocks[lx][y][lz] = BlockType.DIRT;
+            // 砂漠の地下は砂岩が混じる
+            if (biome === 'desert' && y >= height - 4) {
+              blocks[lx][y][lz] = BlockType.SANDSTONE;
+            // 沼地の地下は苔石が混じる
+            } else if (biome === 'swamp' && y < height - 1 && y >= height - 4 && this.oreNoise.noise2D(wx * 0.3 + 77, wz * 0.3 + 77) > 0.6) {
+              blocks[lx][y][lz] = BlockType.MOSSY_COBBLESTONE;
+            } else {
+              blocks[lx][y][lz] = BlockType.DIRT;
+            }
           } else if (y === height) {
             if (height <= SEA_LEVEL) {
               blocks[lx][y][lz] = BlockType.SAND;
