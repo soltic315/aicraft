@@ -16,6 +16,16 @@ import {
   MOB_SPAWN_MAX_DIST,
   MOB_DESPAWN_DIST,
   MOB_SEA_LEVEL_MIN,
+  SHEEP_HP,
+  SHEEP_SPEED,
+  SHEEP_FLEE_SPEED,
+  SHEEP_FLEE_DURATION,
+  SHEEP_WANDER_INTERVAL,
+  CHICKEN_HP,
+  CHICKEN_SPEED,
+  CHICKEN_FLEE_SPEED,
+  CHICKEN_FLEE_DURATION,
+  CHICKEN_WANDER_INTERVAL,
   ZOMBIE_HP,
   ZOMBIE_SPEED,
   ZOMBIE_VIEW_RANGE,
@@ -1179,6 +1189,432 @@ class Spider {
   }
 }
 
+// ---- 羊メッシュ生成 ----
+
+function createSheepMesh() {
+  const woolMat = new THREE.MeshLambertMaterial({ color: 0xf0ece8 });
+  const faceMat = new THREE.MeshLambertMaterial({ color: 0xd0c8c0 });
+  const legMat  = new THREE.MeshLambertMaterial({ color: 0xd8d0c8 });
+
+  const group = new THREE.Group();
+
+  // 胴体（羊毛で丸みある形）
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.90, 0.60, 0.52), woolMat);
+  body.position.set(0, 0.76, 0);
+  group.add(body);
+
+  // 頭（少し暗め・毛なし）
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.40, 0.42), faceMat);
+  head.position.set(0, 0.90, 0.48);
+  group.add(head);
+
+  // 耳
+  const earGeo = new THREE.BoxGeometry(0.20, 0.08, 0.12);
+  const leftEar = new THREE.Mesh(earGeo, faceMat);
+  leftEar.position.set(-0.26, 1.0, 0.44);
+  group.add(leftEar);
+  const rightEar = new THREE.Mesh(earGeo, faceMat);
+  rightEar.position.set(0.26, 1.0, 0.44);
+  group.add(rightEar);
+
+  // 4本の脚
+  const legGeo = new THREE.BoxGeometry(0.17, 0.44, 0.17);
+  for (const [x, z] of [[-0.28, 0.18], [0.28, 0.18], [-0.28, -0.18], [0.28, -0.18]]) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(x, 0.22, z);
+    group.add(leg);
+  }
+
+  return { group, mats: { wool: woolMat, face: faceMat, leg: legMat } };
+}
+
+// ---- Sheep クラス ----
+
+class Sheep {
+  constructor(scene, position) {
+    this.name = '羊';
+    this.isAnimal = true;
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = SHEEP_HP;
+    this.maxHealth = SHEEP_HP;
+    this.isAlive = true;
+
+    this._walkTime = 0;
+    this._wanderDirX = 0;
+    this._wanderDirZ = 0;
+    this._wanderTimer = Math.random() * SHEEP_WANDER_INTERVAL;
+
+    this._fleeing = false;
+    this._fleeTimer = 0;
+    this._fleeDirX = 0;
+    this._fleeDirZ = 0;
+
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+
+    const { group, mats } = createSheepMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      wool: mats.wool.color.clone(),
+      face: mats.face.color.clone(),
+      leg:  mats.leg.color.clone(),
+    };
+
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.wool.color.copy(HIT_FLASH_COLOR);
+    this._mats.face.color.copy(HIT_FLASH_COLOR);
+    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+      this._fleeDirX = 1; this._fleeDirZ = 0;
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+      this._fleeDirX = dx / len;
+      this._fleeDirZ = dz / len;
+    }
+    this._fleeing = true;
+    this._fleeTimer = SHEEP_FLEE_DURATION;
+  }
+
+  drops() {
+    return [
+      { type: BlockType.WOOL, count: 1 + Math.floor(Math.random() * 2) },
+    ];
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.wool.dispose();
+    this._mats.face.dispose();
+    this._mats.leg.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.wool.color.copy(this._origColors.wool);
+    this._mats.face.color.copy(this._origColors.face);
+    this._mats.leg.color.copy(this._origColors.leg);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+
+    let moveX = 0;
+    let moveZ = 0;
+
+    if (this._fleeing) {
+      this._fleeTimer -= dt;
+      if (this._fleeTimer <= 0) {
+        this._fleeing = false;
+      } else {
+        moveX = this._fleeDirX * SHEEP_FLEE_SPEED * dt;
+        moveZ = this._fleeDirZ * SHEEP_FLEE_SPEED * dt;
+      }
+    } else {
+      this._wanderTimer -= dt;
+      if (this._wanderTimer <= 0) {
+        this._wanderTimer = SHEEP_WANDER_INTERVAL * (0.5 + Math.random());
+        const angle = Math.random() * Math.PI * 2;
+        const moving = Math.random() > 0.3;
+        this._wanderDirX = moving ? Math.cos(angle) : 0;
+        this._wanderDirZ = moving ? Math.sin(angle) : 0;
+      }
+      moveX = this._wanderDirX * SHEEP_SPEED * dt;
+      moveZ = this._wanderDirZ * SHEEP_SPEED * dt;
+    }
+
+    const bodyY = Math.floor(this.position.y);
+    if (moveX !== 0) {
+      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
+      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    }
+    if (moveZ !== 0) {
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
+    }
+
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bkY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 1;
+    this.mesh.position.copy(this.position);
+
+    if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
+      this.mesh.rotation.y = Math.atan2(moveX, moveZ);
+      this._walkTime += dt * 5;
+      const swing = Math.sin(this._walkTime) * 0.32;
+      for (let li = 5; li <= 8; li++) {
+        const child = this.mesh.children[li];
+        if (child) child.rotation.x = (li % 2 === 1 ? swing : -swing);
+      }
+    }
+
+    return null;
+  }
+}
+
+// ---- ニワトリメッシュ生成 ----
+
+function createChickenMesh() {
+  const bodyMat  = new THREE.MeshLambertMaterial({ color: 0xf0f0e8 });
+  const headMat  = new THREE.MeshLambertMaterial({ color: 0xe8e8e0 });
+  const combMat  = new THREE.MeshLambertMaterial({ color: 0xe02020 });
+  const beakMat  = new THREE.MeshLambertMaterial({ color: 0xe8a820 });
+  const legMat   = new THREE.MeshLambertMaterial({ color: 0xe8a820 });
+
+  const group = new THREE.Group();
+
+  // 胴体（丸みある）
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.55, 0.48), bodyMat);
+  body.position.set(0, 0.60, 0);
+  group.add(body);
+
+  // 頭（小さめ）
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.30, 0.30), headMat);
+  head.position.set(0, 1.0, 0.28);
+  group.add(head);
+
+  // トサカ（赤）
+  const comb = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.08), combMat);
+  comb.position.set(0, 1.20, 0.26);
+  group.add(comb);
+
+  // くちばし（黄）
+  const beak = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.14), beakMat);
+  beak.position.set(0, 1.0, 0.42);
+  group.add(beak);
+
+  // 2本の脚（細め）
+  const legGeo = new THREE.BoxGeometry(0.10, 0.32, 0.10);
+  for (const [x] of [[-0.14], [0.14]]) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(x, 0.16, 0.05);
+    group.add(leg);
+  }
+
+  return { group, mats: { body: bodyMat, head: headMat, comb: combMat, beak: beakMat, leg: legMat } };
+}
+
+// ---- Chicken クラス ----
+
+class Chicken {
+  constructor(scene, position) {
+    this.name = 'ニワトリ';
+    this.isAnimal = true;
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = CHICKEN_HP;
+    this.maxHealth = CHICKEN_HP;
+    this.isAlive = true;
+
+    this._walkTime = 0;
+    this._wanderDirX = 0;
+    this._wanderDirZ = 0;
+    this._wanderTimer = Math.random() * CHICKEN_WANDER_INTERVAL;
+
+    this._fleeing = false;
+    this._fleeTimer = 0;
+    this._fleeDirX = 0;
+    this._fleeDirZ = 0;
+
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+
+    const { group, mats } = createChickenMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      body: mats.body.color.clone(),
+      head: mats.head.color.clone(),
+    };
+
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.body.color.copy(HIT_FLASH_COLOR);
+    this._mats.head.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+      this._fleeDirX = 1; this._fleeDirZ = 0;
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+      this._fleeDirX = dx / len;
+      this._fleeDirZ = dz / len;
+    }
+    this._fleeing = true;
+    this._fleeTimer = CHICKEN_FLEE_DURATION;
+  }
+
+  drops() {
+    return [
+      { type: BlockType.FEATHER, count: 1 + Math.floor(Math.random() * 2) },
+      { type: BlockType.CHICKEN, count: 1 },
+    ];
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.body.dispose();
+    this._mats.head.dispose();
+    this._mats.comb.dispose();
+    this._mats.beak.dispose();
+    this._mats.leg.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.body.color.copy(this._origColors.body);
+    this._mats.head.color.copy(this._origColors.head);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+
+    let moveX = 0;
+    let moveZ = 0;
+
+    if (this._fleeing) {
+      this._fleeTimer -= dt;
+      if (this._fleeTimer <= 0) {
+        this._fleeing = false;
+      } else {
+        moveX = this._fleeDirX * CHICKEN_FLEE_SPEED * dt;
+        moveZ = this._fleeDirZ * CHICKEN_FLEE_SPEED * dt;
+      }
+    } else {
+      this._wanderTimer -= dt;
+      if (this._wanderTimer <= 0) {
+        this._wanderTimer = CHICKEN_WANDER_INTERVAL * (0.5 + Math.random());
+        const angle = Math.random() * Math.PI * 2;
+        const moving = Math.random() > 0.25;
+        this._wanderDirX = moving ? Math.cos(angle) : 0;
+        this._wanderDirZ = moving ? Math.sin(angle) : 0;
+      }
+      moveX = this._wanderDirX * CHICKEN_SPEED * dt;
+      moveZ = this._wanderDirZ * CHICKEN_SPEED * dt;
+    }
+
+    const bodyY = Math.floor(this.position.y);
+    if (moveX !== 0) {
+      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.3 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.3 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
+      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    }
+    if (moveZ !== 0) {
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.3 * Math.sign(moveZ)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.3 * Math.sign(moveZ)));
+      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
+    }
+
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bkY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.3 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.3 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
+      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.3 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.3 * Math.sign(kbZ)));
+      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 0.7;
+    this.mesh.position.copy(this.position);
+
+    if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
+      this.mesh.rotation.y = Math.atan2(moveX, moveZ);
+      this._walkTime += dt * 8;
+      const swing = Math.sin(this._walkTime) * 0.4;
+      // 脚インデックス（5〜6）
+      if (this.mesh.children[5]) this.mesh.children[5].rotation.x =  swing;
+      if (this.mesh.children[6]) this.mesh.children[6].rotation.x = -swing;
+    }
+
+    return null;
+  }
+}
+
 // ---- 豚メッシュ生成 ----
 
 function createPigMesh() {
@@ -1513,14 +1949,38 @@ export class MobManager {
     const surfaceBlock = this.world.getBlock(Math.floor(x), groundY, Math.floor(z));
     if (surfaceBlock !== BlockType.GRASS) return;
 
-    // 牛または豚（バイオームに関係なく均等）
+    // バイオームに応じた動物スポーン
     const biome = this.world.getBiome ? this.world.getBiome(Math.floor(x), Math.floor(z)) : 'plains';
-    // ジャングルは豚が多め、森・草原は均等
-    const spawnPig = biome === 'jungle' ? Math.random() < 0.7 : Math.random() < 0.5;
-    if (spawnPig) {
-      this.mobs.push(new Pig(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+    const roll = Math.random();
+    if (biome === 'jungle') {
+      // ジャングル: 豚とニワトリが多い
+      if (roll < 0.5) {
+        this.mobs.push(new Pig(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      } else if (roll < 0.8) {
+        this.mobs.push(new Chicken(this.scene, new THREE.Vector3(x, groundY + 0.7, z)));
+      } else {
+        this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      }
+    } else if (biome === 'savanna') {
+      // サバンナ: 牛・羊が多い
+      if (roll < 0.5) {
+        this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      } else if (roll < 0.85) {
+        this.mobs.push(new Sheep(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      } else {
+        this.mobs.push(new Chicken(this.scene, new THREE.Vector3(x, groundY + 0.7, z)));
+      }
     } else {
-      this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      // 平原・森・桜の森など: 均等
+      if (roll < 0.35) {
+        this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      } else if (roll < 0.60) {
+        this.mobs.push(new Pig(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      } else if (roll < 0.80) {
+        this.mobs.push(new Sheep(this.scene, new THREE.Vector3(x, groundY + 1, z)));
+      } else {
+        this.mobs.push(new Chicken(this.scene, new THREE.Vector3(x, groundY + 0.7, z)));
+      }
     }
   }
 

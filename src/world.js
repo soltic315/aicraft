@@ -394,17 +394,19 @@ export class World {
   }
 
   // バイオームを取得（温度・湿度ノイズで分類）
-  // 戻り値: 'plains' | 'forest' | 'desert' | 'tundra' | 'mountain' | 'jungle' | 'swamp'
+  // 戻り値: 'plains' | 'forest' | 'desert' | 'tundra' | 'mountain' | 'jungle' | 'swamp' | 'savanna' | 'cherry'
   getBiome(x, z) {
     const scale = 0.006; // 低スケールで広いバイオームを生成
     const temp  = this.tempNoise.noise2D(x * scale, z * scale);    // -1 〜 +1
     const humid = this.humidNoise.noise2D(x * scale + 100, z * scale + 100); // -1 〜 +1
 
     if (temp < -0.3) return 'tundra';
-    if (temp > 0.3 && humid > 0.4) return 'jungle';   // 高温多湿 → ジャングル
-    if (temp > 0.35 && humid < -0.1) return 'desert';
-    if (temp > 0.2 && humid > 0.25) return 'mountain';
-    if (humid > 0.5) return 'swamp';                  // 高湿度 → 沼地
+    if (temp > 0.3 && humid > 0.4) return 'jungle';      // 高温多湿 → ジャングル
+    if (temp > 0.35 && humid < -0.2) return 'desert';    // 高温乾燥 → 砂漠
+    if (temp > 0.3 && humid < 0.1) return 'savanna';     // 高温・中程度乾燥 → サバンナ
+    if (temp > 0.2 && humid > 0.35) return 'mountain';   // 温暖多湿・高地 → 山岳
+    if (temp > 0.1 && humid > 0.2 && humid <= 0.4) return 'cherry'; // 温暖・中湿度 → 桜の森
+    if (humid > 0.5) return 'swamp';                      // 高湿度 → 沼地
     if (humid > 0.15) return 'forest';
     return 'plains';
   }
@@ -424,6 +426,8 @@ export class World {
     else if (biome === 'forest') { heightScale = 20; }
     else if (biome === 'jungle') { heightScale = 24; heightOffset = 2; }
     else if (biome === 'swamp') { heightScale = 8; heightOffset = -3; } // 低地・平坦
+    else if (biome === 'savanna') { heightScale = 14; heightOffset = -1; } // 平坦な乾燥地
+    else if (biome === 'cherry') { heightScale = 18; heightOffset = 1; }   // 穏やかな丘
 
     return Math.floor(SEA_LEVEL + n * heightScale + heightOffset);
   }
@@ -501,6 +505,9 @@ export class World {
             if (y < 20 && oreVal > 0.94 && oreVal2 > 0.88) {
               // ダイヤモンド: Y<20 に極まれに生成（~1%）
               blocks[lx][y][lz] = BlockType.DIAMOND_ORE;
+            } else if (y < 18 && oreVal > 0.95 && oreVal2 > 0.92) {
+              // アメジスト鉱石: Y<18 に極まれに生成（~0.5%）
+              blocks[lx][y][lz] = BlockType.AMETHYST_ORE;
             } else if (y < 30 && oreVal > 0.92) {
               // 金鉱石: Y<30 に稀に生成（~2%）
               blocks[lx][y][lz] = BlockType.GOLD_ORE;
@@ -510,6 +517,9 @@ export class World {
             } else if (oreVal2 > 0.82) {
               // 石炭鉱石: 全深度に生成（~9%）
               blocks[lx][y][lz] = BlockType.COAL_ORE;
+            } else if (y < 20) {
+              // 深層岩: Y<20 の基盤部分
+              blocks[lx][y][lz] = BlockType.DEEPSLATE;
             } else {
               blocks[lx][y][lz] = BlockType.STONE;
             }
@@ -548,13 +558,15 @@ export class World {
         if (height > SEA_LEVEL + 1) {
           const treeVal = this.treeNoise.noise2D(wx * 0.5, wz * 0.5);
           // バイオーム別の生成閾値・条件
-          const isForest  = biome === 'forest';
-          const isDesert  = biome === 'desert';
-          const isTundra  = biome === 'tundra';
+          const isForest   = biome === 'forest';
+          const isDesert   = biome === 'desert';
+          const isTundra   = biome === 'tundra';
           const isMountain = biome === 'mountain';
-          const isJungle  = biome === 'jungle';
-          const isSwamp   = biome === 'swamp';
-          const treeThreshold = isForest ? 0.15 : isTundra ? 0.55 : isMountain ? 0.60 : isJungle ? 0.05 : 0.35;
+          const isJungle   = biome === 'jungle';
+          const isSwamp    = biome === 'swamp';
+          const isSavanna  = biome === 'savanna';
+          const isCherry   = biome === 'cherry';
+          const treeThreshold = isForest ? 0.15 : isTundra ? 0.55 : isMountain ? 0.60 : isJungle ? 0.05 : isSavanna ? 0.50 : isCherry ? 0.25 : 0.35;
 
           if (isDesert) {
             // 砂漠: サボテン（稀に）
@@ -603,7 +615,14 @@ export class World {
               const rndH = Math.abs(this.treeNoise.noise2D(wx * 10, wz * 10));
               const maxTrunkH = Math.max(1, WORLD_HEIGHT - height - 5);
 
-              const leafType = isJungle ? BlockType.JUNGLE_LEAVES : BlockType.LEAVES;
+              const leafType = isJungle ? BlockType.JUNGLE_LEAVES
+                            : isSavanna ? BlockType.ACACIA_LEAVES
+                            : isCherry  ? BlockType.CHERRY_LEAVES
+                            : BlockType.LEAVES;
+              const trunkType = isJungle  ? BlockType.JUNGLE_WOOD
+                              : isSavanna ? BlockType.ACACIA_WOOD
+                              : isCherry  ? BlockType.CHERRY_WOOD
+                              : BlockType.WOOD;
               const placeLeaf = (nlx, ny, nlz) => {
                 if (nlx >= 0 && nlx < CHUNK_SIZE && nlz >= 0 && nlz < CHUNK_SIZE && ny >= 0 && ny < WORLD_HEIGHT) {
                   if (blocks[nlx][ny][nlz] === BlockType.AIR) blocks[nlx][ny][nlz] = leafType;
@@ -634,9 +653,9 @@ export class World {
                 // ジャングル型: 非常に背が高い幹 + ジャングル木材 + ジャングル葉
                 const trunkH = Math.min(9 + Math.floor(rndH * 6), maxTrunkH);
                 for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                  blocks[lx][height + ty][lz] = BlockType.JUNGLE_WOOD;
+                  blocks[lx][height + ty][lz] = trunkType;
                   // 太い幹（2x2）
-                  if (lx + 1 < CHUNK_SIZE) blocks[lx + 1][height + ty][lz] = BlockType.JUNGLE_WOOD;
+                  if (lx + 1 < CHUNK_SIZE) blocks[lx + 1][height + ty][lz] = trunkType;
                 }
                 // ジャングル葉の球状配置
                 const leafStart = trunkH - 2;
@@ -651,11 +670,46 @@ export class World {
                     }
                   }
                 }
+              } else if (isSavanna) {
+                // アカシア型: 短い幹＋傘状に広がる葉（サバンナ特有）
+                const trunkH = Math.min(3 + Math.floor(rndH * 2), maxTrunkH);
+                for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
+                  blocks[lx][height + ty][lz] = trunkType;
+                }
+                // 傘状の葉（上部に広く、薄い層）
+                for (let ly = trunkH - 1; ly <= trunkH + 1; ly++) {
+                  const radius = ly === trunkH - 1 ? 1 : ly === trunkH ? 3 : 2;
+                  for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                      if (dx === 0 && dz === 0 && ly <= trunkH) continue;
+                      if (dx * dx + dz * dz > (radius + 0.5) * (radius + 0.5)) continue;
+                      placeLeaf(lx + dx, height + ly, lz + dz);
+                    }
+                  }
+                }
+              } else if (isCherry) {
+                // 桜型: 中程度の高さ＋ふんわりした球状の葉（ピンク）
+                const trunkH = Math.min(4 + Math.floor(rndH * 3), maxTrunkH);
+                for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
+                  blocks[lx][height + ty][lz] = trunkType;
+                }
+                const leafStart = trunkH - 1;
+                const leafEnd = trunkH + 2;
+                for (let ly = leafStart; ly <= leafEnd; ly++) {
+                  const radius = ly === leafEnd ? 1 : 2;
+                  for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                      if (dx === 0 && dz === 0 && ly < leafEnd) continue;
+                      if (dx * dx + dz * dz > (radius + 0.8) * (radius + 0.8)) continue;
+                      placeLeaf(lx + dx, height + ly, lz + dz);
+                    }
+                  }
+                }
               } else if (isForest) {
                 // 大オーク型: 太い幹＋大きな球状の葉
                 const trunkH = Math.min(5 + Math.floor(rndH * 4), maxTrunkH);
                 for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                  blocks[lx][height + ty][lz] = BlockType.WOOD;
+                  blocks[lx][height + ty][lz] = trunkType;
                 }
                 const leafStart = trunkH - 1;
                 const leafEnd = trunkH + 3;
@@ -673,7 +727,7 @@ export class World {
                 // 標準オーク型（plains デフォルト）
                 const trunkH = Math.min(4 + Math.floor(rndH * 3), maxTrunkH);
                 for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                  blocks[lx][height + ty][lz] = BlockType.WOOD;
+                  blocks[lx][height + ty][lz] = trunkType;
                 }
                 const leafStart = trunkH - 1;
                 const leafEnd = trunkH + 2;
@@ -727,6 +781,14 @@ export class World {
           // 沼地: キノコと草
           if (decVal > 0.3) blocks[lx][height + 1][lz] = BlockType.TALL_GRASS;
           if (decVal > 0.6) blocks[lx][height + 1][lz] = BlockType.MUSHROOM;
+        } else if (biome === 'savanna') {
+          // サバンナ: まばらな草のみ（乾燥した景観）
+          if (decVal > 0.55) blocks[lx][height + 1][lz] = BlockType.TALL_GRASS;
+        } else if (biome === 'cherry') {
+          // 桜の森: 花と草が豊か
+          if (decVal > 0.1) blocks[lx][height + 1][lz] = BlockType.TALL_GRASS;
+          if (decVal > 0.35 && decVal2 > 0.0) blocks[lx][height + 1][lz] = BlockType.FLOWER;
+          if (decVal > 0.65 && decVal2 > 0.4) blocks[lx][height + 1][lz] = BlockType.FLOWER;
         } else {
           // 平原・山: 草と花を疎らに
           if (decVal > 0.3) blocks[lx][height + 1][lz] = BlockType.TALL_GRASS;
@@ -753,7 +815,8 @@ export class World {
           const block = blocks[lx][y][lz];
           if (block !== BlockType.STONE && block !== BlockType.IRON_ORE &&
               block !== BlockType.COAL_ORE && block !== BlockType.GOLD_ORE &&
-              block !== BlockType.DIAMOND_ORE) continue;
+              block !== BlockType.DIAMOND_ORE && block !== BlockType.DEEPSLATE &&
+              block !== BlockType.AMETHYST_ORE) continue;
 
           // 2 つの独立したノイズ値がどちらも閾値内ならくり抜く（ワーム洞窟）
           const n1 = this.caveNoise.noise3D(wx * CAVE_SCALE_H, y * CAVE_SCALE_V, wz * CAVE_SCALE_H);

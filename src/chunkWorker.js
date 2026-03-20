@@ -39,8 +39,10 @@ function getBiome(x, z) {
   const humid = humidNoise.noise2D(x * scale + 100, z * scale + 100);
   if (temp < -0.3) return 'tundra';
   if (temp > 0.3 && humid > 0.4) return 'jungle';
-  if (temp > 0.35 && humid < -0.1) return 'desert';
-  if (temp > 0.2 && humid > 0.25) return 'mountain';
+  if (temp > 0.35 && humid < -0.2) return 'desert';
+  if (temp > 0.3 && humid < 0.1) return 'savanna';
+  if (temp > 0.2 && humid > 0.35) return 'mountain';
+  if (temp > 0.1 && humid > 0.2 && humid <= 0.4) return 'cherry';
   if (humid > 0.5) return 'swamp';
   if (humid > 0.15) return 'forest';
   return 'plains';
@@ -59,6 +61,8 @@ function getHeight(x, z) {
   else if (biome === 'forest') { heightScale = 20; }
   else if (biome === 'jungle') { heightScale = 24; heightOffset = 2; }
   else if (biome === 'swamp') { heightScale = 8; heightOffset = -3; }
+  else if (biome === 'savanna') { heightScale = 14; heightOffset = -1; }
+  else if (biome === 'cherry') { heightScale = 18; heightOffset = 1; }
   return Math.floor(SEA_LEVEL + n * heightScale + heightOffset);
 }
 
@@ -87,12 +91,16 @@ function generateChunk(cx, cz, chunkEdits) {
           const oreVal2 = oreNoise.noise2D(wx * 0.7 + 33.1, y * 1.1 + wz * 0.65 + 17.3);
           if (y < 20 && oreVal > 0.94 && oreVal2 > 0.88) {
             flatBlocks[idx] = BlockType.DIAMOND_ORE;
+          } else if (y < 18 && oreVal > 0.95 && oreVal2 > 0.92) {
+            flatBlocks[idx] = BlockType.AMETHYST_ORE;
           } else if (y < 30 && oreVal > 0.92) {
             flatBlocks[idx] = BlockType.GOLD_ORE;
           } else if (y < 55 && oreVal > 0.88) {
             flatBlocks[idx] = BlockType.IRON_ORE;
           } else if (oreVal2 > 0.82) {
             flatBlocks[idx] = BlockType.COAL_ORE;
+          } else if (y < 20) {
+            flatBlocks[idx] = BlockType.DEEPSLATE;
           } else {
             flatBlocks[idx] = BlockType.STONE;
           }
@@ -136,7 +144,9 @@ function generateChunk(cx, cz, chunkEdits) {
         const isMountain = biome === 'mountain';
         const isJungle   = biome === 'jungle';
         const isSwamp    = biome === 'swamp';
-        const treeThreshold = isForest ? 0.15 : isTundra ? 0.55 : isMountain ? 0.60 : isJungle ? 0.05 : 0.35;
+        const isSavanna  = biome === 'savanna';
+        const isCherry   = biome === 'cherry';
+        const treeThreshold = isForest ? 0.15 : isTundra ? 0.55 : isMountain ? 0.60 : isJungle ? 0.05 : isSavanna ? 0.50 : isCherry ? 0.25 : 0.35;
 
         if (isDesert) {
           // 砂漠: サボテン（稀に）
@@ -185,7 +195,14 @@ function generateChunk(cx, cz, chunkEdits) {
             const rndH = Math.abs(treeNoise.noise2D(wx * 10, wz * 10));
             const maxTrunkH = Math.max(1, WORLD_HEIGHT - height - 5);
 
-            const leafType = isJungle ? BlockType.JUNGLE_LEAVES : BlockType.LEAVES;
+            const leafType = isJungle  ? BlockType.JUNGLE_LEAVES
+                           : isSavanna ? BlockType.ACACIA_LEAVES
+                           : isCherry  ? BlockType.CHERRY_LEAVES
+                           : BlockType.LEAVES;
+            const trunkType = isJungle  ? BlockType.JUNGLE_WOOD
+                            : isSavanna ? BlockType.ACACIA_WOOD
+                            : isCherry  ? BlockType.CHERRY_WOOD
+                            : BlockType.WOOD;
             const placeLeaf = (nlx, ny, nlz) => {
               if (nlx >= 0 && nlx < CHUNK_SIZE && nlz >= 0 && nlz < CHUNK_SIZE && ny >= 0 && ny < WORLD_HEIGHT) {
                 if (flatBlocks[B(nlx, ny, nlz)] === BlockType.AIR) {
@@ -198,7 +215,7 @@ function generateChunk(cx, cz, chunkEdits) {
               // トウヒ型: 細い幹＋円錐状の葉（上ほど細い）
               const trunkH = Math.min(6 + Math.floor(rndH * 3), maxTrunkH);
               for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                flatBlocks[B(lx, height + ty, lz)] = BlockType.WOOD;
+                flatBlocks[B(lx, height + ty, lz)] = trunkType;
               }
               for (let ly = 1; ly <= trunkH + 1; ly++) {
                 const radius = Math.max(0, Math.floor((trunkH + 2 - ly) * 0.5));
@@ -216,8 +233,8 @@ function generateChunk(cx, cz, chunkEdits) {
               // ジャングル型: 背の高い幹 + ジャングル木材 + ジャングル葉
               const trunkH = Math.min(9 + Math.floor(rndH * 6), maxTrunkH);
               for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                flatBlocks[B(lx, height + ty, lz)] = BlockType.JUNGLE_WOOD;
-                if (lx + 1 < CHUNK_SIZE) flatBlocks[B(lx + 1, height + ty, lz)] = BlockType.JUNGLE_WOOD;
+                flatBlocks[B(lx, height + ty, lz)] = trunkType;
+                if (lx + 1 < CHUNK_SIZE) flatBlocks[B(lx + 1, height + ty, lz)] = trunkType;
               }
               const leafStart = trunkH - 2;
               const leafEnd = trunkH + 2;
@@ -231,11 +248,45 @@ function generateChunk(cx, cz, chunkEdits) {
                   }
                 }
               }
+            } else if (isSavanna) {
+              // アカシア型: 短い幹＋傘状に広がる葉
+              const trunkH = Math.min(3 + Math.floor(rndH * 2), maxTrunkH);
+              for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
+                flatBlocks[B(lx, height + ty, lz)] = trunkType;
+              }
+              for (let ly = trunkH - 1; ly <= trunkH + 1; ly++) {
+                const radius = ly === trunkH - 1 ? 1 : ly === trunkH ? 3 : 2;
+                for (let dx = -radius; dx <= radius; dx++) {
+                  for (let dz = -radius; dz <= radius; dz++) {
+                    if (dx === 0 && dz === 0 && ly <= trunkH) continue;
+                    if (dx * dx + dz * dz > (radius + 0.5) * (radius + 0.5)) continue;
+                    placeLeaf(lx + dx, height + ly, lz + dz);
+                  }
+                }
+              }
+            } else if (isCherry) {
+              // 桜型: 中程度の高さ＋ふんわりした球状の葉
+              const trunkH = Math.min(4 + Math.floor(rndH * 3), maxTrunkH);
+              for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
+                flatBlocks[B(lx, height + ty, lz)] = trunkType;
+              }
+              const leafStart = trunkH - 1;
+              const leafEnd = trunkH + 2;
+              for (let ly = leafStart; ly <= leafEnd; ly++) {
+                const radius = ly === leafEnd ? 1 : 2;
+                for (let dx = -radius; dx <= radius; dx++) {
+                  for (let dz = -radius; dz <= radius; dz++) {
+                    if (dx === 0 && dz === 0 && ly < leafEnd) continue;
+                    if (dx * dx + dz * dz > (radius + 0.8) * (radius + 0.8)) continue;
+                    placeLeaf(lx + dx, height + ly, lz + dz);
+                  }
+                }
+              }
             } else if (isForest) {
               // 大オーク型: 太い幹＋大きな球状の葉
               const trunkH = Math.min(5 + Math.floor(rndH * 4), maxTrunkH);
               for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                flatBlocks[B(lx, height + ty, lz)] = BlockType.WOOD;
+                flatBlocks[B(lx, height + ty, lz)] = trunkType;
               }
               const leafStart = trunkH - 1;
               const leafEnd   = trunkH + 3;
@@ -253,7 +304,7 @@ function generateChunk(cx, cz, chunkEdits) {
               // 標準オーク型（plains デフォルト）
               const trunkH = Math.min(4 + Math.floor(rndH * 3), maxTrunkH);
               for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
-                flatBlocks[B(lx, height + ty, lz)] = BlockType.WOOD;
+                flatBlocks[B(lx, height + ty, lz)] = trunkType;
               }
               const leafStart = trunkH - 1;
               const leafEnd   = trunkH + 2;
@@ -305,6 +356,12 @@ function generateChunk(cx, cz, chunkEdits) {
       } else if (biome === 'swamp') {
         if (decVal > 0.3) flatBlocks[B(lx, aboveY, lz)] = BlockType.TALL_GRASS;
         if (decVal > 0.6) flatBlocks[B(lx, aboveY, lz)] = BlockType.MUSHROOM;
+      } else if (biome === 'savanna') {
+        if (decVal > 0.55) flatBlocks[B(lx, aboveY, lz)] = BlockType.TALL_GRASS;
+      } else if (biome === 'cherry') {
+        if (decVal > 0.1) flatBlocks[B(lx, aboveY, lz)] = BlockType.TALL_GRASS;
+        if (decVal > 0.35 && decVal2 > 0.0) flatBlocks[B(lx, aboveY, lz)] = BlockType.FLOWER;
+        if (decVal > 0.65 && decVal2 > 0.4) flatBlocks[B(lx, aboveY, lz)] = BlockType.FLOWER;
       } else {
         if (decVal > 0.3) flatBlocks[B(lx, aboveY, lz)] = BlockType.TALL_GRASS;
         if (decVal > 0.65 && decVal2 > 0.4) flatBlocks[B(lx, aboveY, lz)] = BlockType.FLOWER;
@@ -330,7 +387,8 @@ function generateChunk(cx, cz, chunkEdits) {
         if (block !== BlockType.STONE && block !== BlockType.IRON_ORE &&
             block !== BlockType.COAL_ORE && block !== BlockType.GOLD_ORE &&
             block !== BlockType.DIAMOND_ORE && block !== BlockType.SANDSTONE &&
-            block !== BlockType.MOSSY_COBBLESTONE) continue;
+            block !== BlockType.MOSSY_COBBLESTONE && block !== BlockType.DEEPSLATE &&
+            block !== BlockType.AMETHYST_ORE) continue;
 
         const n1 = caveNoise.noise3D(wx * CAVE_SCALE_H, y * CAVE_SCALE_V, wz * CAVE_SCALE_H);
         const n2 = caveNoise.noise3D(

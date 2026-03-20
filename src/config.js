@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.42.0';
+export const GAME_VERSION = '3.50.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -31,6 +31,11 @@ export const ALL_ITEM_TYPES = [
   BlockType.JUNGLE_WOOD, BlockType.JUNGLE_LEAVES,
   BlockType.PORK_CHOP, BlockType.COOKED_PORK, BlockType.STRING,
   BlockType.SANDSTONE, BlockType.MOSSY_COBBLESTONE,
+  BlockType.ACACIA_WOOD, BlockType.ACACIA_LEAVES,
+  BlockType.CHERRY_WOOD, BlockType.CHERRY_LEAVES,
+  BlockType.DEEPSLATE, BlockType.AMETHYST_ORE, BlockType.AMETHYST,
+  BlockType.WOOL, BlockType.FEATHER,
+  BlockType.CHICKEN, BlockType.COOKED_CHICKEN, BlockType.MUSHROOM_STEW,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
@@ -66,11 +71,14 @@ export const COOKED_BEEF_HUNGER_RESTORE = 6;
 
 // 食料ごとのステータス
 export const FOOD_STATS = {
-  [BlockType.APPLE]:       { restore: 4, name: 'リンゴ' },
-  [BlockType.BEEF]:        { restore: 3, name: '生肉' },
-  [BlockType.COOKED_BEEF]: { restore: 6, name: '焼き肉' },
-  [BlockType.PORK_CHOP]:   { restore: 3, name: '豚肉' },
-  [BlockType.COOKED_PORK]: { restore: 6, name: '焼き豚肉' },
+  [BlockType.APPLE]:          { restore: 4, name: 'リンゴ' },
+  [BlockType.BEEF]:           { restore: 3, name: '生肉' },
+  [BlockType.COOKED_BEEF]:    { restore: 6, name: '焼き肉' },
+  [BlockType.PORK_CHOP]:      { restore: 3, name: '豚肉' },
+  [BlockType.COOKED_PORK]:    { restore: 6, name: '焼き豚肉' },
+  [BlockType.CHICKEN]:        { restore: 2, name: '生チキン' },
+  [BlockType.COOKED_CHICKEN]: { restore: 5, name: '焼きチキン' },
+  [BlockType.MUSHROOM_STEW]:  { restore: 8, name: 'きのこシチュー' },
 };
 
 export const FALL_DAMAGE_SAFE_SPEED = 12;
@@ -137,6 +145,20 @@ export const SPIDER_ATTACK_DAMAGE       = 2;     // 1回の攻撃ダメージ
 export const SPIDER_ATTACK_INTERVAL     = 2.0;   // 攻撃間隔（秒）
 export const SPIDER_NEUTRAL_RANGE_DAY   = 5;     // 昼間はこの距離内に近づくと攻撃
 
+// 羊
+export const SHEEP_HP                   = 8;
+export const SHEEP_SPEED                = 1.3;   // 通常移動速度（ブロック/秒）
+export const SHEEP_FLEE_SPEED           = 2.8;   // 逃走速度（ブロック/秒）
+export const SHEEP_FLEE_DURATION        = 3.5;   // 逃走継続時間（秒）
+export const SHEEP_WANDER_INTERVAL      = 3.0;   // 方向転換間隔（秒）
+
+// ニワトリ
+export const CHICKEN_HP                 = 4;
+export const CHICKEN_SPEED              = 1.8;   // 通常移動速度（ブロック/秒）
+export const CHICKEN_FLEE_SPEED         = 3.5;   // 逃走速度（ブロック/秒）
+export const CHICKEN_FLEE_DURATION      = 2.5;   // 逃走継続時間（秒）
+export const CHICKEN_WANDER_INTERVAL    = 2.0;   // 方向転換間隔（秒）
+
 // 豚
 export const PIG_HP                     = 10;
 export const PIG_SPEED                  = 1.5;   // 通常移動速度（ブロック/秒）
@@ -200,6 +222,7 @@ export function getStackLimit(type) {
 export const FOOD_ITEMS = new Set([
   BlockType.APPLE, BlockType.BEEF, BlockType.COOKED_BEEF,
   BlockType.PORK_CHOP, BlockType.COOKED_PORK,
+  BlockType.CHICKEN, BlockType.COOKED_CHICKEN, BlockType.MUSHROOM_STEW,
 ]);
 
 // 設置不可アイテムのセット（ツール類 + 素材アイテム）
@@ -211,6 +234,7 @@ export const TOOL_ITEMS = new Set([
   BlockType.BOW, BlockType.ARROW,
   BlockType.IRON_INGOT, BlockType.COAL, BlockType.GOLD_INGOT, BlockType.DIAMOND,
   BlockType.LEATHER, BlockType.BONE, BlockType.STRING,
+  BlockType.AMETHYST, BlockType.WOOL, BlockType.FEATHER,
   BlockType.LAVA, // 溶岩は設置不可（液体は破壊のみ）
 ]);
 
@@ -263,6 +287,18 @@ export const STARTER_INVENTORY = {
   [BlockType.STRING]: 0,
   [BlockType.SANDSTONE]: 0,
   [BlockType.MOSSY_COBBLESTONE]: 0,
+  [BlockType.ACACIA_WOOD]: 0,
+  [BlockType.ACACIA_LEAVES]: 0,
+  [BlockType.CHERRY_WOOD]: 0,
+  [BlockType.CHERRY_LEAVES]: 0,
+  [BlockType.DEEPSLATE]: 0,
+  [BlockType.AMETHYST_ORE]: 0,
+  [BlockType.AMETHYST]: 0,
+  [BlockType.WOOL]: 0,
+  [BlockType.FEATHER]: 0,
+  [BlockType.CHICKEN]: 0,
+  [BlockType.COOKED_CHICKEN]: 0,
+  [BlockType.MUSHROOM_STEW]: 0,
 };
 
 export const CRAFT_RECIPES = [
@@ -469,6 +505,27 @@ export const CRAFT_RECIPES = [
     consumes: { [BlockType.BONE]: 1 },
     produces: { [BlockType.ARROW]: 4 },
   },
+  // きのこシチュー（キノコ x2 -> きのこシチュー x1）
+  {
+    id: 'mushroom_stew',
+    label: 'キノコ x2 -> きのこシチュー x1',
+    consumes: { [BlockType.MUSHROOM]: 2 },
+    produces: { [BlockType.MUSHROOM_STEW]: 1 },
+  },
+  // アカシア板材（アカシア木材 x1 -> 板材 x4）
+  {
+    id: 'plank_from_acacia',
+    label: 'アカシア木材 x1 -> 板材 x4',
+    consumes: { [BlockType.ACACIA_WOOD]: 1 },
+    produces: { [BlockType.PLANK]: 4 },
+  },
+  // 桜板材（桜木材 x1 -> 板材 x4）
+  {
+    id: 'plank_from_cherry',
+    label: '桜木材 x1 -> 板材 x4',
+    consumes: { [BlockType.CHERRY_WOOD]: 1 },
+    produces: { [BlockType.PLANK]: 4 },
+  },
   // ダイヤモンドツールレシピ（ダイヤモンド x2）
   {
     id: 'diamond_pickaxe',
@@ -523,9 +580,11 @@ export const CRAFT_RECIPES = [
 
 // 精錬の燃料として使えるアイテム（いずれか1つを消費）
 export const SMELT_FUELS = [
-  { type: BlockType.COAL,  count: 1 }, // 石炭: 効率的な燃料
-  { type: BlockType.WOOD,  count: 2 }, // 木材: 2本で1回分
-  { type: BlockType.PLANK, count: 2 }, // 板材: 2枚で1回分
+  { type: BlockType.COAL,         count: 1 }, // 石炭: 効率的な燃料
+  { type: BlockType.WOOD,         count: 2 }, // 木材: 2本で1回分
+  { type: BlockType.PLANK,        count: 2 }, // 板材: 2枚で1回分
+  { type: BlockType.ACACIA_WOOD,  count: 2 }, // アカシア木材: 2本で1回分
+  { type: BlockType.CHERRY_WOOD,  count: 2 }, // 桜木材: 2本で1回分
 ];
 
 // 精錬レシピ（かまどで使用）
@@ -560,6 +619,14 @@ export const SMELT_RECIPES = [
     inputType: BlockType.PORK_CHOP,
     inputCount: 1,
     outputType: BlockType.COOKED_PORK,
+    outputCount: 1,
+  },
+  {
+    id: 'smelt_chicken',
+    label: '生チキン -> 焼きチキン',
+    inputType: BlockType.CHICKEN,
+    inputCount: 1,
+    outputType: BlockType.COOKED_CHICKEN,
     outputCount: 1,
   },
 ];

@@ -73,6 +73,23 @@ export const BlockType = {
   // 追加バイオームブロック
   SANDSTONE: 55,      // 砂岩（砂漠の地下）
   MOSSY_COBBLESTONE: 56, // 苔石（沼地）
+  // サバンナバイオームブロック
+  ACACIA_WOOD: 57,    // アカシア木材（サバンナ）
+  ACACIA_LEAVES: 58,  // アカシアの葉
+  // 桜バイオームブロック
+  CHERRY_WOOD: 59,    // 桜木材
+  CHERRY_LEAVES: 60,  // 桜の葉（ピンク）
+  // 深層ブロック
+  DEEPSLATE: 61,      // 深層岩（深いY座標）
+  AMETHYST_ORE: 62,   // アメジスト鉱石（深層）
+  // 素材アイテム
+  AMETHYST: 63,       // アメジスト（アメジスト鉱石からドロップ）
+  WOOL: 64,           // 羊毛（羊からドロップ）
+  FEATHER: 65,        // 羽根（ニワトリからドロップ）
+  // 食料
+  CHICKEN: 66,        // 生チキン（ニワトリからドロップ）
+  COOKED_CHICKEN: 67, // 焼きチキン（かまどで精錬）
+  MUSHROOM_STEW: 68,  // きのこシチュー（キノコからクラフト）
 };
 
 export const BLOCK_NAMES = {
@@ -132,6 +149,18 @@ export const BLOCK_NAMES = {
   [BlockType.STRING]: '糸',
   [BlockType.SANDSTONE]: '砂岩',
   [BlockType.MOSSY_COBBLESTONE]: '苔石',
+  [BlockType.ACACIA_WOOD]: 'アカシア木材',
+  [BlockType.ACACIA_LEAVES]: 'アカシアの葉',
+  [BlockType.CHERRY_WOOD]: '桜木材',
+  [BlockType.CHERRY_LEAVES]: '桜の葉',
+  [BlockType.DEEPSLATE]: '深層岩',
+  [BlockType.AMETHYST_ORE]: 'アメジスト鉱石',
+  [BlockType.AMETHYST]: 'アメジスト',
+  [BlockType.WOOL]: '羊毛',
+  [BlockType.FEATHER]: '羽根',
+  [BlockType.CHICKEN]: '生チキン',
+  [BlockType.COOKED_CHICKEN]: '焼きチキン',
+  [BlockType.MUSHROOM_STEW]: 'きのこシチュー',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -162,6 +191,12 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.JUNGLE_LEAVES]: 0.2,
   [BlockType.SANDSTONE]: 1.2,
   [BlockType.MOSSY_COBBLESTONE]: 1.8,
+  [BlockType.ACACIA_WOOD]: 0.9,
+  [BlockType.ACACIA_LEAVES]: 0.2,
+  [BlockType.CHERRY_WOOD]: 0.9,
+  [BlockType.CHERRY_LEAVES]: 0.2,
+  [BlockType.DEEPSLATE]: 2.5,
+  [BlockType.AMETHYST_ORE]: 3.5,
 };
 
 // ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
@@ -170,6 +205,8 @@ export const BLOCK_DROP_OVERRIDES = {
   [BlockType.IRON_ORE]: BlockType.IRON_INGOT,
   [BlockType.COAL_ORE]: BlockType.COAL,
   [BlockType.DIAMOND_ORE]: BlockType.DIAMOND,
+  [BlockType.AMETHYST_ORE]: BlockType.AMETHYST,
+  [BlockType.DEEPSLATE]: BlockType.DEEPSLATE, // 深層岩は丸石にならない
   // 金鉱石はかまどで精錬が必要（鉱石自体をドロップ）
 };
 
@@ -384,6 +421,48 @@ const BLOCK_COLORS = {
     bottom: '#525e38',
     topDetail: '#3e5028',
     sideDetail: '#3a4820',
+  },
+  [BlockType.ACACIA_WOOD]: {
+    top: '#b07840',
+    side: '#9a5a28',
+    bottom: '#b07840',
+    topDetail: '#8c6030',
+    sideDetail: '#7a4418',
+  },
+  [BlockType.ACACIA_LEAVES]: {
+    top: '#7ab830',
+    side: '#7ab830',
+    bottom: '#7ab830',
+    topDetail: '#5a9020',
+    sideDetail: '#5a9020',
+  },
+  [BlockType.CHERRY_WOOD]: {
+    top: '#d08060',
+    side: '#b85840',
+    bottom: '#d08060',
+    topDetail: '#b06848',
+    sideDetail: '#984030',
+  },
+  [BlockType.CHERRY_LEAVES]: {
+    top: '#f880b0',
+    side: '#f070a0',
+    bottom: '#f060a0',
+    topDetail: '#e05090',
+    sideDetail: '#e04080',
+  },
+  [BlockType.DEEPSLATE]: {
+    top: '#3a3a50',
+    side: '#303048',
+    bottom: '#2a2a40',
+    topDetail: '#4a4a60',
+    sideDetail: '#3c3c54',
+  },
+  [BlockType.AMETHYST_ORE]: {
+    top: '#3a3a50',
+    side: '#303048',
+    bottom: '#2a2a40',
+    topDetail: '#a060d8',
+    sideDetail: '#8040c0',
   },
 };
 
@@ -632,6 +711,78 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
       ctx.fillStyle = '#a07828';
       ctx.fillRect(px, py, pixelSize, pixelSize);
     }
+  } else if (pattern === 'acacia_wood_side') {
+    // アカシア側面: 対比の強い縦縞
+    for (let y = 0; y < 16; y++) {
+      if (y % 3 === 0) {
+        ctx.fillStyle = '#7a4418';
+        ctx.fillRect(0, y * pixelSize, size, pixelSize * 0.7);
+      }
+    }
+    ctx.fillStyle = '#5a3010';
+    ctx.fillRect(pixelSize * 5, 0, pixelSize * 2, size);
+    ctx.fillRect(pixelSize * 11, 0, pixelSize * 2, size);
+  } else if (pattern === 'acacia_leaves') {
+    // アカシア葉: 黄緑のランダムパターン
+    for (let i = 0; i < 28; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#5a9020' : '#7ac030';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+  } else if (pattern === 'cherry_wood_side') {
+    // 桜木材側面: 淡いピンク系縦縞
+    for (let y = 0; y < 16; y++) {
+      if (y % 3 === 0) {
+        ctx.fillStyle = '#984030';
+        ctx.fillRect(0, y * pixelSize, size, pixelSize * 0.7);
+      }
+    }
+    ctx.fillStyle = '#7a2820';
+    ctx.fillRect(pixelSize * 6, 0, pixelSize * 2, size);
+  } else if (pattern === 'cherry_leaves') {
+    // 桜葉: ピンクのランダムパターン
+    for (let i = 0; i < 30; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = rand() > 0.4 ? '#e04080' : '#f890c0';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+    // 白い花びら点
+    for (let i = 0; i < 8; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = '#fff0f8';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+  } else if (pattern === 'deepslate') {
+    // 深層岩: 暗青灰色の石パターン
+    for (let i = 0; i < 8; i++) {
+      const sx = Math.floor(rand() * 14) * pixelSize;
+      const sy = Math.floor(rand() * 14) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#3c3c54' : '#4a4a64';
+      ctx.fillRect(sx, sy, pixelSize * 2, pixelSize);
+    }
+    for (let i = 0; i < 4; i++) {
+      const sx = Math.floor(rand() * 12) * pixelSize;
+      const sy = Math.floor(rand() * 12) * pixelSize;
+      ctx.fillStyle = '#252535';
+      ctx.fillRect(sx, sy, pixelSize, pixelSize * 2);
+    }
+  } else if (pattern === 'amethyst_ore') {
+    // アメジスト鉱石: 深層岩に紫の結晶
+    for (let i = 0; i < 8; i++) {
+      const sx = Math.floor(rand() * 14) * pixelSize;
+      const sy = Math.floor(rand() * 14) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#3c3c54' : '#4a4a64';
+      ctx.fillRect(sx, sy, pixelSize * 2, pixelSize);
+    }
+    for (let i = 0; i < 7; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#a060d8' : '#c080f0';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
+    }
   } else if (pattern === 'mossy_cobblestone') {
     // 苔石: 丸石に苔色のスポット
     for (let i = 0; i < 10; i++) {
@@ -777,6 +928,12 @@ export function generateTextures() {
     [BlockType.JUNGLE_LEAVES]: { top: 'jungle_leaves', side: 'jungle_leaves', bottom: 'jungle_leaves' },
     [BlockType.SANDSTONE]: { top: 'sandstone_top', side: 'sandstone_side', bottom: 'sandstone_top' },
     [BlockType.MOSSY_COBBLESTONE]: { top: 'mossy_cobblestone', side: 'mossy_cobblestone', bottom: 'mossy_cobblestone' },
+    [BlockType.ACACIA_WOOD]: { top: 'wood_top', side: 'acacia_wood_side', bottom: 'wood_top' },
+    [BlockType.ACACIA_LEAVES]: { top: 'acacia_leaves', side: 'acacia_leaves', bottom: 'acacia_leaves' },
+    [BlockType.CHERRY_WOOD]: { top: 'wood_top', side: 'cherry_wood_side', bottom: 'wood_top' },
+    [BlockType.CHERRY_LEAVES]: { top: 'cherry_leaves', side: 'cherry_leaves', bottom: 'cherry_leaves' },
+    [BlockType.DEEPSLATE]: { top: 'deepslate', side: 'deepslate', bottom: 'deepslate' },
+    [BlockType.AMETHYST_ORE]: { top: 'amethyst_ore', side: 'amethyst_ore', bottom: 'amethyst_ore' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -1167,6 +1324,179 @@ function generateCookedPorkIcon() {
   return c;
 }
 
+// アメジストアイコン
+function generateAmethystIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#9050c8';
+  // 六角形風の結晶
+  ctx.beginPath();
+  ctx.moveTo(16, 4);
+  ctx.lineTo(24, 10);
+  ctx.lineTo(24, 22);
+  ctx.lineTo(16, 28);
+  ctx.lineTo(8, 22);
+  ctx.lineTo(8, 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#c080f0';
+  ctx.beginPath();
+  ctx.moveTo(16, 4);
+  ctx.lineTo(24, 10);
+  ctx.lineTo(16, 14);
+  ctx.lineTo(8, 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#6030a0';
+  ctx.beginPath();
+  ctx.moveTo(8, 22);
+  ctx.lineTo(16, 28);
+  ctx.lineTo(16, 14);
+  ctx.lineTo(8, 10);
+  ctx.closePath();
+  ctx.fill();
+  return c;
+}
+
+// 羊毛アイコン
+function generateWoolIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#f0ece8';
+  ctx.beginPath();
+  ctx.roundRect(4, 8, 24, 18, 5);
+  ctx.fill();
+  // 毛並みの波状表現
+  for (let x = 4; x < 28; x += 5) {
+    ctx.fillStyle = '#d8d0c8';
+    ctx.beginPath();
+    ctx.arc(x + 2, 12, 4, Math.PI, 0);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#e0dcd8';
+  ctx.fillRect(5, 13, 22, 10);
+  return c;
+}
+
+// 羽根アイコン
+function generateFeatherIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 羽根の軸
+  ctx.strokeStyle = '#b8a890';
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(6, 26);
+  ctx.lineTo(26, 6);
+  ctx.stroke();
+  // 羽根のウェブ（片側）
+  ctx.fillStyle = '#f0ece8';
+  ctx.beginPath();
+  ctx.moveTo(6, 26);
+  ctx.quadraticCurveTo(6, 10, 26, 6);
+  ctx.quadraticCurveTo(20, 16, 6, 26);
+  ctx.fill();
+  ctx.fillStyle = '#d8d4d0';
+  ctx.beginPath();
+  ctx.moveTo(6, 26);
+  ctx.quadraticCurveTo(14, 22, 26, 6);
+  ctx.quadraticCurveTo(18, 20, 6, 26);
+  ctx.fill();
+  return c;
+}
+
+// 生チキンアイコン
+function generateChickenIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 鶏肉本体（淡いピンク）
+  ctx.fillStyle = '#e0a890';
+  ctx.beginPath();
+  ctx.roundRect(7, 10, 18, 14, 4);
+  ctx.fill();
+  ctx.fillStyle = '#c88878';
+  ctx.fillRect(8, 14, 16, 4);
+  ctx.fillStyle = '#e8c0b0';
+  ctx.fillRect(8, 11, 16, 4);
+  // 骨
+  ctx.fillStyle = '#f2eedc';
+  ctx.fillRect(7, 11, 3, 10);
+  ctx.beginPath();
+  ctx.arc(8.5, 11, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(8.5, 21, 3, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+// 焼きチキンアイコン
+function generateCookedChickenIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 焼き色（黄茶）
+  ctx.fillStyle = '#c07840';
+  ctx.beginPath();
+  ctx.roundRect(7, 10, 18, 14, 4);
+  ctx.fill();
+  ctx.fillStyle = '#a05820';
+  ctx.fillRect(8, 14, 16, 4);
+  ctx.fillStyle = '#d89050';
+  ctx.fillRect(8, 11, 16, 4);
+  // 骨
+  ctx.fillStyle = '#f2eedc';
+  ctx.fillRect(7, 11, 3, 10);
+  ctx.beginPath();
+  ctx.arc(8.5, 11, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(8.5, 21, 3, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+// きのこシチューアイコン
+function generateMushroomStewIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // ボウル
+  ctx.fillStyle = '#8b5e3c';
+  ctx.beginPath();
+  ctx.moveTo(5, 14);
+  ctx.lineTo(27, 14);
+  ctx.lineTo(24, 26);
+  ctx.lineTo(8, 26);
+  ctx.closePath();
+  ctx.fill();
+  // スープ（赤茶）
+  ctx.fillStyle = '#c04020';
+  ctx.beginPath();
+  ctx.moveTo(7, 16);
+  ctx.lineTo(25, 16);
+  ctx.lineTo(23, 24);
+  ctx.lineTo(9, 24);
+  ctx.closePath();
+  ctx.fill();
+  // キノコのかけら
+  ctx.fillStyle = '#e06030';
+  ctx.beginPath();
+  ctx.arc(14, 18, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f0e8e0';
+  ctx.fillRect(12, 18, 4, 3);
+  // ボウルの縁
+  ctx.fillStyle = '#6a4024';
+  ctx.fillRect(5, 13, 22, 3);
+  return c;
+}
+
 // 糸アイコン
 function generateStringIcon() {
   const c = document.createElement('canvas');
@@ -1214,6 +1544,12 @@ export function generateBlockIcon(type) {
   if (type === BlockType.PORK_CHOP)   return generatePorkChopIcon();
   if (type === BlockType.COOKED_PORK) return generateCookedPorkIcon();
   if (type === BlockType.STRING)      return generateStringIcon();
+  if (type === BlockType.AMETHYST)      return generateAmethystIcon();
+  if (type === BlockType.WOOL)          return generateWoolIcon();
+  if (type === BlockType.FEATHER)       return generateFeatherIcon();
+  if (type === BlockType.CHICKEN)       return generateChickenIcon();
+  if (type === BlockType.COOKED_CHICKEN) return generateCookedChickenIcon();
+  if (type === BlockType.MUSHROOM_STEW) return generateMushroomStewIcon();
 
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;
