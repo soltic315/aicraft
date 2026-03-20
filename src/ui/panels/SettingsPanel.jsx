@@ -13,6 +13,7 @@ export function SettingsPanel() {
   const renderDistance = useSettingsStore((s) => s.renderDistance);
   const uiScale = useSettingsStore((s) => s.uiScale);
   const fov = useSettingsStore((s) => s.fov);
+  const targetFps = useSettingsStore((s) => s.targetFps);
   const highContrast = useSettingsStore((s) => s.highContrast);
   const showDebugInfo = useSettingsStore((s) => s.showDebugInfo);
 
@@ -151,6 +152,25 @@ export function SettingsPanel() {
             }}
           />
           <span class="setting-value">{fov ?? 75}°</span>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label for="setting-target-fps">FPS 制限</label>
+        <div>
+          <input
+            id="setting-target-fps"
+            type="range"
+            min="30"
+            max="144"
+            step="1"
+            value={targetFps ?? 60}
+            onInput={(e) => {
+              useSettingsStore.getState().setTargetFps(Number(e.currentTarget.value));
+              window.__aicraft?.applySettings?.();
+            }}
+          />
+          <span class="setting-value">{targetFps ?? 60} FPS</span>
         </div>
       </div>
 

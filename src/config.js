@@ -193,6 +193,7 @@ export const DEFAULT_SETTINGS = {
   highContrast: false,
   showDebugInfo: false,
   fov: 75, // 視野角（度）
+  targetFps: 60,
 };
 
 // 難易度設定
@@ -698,6 +699,7 @@ export function sanitizeSettings(raw) {
     renderDistance: clamp(Math.floor(Number(raw.renderDistance) || DEFAULT_SETTINGS.renderDistance), 2, 8),
     uiScale: clamp(Number(raw.uiScale) || DEFAULT_SETTINGS.uiScale, 0.7, 2),
     fov: clamp(Math.floor(Number(raw.fov) || DEFAULT_SETTINGS.fov), 50, 120),
+    targetFps: clamp(Math.floor(Number(raw.targetFps) || DEFAULT_SETTINGS.targetFps), 30, 144),
     highContrast,
     showDebugInfo,
   };

@@ -54,6 +54,11 @@ export const useSettingsStore = create((set, get) => ({
     get().persist();
   },
 
+  setTargetFps(value) {
+    set({ targetFps: clamp(Math.floor(Number(value) || DEFAULT_SETTINGS.targetFps), 30, 144) });
+    get().persist();
+  },
+
   setHighContrast(value) {
     set({ highContrast: Boolean(value) });
     get().persist();
@@ -65,10 +70,10 @@ export const useSettingsStore = create((set, get) => ({
   },
 
   persist() {
-    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, highContrast, showDebugInfo } = get();
+    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, targetFps, highContrast, showDebugInfo } = get();
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, highContrast, showDebugInfo }),
+      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, targetFps, highContrast, showDebugInfo }),
     );
   },
 }));

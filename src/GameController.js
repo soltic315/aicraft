@@ -30,6 +30,7 @@ import {
   DAY_SUN_COLOR,
   NIGHT_MOON_COLOR,
   clamp,
+  DEFAULT_SETTINGS,
   calculateFallDamage,
   sanitizeSettings,
   getPosKey,
@@ -90,11 +91,20 @@ export class GameController {
       : Math.floor(Math.random() * 100000);
 
     // Scene
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setClearColor(0x87CEEB);
-    document.body.appendChild(this.renderer.domElement);
+    this.webglSupported = true;
+    try {
+      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      this.renderer.setClearColor(0x87CEEB);
+      this.renderer.domElement.style.touchAction = 'none';
+      this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+      document.body.appendChild(this.renderer.domElement);
+    } catch (error) {
+      this.webglSupported = false;
+      this._showWebGLError(error);
+      return;
+    }
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(0x87CEEB, 60, 120);
@@ -246,6 +256,7 @@ export class GameController {
     // Game loop state
     this.gameStarted = false;
     this.lastTime = performance.now();
+    this.lastFrameTime = this.lastTime;
     this.wasOnGround = false;
     this.cycleStartTime = performance.now();
     this.frameCount = 0;
@@ -255,6 +266,10 @@ export class GameController {
   }
 
   init() {
+    if (!this.webglSupported) {
+      return;
+    }
+
     // Expose shared refs for Preact components
     window.__aicraft = {
       eventBus: this.eventBus,
@@ -284,6 +299,14 @@ export class GameController {
     // Auto-save before unload
     window.addEventListener('beforeunload', () => {
       this._saveGame({ showFeedback: false });
+    });
+
+    // タブ非表示時に自動一時停止（意図しない挙動防止）
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.gameStarted && !useGameStore.getState().paused) {
+        useGameStore.getState().setPaused(true);
+        useUIStore.getState().showFeedback('タブが非アクティブになったためゲームを一時停止しました', 1200);
+      }
     });
 
     // パネルが閉じている状態でのクリック/キー入力で自動再ロック
@@ -518,6 +541,16 @@ export class GameController {
 
   // ---- Settings ----
 
+  _showWebGLError(error) {
+    console.error('WebGL not supported or failed to initialize:', error);
+    const warning = document.createElement('div');
+    warning.id = 'webgl-error-overlay';
+    warning.style = 'position: fixed; inset: 0; background: rgba(0,0,0,0.9); color: #fff; display: flex; align-items: center; justify-content: center; z-index: 3000; font-size: 18px; padding: 20px; text-align: center; line-height: 1.5;';
+    warning.innerHTML = `<div><h2>WebGL が利用できません</h2><p>お使いのブラウザやグラフィックドライバが WebGL2 に対応していない可能性があります。最新のブラウザに更新するか、別の環境で再度お試しください。</p><p>${String(error)}</p></div>`;
+    document.body.appendChild(warning);
+    useUIStore.getState().showFeedback('WebGLが利用できません。最新ブラウザをお試しください。', 5000);
+  }
+
   _applySettings(persist = true) {
     const settings = useSettingsStore.getState();
     this.settings = settings;
@@ -530,6 +563,13 @@ export class GameController {
     const fov = settings.fov ?? 75;
     this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
+
+    // Pixel ratio / 性能制御
+    const pixelRatio = Math.min(window.devicePixelRatio, 2);
+    this.renderer.setPixelRatio(pixelRatio);
+
+    // フレームレート制限に合わせる
+    this.targetFps = settings.targetFps ?? DEFAULT_SETTINGS.targetFps;
 
     // Accessibility / UI scaling
     document.documentElement.style.setProperty('--ui-scale', String(settings.uiScale ?? 1));
@@ -548,9 +588,13 @@ export class GameController {
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
-      if (parsed.schemaVersion !== SAVE_SCHEMA_VERSION) return null;
+      if (parsed.schemaVersion !== SAVE_SCHEMA_VERSION) {
+        console.info('保存データのスキーマが一致しません（', parsed.schemaVersion, '!=', SAVE_SCHEMA_VERSION, '）。新規ワールドを生成します。');
+        return null;
+      }
       return parsed;
-    } catch {
+    } catch (e) {
+      console.warn('保存データの読み込みに失敗しました:', e);
       return null;
     }
   }
@@ -587,6 +631,11 @@ export class GameController {
           bgmVolume: settings.bgmVolume,
           seVolume: settings.seVolume,
           renderDistance: settings.renderDistance,
+          uiScale: settings.uiScale,
+          fov: settings.fov,
+          targetFps: settings.targetFps,
+          highContrast: settings.highContrast,
+          showDebugInfo: settings.showDebugInfo,
         },
         chunkDiffs: this.world.exportChunkEdits(),
         chestStorage: chestState,
@@ -1389,6 +1438,13 @@ export class GameController {
 
   _gameLoop(time) {
     requestAnimationFrame((t) => this._gameLoop(t));
+
+    const targetFps = this.targetFps || DEFAULT_SETTINGS.targetFps;
+    const minFrameMs = 1000 / targetFps;
+    if (time - this.lastFrameTime < minFrameMs) {
+      return;
+    }
+    this.lastFrameTime = time;
 
     const dt = (time - this.lastTime) / 1000;
     this.lastTime = time;

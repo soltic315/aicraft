@@ -35,6 +35,10 @@
 - 難易度に応じて空腹消費量が変化（`DIFFICULTY_SETTINGS`で倍率管理）
 - 攻撃・被弾・爆発の効果音をより適切な音に変更
 - 設定の`sanitizeSettings`にFoV項目を追加
+- 設定にFPS制限（30〜144）のオプションを追加し、`GameController`のゲームループで実際に反映
+- セーブデータに`uiScale`・`fov`・`targetFps`・`highContrast`・`showDebugInfo`を含め、ロード時に新スキーマを検証
+- タブ非アクティブ時に自動一時停止する機能を追加
+- WebGL初期化に失敗した場合に明示メッセージを表示して操作を停止
 
 ## [3.50.0] - 2026-03-20
 
