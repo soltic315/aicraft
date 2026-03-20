@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.16.1';
+export const GAME_VERSION = '3.21.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -17,7 +17,12 @@ export const ALL_ITEM_TYPES = [
   BlockType.GRASS, BlockType.DIRT, BlockType.STONE, BlockType.WOOD,
   BlockType.LEAVES, BlockType.SAND, BlockType.WATER, BlockType.PLANK,
   BlockType.GLASS, BlockType.CRAFTING_TABLE, BlockType.CHEST,
-  BlockType.APPLE, BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL,
+  BlockType.COBBLESTONE, BlockType.IRON_ORE, BlockType.IRON_INGOT,
+  BlockType.APPLE, BlockType.BEEF, BlockType.COOKED_BEEF,
+  BlockType.FURNACE,
+  BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL,
+  BlockType.STONE_PICKAXE, BlockType.STONE_AXE, BlockType.STONE_SHOVEL,
+  BlockType.IRON_PICKAXE, BlockType.IRON_AXE, BlockType.IRON_SHOVEL,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
@@ -48,6 +53,15 @@ export const HUNGER_LOW_THRESHOLD = 6;
 export const HUNGER_STARVE_DAMAGE_INTERVAL = 2;
 export const HUNGER_STARVE_DAMAGE = 1;
 export const APPLE_HUNGER_RESTORE = 4;
+export const BEEF_HUNGER_RESTORE = 3;
+export const COOKED_BEEF_HUNGER_RESTORE = 6;
+
+// 食料ごとのステータス
+export const FOOD_STATS = {
+  [BlockType.APPLE]:       { restore: 4, name: 'リンゴ' },
+  [BlockType.BEEF]:        { restore: 3, name: '生肉' },
+  [BlockType.COOKED_BEEF]: { restore: 6, name: '焼き肉' },
+};
 
 export const FALL_DAMAGE_SAFE_SPEED = 12;
 export const FALL_DAMAGE_HEAVY_SPEED = 16;
@@ -75,6 +89,15 @@ export const MOB_SPAWN_MIN_DIST     = 8;    // スポーン最小距離（ブロ
 export const MOB_SPAWN_MAX_DIST     = 24;   // スポーン最大距離（ブロック）
 export const MOB_DESPAWN_DIST       = 64;   // デスポーン距離（ブロック）
 export const MOB_SEA_LEVEL_MIN      = 20;   // この高度以下にはスポーンしない
+
+// 動物（友好モブ）
+export const ANIMAL_MAX_COUNT       = 5;    // 同時存在できる動物の最大数
+export const ANIMAL_SPAWN_INTERVAL  = 20;   // スポーン試行間隔（秒）
+export const COW_HP                 = 10;
+export const COW_SPEED              = 1.2;  // 通常移動速度（ブロック/秒）
+export const COW_FLEE_SPEED         = 2.5;  // 逃走速度（ブロック/秒）
+export const COW_FLEE_DURATION      = 3.0;  // 逃走継続時間（秒）
+export const COW_WANDER_INTERVAL    = 3.0;  // 方向転換間隔（秒）
 
 // ゾンビ
 export const ZOMBIE_HP                  = 10;
@@ -104,11 +127,36 @@ export const DEFAULT_SETTINGS = {
   showDebugInfo: false,
 };
 
-// 食料アイテムのセット（設置不可・右クリックで食べる）
-export const FOOD_ITEMS = new Set([BlockType.APPLE]);
+// スタック上限
+export const STACK_LIMIT = 64;
 
-// ツールアイテムのセット（設置不可・選択時に自動装備）
-export const TOOL_ITEMS = new Set([BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL]);
+// ツール類はスタック上限 1（耐久値管理のため）
+export const ITEM_STACK_LIMITS = {
+  [BlockType.PICKAXE]:       1,
+  [BlockType.AXE]:           1,
+  [BlockType.SHOVEL]:        1,
+  [BlockType.STONE_PICKAXE]: 1,
+  [BlockType.STONE_AXE]:     1,
+  [BlockType.STONE_SHOVEL]:  1,
+  [BlockType.IRON_PICKAXE]:  1,
+  [BlockType.IRON_AXE]:      1,
+  [BlockType.IRON_SHOVEL]:   1,
+};
+
+export function getStackLimit(type) {
+  return ITEM_STACK_LIMITS[type] ?? STACK_LIMIT;
+}
+
+// 食料アイテムのセット（設置不可・右クリックで食べる）
+export const FOOD_ITEMS = new Set([BlockType.APPLE, BlockType.BEEF, BlockType.COOKED_BEEF]);
+
+// 設置不可アイテムのセット（ツール類 + 素材アイテム）
+export const TOOL_ITEMS = new Set([
+  BlockType.PICKAXE,       BlockType.AXE,       BlockType.SHOVEL,
+  BlockType.STONE_PICKAXE, BlockType.STONE_AXE, BlockType.STONE_SHOVEL,
+  BlockType.IRON_PICKAXE,  BlockType.IRON_AXE,  BlockType.IRON_SHOVEL,
+  BlockType.IRON_INGOT,
+]);
 
 // 全アイテムを 0 から開始（ブロック破壊・クラフトで入手）
 export const STARTER_INVENTORY = {
@@ -124,9 +172,21 @@ export const STARTER_INVENTORY = {
   [BlockType.CRAFTING_TABLE]: 0,
   [BlockType.CHEST]: 0,
   [BlockType.APPLE]: 0,
+  [BlockType.BEEF]: 0,
+  [BlockType.COOKED_BEEF]: 0,
+  [BlockType.FURNACE]: 0,
   [BlockType.PICKAXE]: 0,
   [BlockType.AXE]: 0,
   [BlockType.SHOVEL]: 0,
+  [BlockType.COBBLESTONE]: 0,
+  [BlockType.IRON_ORE]: 0,
+  [BlockType.IRON_INGOT]: 0,
+  [BlockType.STONE_PICKAXE]: 0,
+  [BlockType.STONE_AXE]: 0,
+  [BlockType.STONE_SHOVEL]: 0,
+  [BlockType.IRON_PICKAXE]: 0,
+  [BlockType.IRON_AXE]: 0,
+  [BlockType.IRON_SHOVEL]: 0,
 };
 
 export const CRAFT_RECIPES = [
@@ -171,6 +231,150 @@ export const CRAFT_RECIPES = [
     label: '板材 x2 -> シャベル x1',
     consumes: { [BlockType.PLANK]: 2 },
     produces: { [BlockType.SHOVEL]: 1 },
+  },
+  // 木ツール修理レシピ（板材 x1 消費で耐久値 +30）
+  {
+    id: 'repair_pickaxe',
+    label: 'ツルハシ（木）修理（板材 x1 -> 耐久 +30）',
+    consumes: { [BlockType.PICKAXE]: 1, [BlockType.PLANK]: 1 },
+    produces: { [BlockType.PICKAXE]: 1 },
+    repairTool: 'pickaxe',
+    repairAmount: 30,
+  },
+  {
+    id: 'repair_axe',
+    label: '斧（木）修理（板材 x1 -> 耐久 +30）',
+    consumes: { [BlockType.AXE]: 1, [BlockType.PLANK]: 1 },
+    produces: { [BlockType.AXE]: 1 },
+    repairTool: 'axe',
+    repairAmount: 30,
+  },
+  {
+    id: 'repair_shovel',
+    label: 'シャベル（木）修理（板材 x1 -> 耐久 +30）',
+    consumes: { [BlockType.SHOVEL]: 1, [BlockType.PLANK]: 1 },
+    produces: { [BlockType.SHOVEL]: 1 },
+    repairTool: 'shovel',
+    repairAmount: 30,
+  },
+  // 石ツールレシピ（丸石 x2）
+  {
+    id: 'stone_pickaxe',
+    label: '丸石 x2 -> ツルハシ（石） x1',
+    consumes: { [BlockType.COBBLESTONE]: 2 },
+    produces: { [BlockType.STONE_PICKAXE]: 1 },
+  },
+  {
+    id: 'stone_axe',
+    label: '丸石 x2 -> 斧（石） x1',
+    consumes: { [BlockType.COBBLESTONE]: 2 },
+    produces: { [BlockType.STONE_AXE]: 1 },
+  },
+  {
+    id: 'stone_shovel',
+    label: '丸石 x2 -> シャベル（石） x1',
+    consumes: { [BlockType.COBBLESTONE]: 2 },
+    produces: { [BlockType.STONE_SHOVEL]: 1 },
+  },
+  // 石ツール修理レシピ（丸石 x1 消費で耐久値 +66）
+  {
+    id: 'repair_stone_pickaxe',
+    label: 'ツルハシ（石）修理（丸石 x1 -> 耐久 +66）',
+    consumes: { [BlockType.STONE_PICKAXE]: 1, [BlockType.COBBLESTONE]: 1 },
+    produces: { [BlockType.STONE_PICKAXE]: 1 },
+    repairTool: 'stone_pickaxe',
+    repairAmount: 66,
+  },
+  {
+    id: 'repair_stone_axe',
+    label: '斧（石）修理（丸石 x1 -> 耐久 +66）',
+    consumes: { [BlockType.STONE_AXE]: 1, [BlockType.COBBLESTONE]: 1 },
+    produces: { [BlockType.STONE_AXE]: 1 },
+    repairTool: 'stone_axe',
+    repairAmount: 66,
+  },
+  {
+    id: 'repair_stone_shovel',
+    label: 'シャベル（石）修理（丸石 x1 -> 耐久 +66）',
+    consumes: { [BlockType.STONE_SHOVEL]: 1, [BlockType.COBBLESTONE]: 1 },
+    produces: { [BlockType.STONE_SHOVEL]: 1 },
+    repairTool: 'stone_shovel',
+    repairAmount: 66,
+  },
+  // 鉄ツールレシピ（鉄インゴット x2）
+  {
+    id: 'iron_pickaxe',
+    label: '鉄インゴット x2 -> ツルハシ（鉄） x1',
+    consumes: { [BlockType.IRON_INGOT]: 2 },
+    produces: { [BlockType.IRON_PICKAXE]: 1 },
+  },
+  {
+    id: 'iron_axe',
+    label: '鉄インゴット x2 -> 斧（鉄） x1',
+    consumes: { [BlockType.IRON_INGOT]: 2 },
+    produces: { [BlockType.IRON_AXE]: 1 },
+  },
+  {
+    id: 'iron_shovel',
+    label: '鉄インゴット x2 -> シャベル（鉄） x1',
+    consumes: { [BlockType.IRON_INGOT]: 2 },
+    produces: { [BlockType.IRON_SHOVEL]: 1 },
+  },
+  // 鉄ツール修理レシピ（鉄インゴット x1 消費で耐久値 +125）
+  {
+    id: 'repair_iron_pickaxe',
+    label: 'ツルハシ（鉄）修理（鉄インゴット x1 -> 耐久 +125）',
+    consumes: { [BlockType.IRON_PICKAXE]: 1, [BlockType.IRON_INGOT]: 1 },
+    produces: { [BlockType.IRON_PICKAXE]: 1 },
+    repairTool: 'iron_pickaxe',
+    repairAmount: 125,
+  },
+  {
+    id: 'repair_iron_axe',
+    label: '斧（鉄）修理（鉄インゴット x1 -> 耐久 +125）',
+    consumes: { [BlockType.IRON_AXE]: 1, [BlockType.IRON_INGOT]: 1 },
+    produces: { [BlockType.IRON_AXE]: 1 },
+    repairTool: 'iron_axe',
+    repairAmount: 125,
+  },
+  {
+    id: 'repair_iron_shovel',
+    label: 'シャベル（鉄）修理（鉄インゴット x1 -> 耐久 +125）',
+    consumes: { [BlockType.IRON_SHOVEL]: 1, [BlockType.IRON_INGOT]: 1 },
+    produces: { [BlockType.IRON_SHOVEL]: 1 },
+    repairTool: 'iron_shovel',
+    repairAmount: 125,
+  },
+  // かまどクラフト（丸石 x4）
+  {
+    id: 'furnace_from_cobblestone',
+    label: '丸石 x4 -> かまど x1',
+    consumes: { [BlockType.COBBLESTONE]: 4 },
+    produces: { [BlockType.FURNACE]: 1 },
+  },
+];
+
+// 精錬レシピ（かまどで使用）
+export const SMELT_RECIPES = [
+  {
+    id: 'smelt_iron_ore',
+    label: '鉄鉱石 -> 鉄インゴット',
+    inputType: BlockType.IRON_ORE,
+    inputCount: 1,
+    outputType: BlockType.IRON_INGOT,
+    outputCount: 1,
+    fuelType: BlockType.WOOD,
+    fuelCount: 1,
+  },
+  {
+    id: 'smelt_beef',
+    label: '生肉 -> 焼き肉',
+    inputType: BlockType.BEEF,
+    inputCount: 1,
+    outputType: BlockType.COOKED_BEEF,
+    outputCount: 1,
+    fuelType: BlockType.WOOD,
+    fuelCount: 1,
   },
 ];
 

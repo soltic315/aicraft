@@ -1,5 +1,6 @@
 // モブシステム: エンティティ管理・AI・レンダリング
 import * as THREE from 'three';
+import { BlockType } from './blocks.js';
 import {
   MOB_MAX_COUNT,
   MOB_SPAWN_INTERVAL,
@@ -14,6 +15,13 @@ import {
   ZOMBIE_ATTACK_DAMAGE,
   ZOMBIE_ATTACK_INTERVAL,
   ZOMBIE_BURN_DAMAGE_PER_SEC,
+  ANIMAL_MAX_COUNT,
+  ANIMAL_SPAWN_INTERVAL,
+  COW_HP,
+  COW_SPEED,
+  COW_FLEE_SPEED,
+  COW_FLEE_DURATION,
+  COW_WANDER_INTERVAL,
 } from './config.js';
 
 // ---- スラブ法によるレイ-AABB 交差判定 ----
@@ -272,15 +280,229 @@ class Zombie {
   }
 }
 
+// ---- 牛メッシュ生成 ----
+
+function createCowMesh() {
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
+  const headMat = new THREE.MeshLambertMaterial({ color: 0x7A4E2C });
+  const legMat  = new THREE.MeshLambertMaterial({ color: 0x6A3E1C });
+
+  const group = new THREE.Group();
+
+  // 胴体（幅広・低め）
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.55, 0.5), bodyMat);
+  body.position.set(0, 0.75, 0);
+  group.add(body);
+
+  // 頭（前寄り）
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.38, 0.38), headMat);
+  head.position.set(0, 0.9, 0.48);
+  group.add(head);
+
+  // 4本の脚（前左・前右・後左・後右）
+  const legGeo = new THREE.BoxGeometry(0.18, 0.45, 0.18);
+  for (const [x, z] of [[-0.3, 0.18], [0.3, 0.18], [-0.3, -0.18], [0.3, -0.18]]) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(x, 0.225, z);
+    group.add(leg);
+  }
+
+  return { group, mats: { body: bodyMat, head: headMat, leg: legMat } };
+}
+
+// ---- Cow クラス ----
+
+class Cow {
+  constructor(scene, position) {
+    this.name = '牛';
+    this.isAnimal = true;
+    this.scene = scene;
+    this.position = position.clone();
+    this.health = COW_HP;
+    this.maxHealth = COW_HP;
+    this.isAlive = true;
+
+    this._walkTime = 0;
+    this._wanderDirX = 0;
+    this._wanderDirZ = 0;
+    this._wanderTimer = Math.random() * COW_WANDER_INTERVAL;
+
+    this._fleeing = false;
+    this._fleeTimer = 0;
+    this._fleeDirX = 0;
+    this._fleeDirZ = 0;
+
+    this._knockbackVel = new THREE.Vector3();
+    this._flashTimer = 0;
+
+    const { group, mats } = createCowMesh();
+    this.mesh = group;
+    this._mats = mats;
+    this._origColors = {
+      body: mats.body.color.clone(),
+      head: mats.head.color.clone(),
+      leg:  mats.leg.color.clone(),
+    };
+
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
+  }
+
+  takeDamage(amount) {
+    if (!this.isAlive) return 0;
+    const prev = this.health;
+    this.health = Math.max(0, this.health - amount);
+    if (this.health <= 0) this._die();
+    return prev - this.health;
+  }
+
+  flashHit() {
+    if (!this.isAlive) return;
+    this._flashTimer = HIT_FLASH_DURATION;
+    this._mats.body.color.copy(HIT_FLASH_COLOR);
+    this._mats.head.color.copy(HIT_FLASH_COLOR);
+    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+  }
+
+  applyKnockback(fromX, fromZ, force) {
+    if (!this.isAlive) return;
+    const dx = this.position.x - fromX;
+    const dz = this.position.z - fromZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) {
+      this._knockbackVel.set(force, 0, 0);
+      this._fleeDirX = 1; this._fleeDirZ = 0;
+    } else {
+      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
+      this._fleeDirX = dx / len;
+      this._fleeDirZ = dz / len;
+    }
+    // 逃走開始
+    this._fleeing = true;
+    this._fleeTimer = COW_FLEE_DURATION;
+  }
+
+  /** 死亡時にドロップするアイテム一覧 */
+  drops() {
+    const count = 1 + (Math.random() < 0.4 ? 1 : 0);
+    return [{ type: BlockType.BEEF, count }];
+  }
+
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    this._mats.body.dispose();
+    this._mats.head.dispose();
+    this._mats.leg.dispose();
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) obj.geometry.dispose();
+    });
+  }
+
+  _restoreColors() {
+    this._mats.body.color.copy(this._origColors.body);
+    this._mats.head.color.copy(this._origColors.head);
+    this._mats.leg.color.copy(this._origColors.leg);
+  }
+
+  update(dt, playerPos, world, isDay) {
+    if (!this.isAlive) return null;
+
+    // ヒットフラッシュ更新
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+
+    let moveX = 0;
+    let moveZ = 0;
+
+    if (this._fleeing) {
+      // 逃走中: プレイヤーから離れる方向へ走る
+      this._fleeTimer -= dt;
+      if (this._fleeTimer <= 0) {
+        this._fleeing = false;
+      } else {
+        moveX = this._fleeDirX * COW_FLEE_SPEED * dt;
+        moveZ = this._fleeDirZ * COW_FLEE_SPEED * dt;
+      }
+    } else {
+      // 徘徊: 一定間隔で方向転換
+      this._wanderTimer -= dt;
+      if (this._wanderTimer <= 0) {
+        this._wanderTimer = COW_WANDER_INTERVAL * (0.5 + Math.random());
+        const angle = Math.random() * Math.PI * 2;
+        // 30%の確率で立ち止まる
+        const moving = Math.random() > 0.3;
+        this._wanderDirX = moving ? Math.cos(angle) : 0;
+        this._wanderDirZ = moving ? Math.sin(angle) : 0;
+      }
+      moveX = this._wanderDirX * COW_SPEED * dt;
+      moveZ = this._wanderDirZ * COW_SPEED * dt;
+    }
+
+    // ブロック衝突チェック付き移動
+    const bodyY = Math.floor(this.position.y);
+    if (moveX !== 0) {
+      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
+      if (bx === 0 && bx2 === 0) this.position.x += moveX;
+      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    }
+    if (moveZ !== 0) {
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
+      if (bz === 0 && bz2 === 0) this.position.z += moveZ;
+      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
+    }
+
+    // ノックバック適用
+    if (this._knockbackVel.lengthSq() > 0.01) {
+      const kbX = this._knockbackVel.x * dt;
+      const kbZ = this._knockbackVel.z * dt;
+      const bkY = Math.floor(this.position.y);
+      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
+      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
+      if (kbBX === 0 && kbBX2 === 0) this.position.x += kbX;
+      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
+      if (kbBZ === 0 && kbBZ2 === 0) this.position.z += kbZ;
+      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+    }
+
+    // 地形高度に追従
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + 1;
+    this.mesh.position.copy(this.position);
+
+    // 移動時に進行方向を向く・脚アニメーション
+    if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
+      this.mesh.rotation.y = Math.atan2(moveX, moveZ);
+      this._walkTime += dt * 5;
+      const swing = Math.sin(this._walkTime) * 0.35;
+      // 前左・後右 / 前右・後左 で対角に動かす
+      this.mesh.children[2].rotation.x =  swing;
+      this.mesh.children[3].rotation.x = -swing;
+      this.mesh.children[4].rotation.x = -swing;
+      this.mesh.children[5].rotation.x =  swing;
+    }
+
+    return null; // 友好モブ: 攻撃しない
+  }
+}
+
 // ---- MobManager クラス ----
 
 export class MobManager {
   constructor(scene, world) {
     this.scene = scene;
     this.world = world;
-    /** @type {Zombie[]} */
+    /** @type {Array<Zombie|Cow>} */
     this.mobs = [];
     this.spawnTimer = MOB_SPAWN_INTERVAL;
+    this.animalSpawnTimer = ANIMAL_SPAWN_INTERVAL * 0.3; // 最初は早めにスポーン
   }
 
   get count() {
@@ -320,7 +542,7 @@ export class MobManager {
    * @param {(damage: number, mobX: number, mobZ: number) => void} onMobAttack
    */
   update(dt, playerPos, isDay, onMobAttack) {
-    // 夜間スポーン
+    // 夜間スポーン（ゾンビ）
     if (!isDay) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
@@ -329,6 +551,15 @@ export class MobManager {
       }
     } else {
       this.spawnTimer = Math.min(this.spawnTimer, MOB_SPAWN_INTERVAL * 0.3);
+    }
+
+    // 昼間スポーン（動物）
+    if (isDay) {
+      this.animalSpawnTimer -= dt;
+      if (this.animalSpawnTimer <= 0) {
+        this.animalSpawnTimer = ANIMAL_SPAWN_INTERVAL;
+        this._trySpawnAnimal(playerPos);
+      }
     }
 
     // 各モブ更新
@@ -354,6 +585,25 @@ export class MobManager {
         onMobAttack(result.damage, result.mobX, result.mobZ);
       }
     }
+  }
+
+  _trySpawnAnimal(playerPos) {
+    const animalCount = this.mobs.filter((m) => m.isAnimal).length;
+    if (animalCount >= ANIMAL_MAX_COUNT) return;
+
+    const angle = Math.random() * Math.PI * 2;
+    const dist = MOB_SPAWN_MIN_DIST + Math.random() * (MOB_SPAWN_MAX_DIST - MOB_SPAWN_MIN_DIST);
+    const x = playerPos.x + Math.cos(angle) * dist;
+    const z = playerPos.z + Math.sin(angle) * dist;
+    const groundY = this.world.getHeight(Math.floor(x), Math.floor(z));
+
+    if (groundY <= MOB_SEA_LEVEL_MIN) return;
+
+    // 草地ブロックの上にのみスポーン
+    const surfaceBlock = this.world.getBlock(Math.floor(x), groundY, Math.floor(z));
+    if (surfaceBlock !== BlockType.GRASS) return;
+
+    this.mobs.push(new Cow(this.scene, new THREE.Vector3(x, groundY + 1, z)));
   }
 
   _trySpawn(playerPos) {

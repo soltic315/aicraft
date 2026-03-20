@@ -3,6 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { useDraggable } from '../hooks/useDraggable.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
+import { useDurabilityStore } from '../../stores/durabilityStore.js';
 import { CRAFT_RECIPES } from '../../config.js';
 
 export function CraftPanel() {
@@ -47,8 +48,13 @@ export function CraftPanel() {
               onClick={() => {
                 const inv = useInventoryStore.getState();
                 if (inv.craftRecipe(recipe)) {
+                  if (recipe.repairTool) {
+                    useDurabilityStore.getState().repair(recipe.repairTool, recipe.repairAmount);
+                    useUIStore.getState().showFeedback(`修理成功: ${recipe.label}`, 900);
+                  } else {
+                    useUIStore.getState().showFeedback(`クラフト成功: ${recipe.label}`, 900);
+                  }
                   window.__aicraft?.sound?.playPlace();
-                  useUIStore.getState().showFeedback(`クラフト成功: ${recipe.label}`, 900);
                 } else {
                   window.__aicraft?.sound?.playError();
                   useUIStore.getState().showFeedback('クラフト失敗: 素材が不足しています');

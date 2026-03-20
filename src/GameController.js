@@ -4,6 +4,7 @@ import {
   BlockType,
   BLOCK_NAMES,
   BLOCK_BREAK_DURATIONS,
+  BLOCK_DROP_OVERRIDES,
   generateTextures,
   generateBreakOverlayTextures,
 } from './blocks.js';
@@ -45,6 +46,7 @@ import {
   HUNGER_STARVE_DAMAGE_INTERVAL,
   HUNGER_STARVE_DAMAGE,
   APPLE_HUNGER_RESTORE,
+  FOOD_STATS,
   CHEST_AUTO_CLOSE_DISTANCE,
   PLAYER_ATTACK_REACH,
   PLAYER_ATTACK_DAMAGE_BASE,
@@ -63,6 +65,7 @@ import { useBreakStore } from './stores/breakStore.js';
 import { useUIStore } from './stores/uiStore.js';
 import { useToolStore } from './stores/toolStore.js';
 import { useHungerStore } from './stores/hungerStore.js';
+import { useDurabilityStore } from './stores/durabilityStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
 import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './DroppedItemManager.js';
@@ -189,6 +192,11 @@ export class GameController {
     // 空腹値を復元
     if (Number.isFinite(this.savedGame?.player?.hunger)) {
       useHungerStore.getState().restoreFromSave(this.savedGame.player.hunger);
+    }
+
+    // ツール耐久値を復元
+    if (this.savedGame?.player?.toolDurability) {
+      useDurabilityStore.getState().restoreFromSave(this.savedGame.player.toolDurability);
     }
 
     this.lastPlaceTime = 0;
@@ -489,6 +497,7 @@ export class GameController {
       const chestState = useChestStore.getState().exportForSave();
       const settings = useSettingsStore.getState();
       const { hunger } = useHungerStore.getState();
+      const { durability } = useDurabilityStore.getState();
 
       const data = {
         schemaVersion: SAVE_SCHEMA_VERSION,
@@ -506,6 +515,7 @@ export class GameController {
           selectedSlot,
           selectedTool,
           hunger,
+          toolDurability: { ...durability },
         },
         settings: {
           sensitivity: settings.sensitivity,
@@ -548,6 +558,7 @@ export class GameController {
     useInventoryStore.getState().reset();
     useToolStore.getState().clearTool();
     useHungerStore.getState().reset();
+    useDurabilityStore.getState().reset();
     useBreakStore.getState().reset();
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
@@ -689,15 +700,17 @@ export class GameController {
       return;
     }
 
+    const stats = FOOD_STATS[selectedType] ?? { restore: APPLE_HUNGER_RESTORE, name: '食料' };
+
     if (this.getInventoryCount(selectedType) <= 0) {
-      useUIStore.getState().showFeedback('リンゴがありません', 800);
+      useUIStore.getState().showFeedback(`${stats.name}がありません`, 800);
       this.sound.playError();
       return;
     }
 
     this._consumeFromInventory(selectedType);
-    hungerStore.feedHunger(APPLE_HUNGER_RESTORE);
-    useUIStore.getState().showFeedback(`リンゴを食べた！ 空腹 +${APPLE_HUNGER_RESTORE}`, 1000);
+    hungerStore.feedHunger(stats.restore);
+    useUIStore.getState().showFeedback(`${stats.name}を食べた！ 空腹 +${stats.restore}`, 1000);
     this.sound.playPlace();
   }
 
@@ -740,6 +753,12 @@ export class GameController {
     // 右クリックでチェストを開く（手が空でも可）
     if (hit && hit.blockType === BlockType.CHEST) {
       this._openChestAt(hit.blockPos);
+      return;
+    }
+
+    // 右クリックでかまどを開く（手が空でも可）
+    if (hit && hit.blockType === BlockType.FURNACE) {
+      useUIStore.getState().openFurnacePanel();
       return;
     }
 
@@ -825,14 +844,28 @@ export class GameController {
         }
       }
 
-      // ブロックを床にドロップ
-      this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, hit.blockType, 1);
+      // ブロックを床にドロップ（石→丸石など上書き対応）
+      const dropType = BLOCK_DROP_OVERRIDES[hit.blockType] ?? hit.blockType;
+      this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, dropType, 1);
       // 葉ブロック破壊時に30%の確率でリンゴをドロップ
       if (hit.blockType === BlockType.LEAVES && Math.random() < 0.3) {
         this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.APPLE, 1);
       }
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.sound.playBreak();
+
+      // ツール耐久値を消耗
+      if (hasTool && selectedTool) {
+        const durStore = useDurabilityStore.getState();
+        const broke = durStore.damage(selectedTool);
+        if (broke) {
+          useInventoryStore.getState().consumeItem(toolItemType, 1);
+          durStore.resetTool(selectedTool);
+          useUIStore.getState().showFeedback(`${TOOL_NAMES[selectedTool]}が壊れました！`, 1500);
+          this.sound.playError();
+        }
+      }
+
       this._resetBreaking();
     }
   }
@@ -985,7 +1018,14 @@ export class GameController {
     this.sound.playBreak(); // 打撃音として流用
 
     if (!mob.isAlive) {
-      useUIStore.getState().showFeedback('ゾンビを倒した！', 1200);
+      // ドロップアイテムをスポーン
+      if (typeof mob.drops === 'function') {
+        for (const { type, count } of mob.drops()) {
+          this.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
+        }
+      }
+      const name = mob.isAnimal ? (mob.name ?? '動物') : 'ゾンビ';
+      useUIStore.getState().showFeedback(`${name}を倒した！`, 1200);
     }
   }
 

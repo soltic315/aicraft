@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { HOTBAR_SIZE, TOTAL_SLOTS } from '../config.js';
+import { HOTBAR_SIZE, TOTAL_SLOTS, getStackLimit } from '../config.js';
 
 // スロットの初期状態（空）を生成
 const emptySlots = () => Array.from({ length: TOTAL_SLOTS }, () => ({ type: null, count: 0 }));
@@ -51,21 +51,25 @@ export const useInventoryStore = create((set, get) => ({
   addItem(type, amount = 1) {
     set((state) => {
       const newSlots = state.slots.map((s) => ({ ...s }));
+      const limit = getStackLimit(type);
       let remaining = amount;
 
-      // 既存の同種スロットにスタック
+      // 既存の同種スロットにスタック（上限まで）
       for (let i = 0; i < newSlots.length && remaining > 0; i++) {
-        if (newSlots[i].type === type) {
-          newSlots[i].count += remaining;
-          remaining = 0;
+        if (newSlots[i].type === type && newSlots[i].count < limit) {
+          const space = limit - newSlots[i].count;
+          const add = Math.min(space, remaining);
+          newSlots[i].count += add;
+          remaining -= add;
         }
       }
 
       // 空きスロットに格納（ホットバー優先）
       for (let i = 0; i < newSlots.length && remaining > 0; i++) {
         if (newSlots[i].type === null) {
-          newSlots[i] = { type, count: remaining };
-          remaining = 0;
+          const add = Math.min(limit, remaining);
+          newSlots[i] = { type, count: add };
+          remaining -= add;
         }
       }
 
@@ -123,20 +127,24 @@ export const useInventoryStore = create((set, get) => ({
       }
     }
 
-    // アイテムを生産
+    // アイテムを生産（スタック上限適用）
     for (const [type, amount] of Object.entries(recipe.produces)) {
       const t = Number(type);
+      const limit = getStackLimit(t);
       let remaining = amount;
       for (let i = 0; i < newSlots.length && remaining > 0; i++) {
-        if (newSlots[i].type === t) {
-          newSlots[i].count += remaining;
-          remaining = 0;
+        if (newSlots[i].type === t && newSlots[i].count < limit) {
+          const space = limit - newSlots[i].count;
+          const add = Math.min(space, remaining);
+          newSlots[i].count += add;
+          remaining -= add;
         }
       }
       for (let i = 0; i < newSlots.length && remaining > 0; i++) {
         if (newSlots[i].type === null) {
-          newSlots[i] = { type: t, count: remaining };
-          remaining = 0;
+          const add = Math.min(limit, remaining);
+          newSlots[i] = { type: t, count: add };
+          remaining -= add;
         }
       }
     }
@@ -151,7 +159,9 @@ export const useInventoryStore = create((set, get) => ({
       savedSlots.forEach((s, i) => {
         if (i < newSlots.length && s && typeof s === 'object') {
           const type = s.type == null ? null : Number(s.type);
-          const count = Math.max(0, Math.floor(Number(s.count) || 0));
+          const rawCount = Math.max(0, Math.floor(Number(s.count) || 0));
+          const limit = type != null ? getStackLimit(type) : 0;
+          const count = type != null ? Math.min(rawCount, limit) : rawCount;
           if (type === null || Number.isFinite(type)) {
             newSlots[i] = { type: count > 0 ? type : null, count: count > 0 ? count : 0 };
           }

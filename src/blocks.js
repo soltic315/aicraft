@@ -17,6 +17,23 @@ export const BlockType = {
   PICKAXE: 13,
   AXE: 14,
   SHOVEL: 15,
+  // 食料
+  BEEF: 25,
+  COOKED_BEEF: 27,
+  // 設備ブロック
+  FURNACE: 26,
+  // 石・鉄ティア素材
+  COBBLESTONE: 16,
+  IRON_ORE: 17,
+  IRON_INGOT: 18,
+  // 石ツール
+  STONE_PICKAXE: 19,
+  STONE_AXE: 20,
+  STONE_SHOVEL: 21,
+  // 鉄ツール
+  IRON_PICKAXE: 22,
+  IRON_AXE: 23,
+  IRON_SHOVEL: 24,
 };
 
 export const BLOCK_NAMES = {
@@ -32,9 +49,21 @@ export const BLOCK_NAMES = {
   [BlockType.CRAFTING_TABLE]: '作業台',
   [BlockType.CHEST]: 'チェスト',
   [BlockType.APPLE]: 'リンゴ',
-  [BlockType.PICKAXE]: 'ツルハシ',
-  [BlockType.AXE]: '斧',
-  [BlockType.SHOVEL]: 'シャベル',
+  [BlockType.BEEF]: '生肉',
+  [BlockType.PICKAXE]: 'ツルハシ（木）',
+  [BlockType.AXE]: '斧（木）',
+  [BlockType.SHOVEL]: 'シャベル（木）',
+  [BlockType.FURNACE]: 'かまど',
+  [BlockType.COOKED_BEEF]: '焼き肉',
+  [BlockType.COBBLESTONE]: '丸石',
+  [BlockType.IRON_ORE]: '鉄鉱石',
+  [BlockType.IRON_INGOT]: '鉄インゴット',
+  [BlockType.STONE_PICKAXE]: 'ツルハシ（石）',
+  [BlockType.STONE_AXE]: '斧（石）',
+  [BlockType.STONE_SHOVEL]: 'シャベル（石）',
+  [BlockType.IRON_PICKAXE]: 'ツルハシ（鉄）',
+  [BlockType.IRON_AXE]: '斧（鉄）',
+  [BlockType.IRON_SHOVEL]: 'シャベル（鉄）',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -48,6 +77,15 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.GLASS]: 0.35,
   [BlockType.CRAFTING_TABLE]: 1.0,
   [BlockType.CHEST]: 1.1,
+  [BlockType.COBBLESTONE]: 1.8,
+  [BlockType.IRON_ORE]: 2.0,
+  [BlockType.FURNACE]: 1.5,
+};
+
+// ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
+export const BLOCK_DROP_OVERRIDES = {
+  [BlockType.STONE]: BlockType.COBBLESTONE,
+  [BlockType.IRON_ORE]: BlockType.IRON_INGOT,
 };
 
 // Color palettes for each block type (top, side, bottom)
@@ -128,6 +166,27 @@ const BLOCK_COLORS = {
     bottom: '#7a4a24',
     topDetail: '#d49c5d',
     sideDetail: '#5f3518',
+  },
+  [BlockType.COBBLESTONE]: {
+    top: '#686868',
+    side: '#686868',
+    bottom: '#686868',
+    topDetail: '#505050',
+    sideDetail: '#505050',
+  },
+  [BlockType.IRON_ORE]: {
+    top: '#808080',
+    side: '#808080',
+    bottom: '#808080',
+    topDetail: '#c48040',
+    sideDetail: '#a06030',
+  },
+  [BlockType.FURNACE]: {
+    top: '#686868',
+    side: '#505050',
+    bottom: '#686868',
+    topDetail: '#505050',
+    sideDetail: '#382820',
   },
 };
 
@@ -258,6 +317,46 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
     ctx.strokeStyle = '#4f2b13';
     ctx.lineWidth = Math.max(1, pixelSize * 0.6);
     ctx.strokeRect(0, 0, size, size);
+  } else if (pattern === 'cobblestone') {
+    // 丸石: 石よりやや濃いパッチとクラック
+    for (let i = 0; i < 10; i++) {
+      const sx = Math.floor(rand() * 13) * pixelSize;
+      const sy = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#4e4e4e' : '#7a7a7a';
+      ctx.fillRect(sx, sy, pixelSize * (2 + Math.floor(rand() * 2)), pixelSize * (2 + Math.floor(rand() * 2)));
+    }
+    ctx.fillStyle = '#3e3e3e';
+    for (let i = 0; i < 4; i++) {
+      const sx = Math.floor(rand() * 12) * pixelSize;
+      const sy = Math.floor(rand() * 12) * pixelSize;
+      ctx.fillRect(sx, sy, pixelSize, pixelSize * (2 + Math.floor(rand() * 2)));
+    }
+  } else if (pattern === 'iron_ore') {
+    // 鉄鉱石: 石の地に橙色の鉱脈スポット
+    for (let i = 0; i < 8; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#c48040' : '#9e6028';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
+    }
+    for (let i = 0; i < 4; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = '#706060';
+      ctx.fillRect(px, py, pixelSize * 2, pixelSize);
+    }
+  } else if (pattern === 'furnace_side') {
+    // かまど側面: 暗い石に炎の口
+    ctx.fillStyle = '#2a1a0a';
+    ctx.fillRect(pixelSize * 4, pixelSize * 6, pixelSize * 8, pixelSize * 6);
+    // 炎の色（橙→黄）
+    ctx.fillStyle = '#e06010';
+    ctx.fillRect(pixelSize * 5, pixelSize * 7, pixelSize * 6, pixelSize * 4);
+    ctx.fillStyle = '#f8b010';
+    ctx.fillRect(pixelSize * 6, pixelSize * 8, pixelSize * 4, pixelSize * 2);
+    // 上部の煙突穴
+    ctx.fillStyle = '#181818';
+    ctx.fillRect(pixelSize * 7, pixelSize * 1, pixelSize * 2, pixelSize * 3);
   } else if (pattern === 'chest_side') {
     for (let y = 1; y < 16; y += 3) {
       ctx.fillStyle = y % 2 === 0 ? '#7f4f26' : '#9a6532';
@@ -365,6 +464,9 @@ export function generateTextures() {
       side: 'chest_side',
       bottom: 'plank',
     },
+    [BlockType.COBBLESTONE]: { top: 'cobblestone', side: 'cobblestone', bottom: 'cobblestone' },
+    [BlockType.IRON_ORE]: { top: 'iron_ore', side: 'iron_ore', bottom: 'iron_ore' },
+    [BlockType.FURNACE]: { top: 'cobblestone', side: 'furnace_side', bottom: 'cobblestone' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -380,6 +482,62 @@ export function generateTextures() {
   }
 
   return textures;
+}
+
+// 生肉アイコン
+function generateBeefIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 肉本体（赤）
+  ctx.fillStyle = '#b83020';
+  ctx.beginPath();
+  ctx.roundRect(6, 11, 20, 13, 3);
+  ctx.fill();
+  // 脂の白いライン
+  ctx.fillStyle = '#e8c090';
+  ctx.fillRect(7, 15, 18, 3);
+  // 上部のハイライト
+  ctx.fillStyle = '#d04030';
+  ctx.fillRect(8, 9, 14, 4);
+  // 骨（白い棒）
+  ctx.fillStyle = '#f2eedc';
+  ctx.fillRect(6, 12, 3, 9);
+  ctx.beginPath();
+  ctx.arc(7.5, 12, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
+}
+
+// 焼き肉アイコン
+function generateCookedBeefIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 肉本体（焦げ茶）
+  ctx.fillStyle = '#6b2810';
+  ctx.beginPath();
+  ctx.roundRect(6, 11, 20, 13, 3);
+  ctx.fill();
+  // 焼き色のライン
+  ctx.fillStyle = '#4a1808';
+  ctx.fillRect(7, 15, 18, 3);
+  // 表面ハイライト
+  ctx.fillStyle = '#8b3818';
+  ctx.fillRect(8, 9, 14, 4);
+  // 骨
+  ctx.fillStyle = '#f2eedc';
+  ctx.fillRect(6, 12, 3, 9);
+  ctx.beginPath();
+  ctx.arc(7.5, 12, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+  ctx.fill();
+  return c;
 }
 
 // リンゴ専用アイコンを描画
@@ -423,74 +581,92 @@ function generateAppleIcon() {
   return canvas;
 }
 
-// ツルハシアイコン
-function generatePickaxeIcon() {
+// ツルハシアイコン（headColor で素材色変更可）
+function generatePickaxeIcon(headColor = '#B0BCC8') {
   const c = document.createElement('canvas');
   c.width = c.height = 32;
   const ctx = c.getContext('2d');
-  // ハンドル
   ctx.strokeStyle = '#7B4F2E';
   ctx.lineWidth = 3.5;
   ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(7, 25); ctx.lineTo(20, 12); ctx.stroke();
-  // ヘッド横棒
-  ctx.fillStyle = '#B0BCC8';
+  ctx.fillStyle = headColor;
   ctx.fillRect(16, 8, 12, 4);
-  // 左の爪（下向き）
   ctx.fillRect(16, 12, 4, 5);
-  // 右の爪（上向き）
   ctx.fillRect(24, 3, 4, 5);
   return c;
 }
 
 // 斧アイコン
-function generateAxeIcon() {
+function generateAxeIcon(headColor = '#B0BCC8') {
   const c = document.createElement('canvas');
   c.width = c.height = 32;
   const ctx = c.getContext('2d');
-  // ハンドル
   ctx.strokeStyle = '#7B4F2E';
   ctx.lineWidth = 3.5;
   ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(22, 25); ctx.lineTo(12, 10); ctx.stroke();
-  // 刃（台形）
-  ctx.fillStyle = '#B0BCC8';
+  ctx.fillStyle = headColor;
   ctx.beginPath();
   ctx.moveTo(8, 5); ctx.lineTo(20, 8); ctx.lineTo(17, 20); ctx.lineTo(8, 16);
   ctx.closePath(); ctx.fill();
-  // 刃エッジ（明るい）
-  ctx.strokeStyle = '#D0DCE8';
+  ctx.strokeStyle = adjustBrightness(headColor, 0.15);
   ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(8, 5); ctx.lineTo(8, 16); ctx.stroke();
   return c;
 }
 
 // シャベルアイコン
-function generateShovelIcon() {
+function generateShovelIcon(headColor = '#B0BCC8') {
   const c = document.createElement('canvas');
   c.width = c.height = 32;
   const ctx = c.getContext('2d');
-  // ハンドル
   ctx.strokeStyle = '#7B4F2E';
   ctx.lineWidth = 3.5;
   ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(16, 4); ctx.lineTo(16, 20); ctx.stroke();
-  // ブレード（長方形）
-  ctx.fillStyle = '#B0BCC8';
+  ctx.fillStyle = headColor;
   ctx.fillRect(10, 18, 12, 8);
-  // ブレード下端（半円）
   ctx.beginPath();
   ctx.arc(16, 26, 6, 0, Math.PI);
   ctx.fill();
   return c;
 }
 
+// 鉄インゴットアイコン
+function generateIronIngotIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // インゴット本体（台形）
+  ctx.fillStyle = '#b8c0c8';
+  ctx.beginPath();
+  ctx.moveTo(6, 22); ctx.lineTo(10, 10); ctx.lineTo(22, 10); ctx.lineTo(26, 22);
+  ctx.closePath(); ctx.fill();
+  // 上面ハイライト
+  ctx.fillStyle = '#d4dce4';
+  ctx.fillRect(10, 10, 12, 4);
+  // 下影
+  ctx.fillStyle = '#8890a0';
+  ctx.fillRect(6, 20, 20, 2);
+  return c;
+}
+
 // Generate a small icon canvas for hotbar display
 export function generateBlockIcon(type) {
-  if (type === BlockType.APPLE)   return generateAppleIcon();
-  if (type === BlockType.PICKAXE) return generatePickaxeIcon();
-  if (type === BlockType.AXE)     return generateAxeIcon();
-  if (type === BlockType.SHOVEL)  return generateShovelIcon();
+  if (type === BlockType.APPLE)       return generateAppleIcon();
+  if (type === BlockType.BEEF)        return generateBeefIcon();
+  if (type === BlockType.COOKED_BEEF) return generateCookedBeefIcon();
+  if (type === BlockType.PICKAXE) return generatePickaxeIcon('#B0BCC8');
+  if (type === BlockType.AXE)     return generateAxeIcon('#B0BCC8');
+  if (type === BlockType.SHOVEL)  return generateShovelIcon('#B0BCC8');
+  if (type === BlockType.IRON_INGOT)    return generateIronIngotIcon();
+  if (type === BlockType.STONE_PICKAXE) return generatePickaxeIcon('#8a8a8a');
+  if (type === BlockType.STONE_AXE)     return generateAxeIcon('#8a8a8a');
+  if (type === BlockType.STONE_SHOVEL)  return generateShovelIcon('#8a8a8a');
+  if (type === BlockType.IRON_PICKAXE)  return generatePickaxeIcon('#d0d8e0');
+  if (type === BlockType.IRON_AXE)      return generateAxeIcon('#d0d8e0');
+  if (type === BlockType.IRON_SHOVEL)   return generateShovelIcon('#d0d8e0');
 
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;

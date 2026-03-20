@@ -17,6 +17,7 @@ export class World {
     this.seed = Number.isFinite(options.seed) ? options.seed : Math.floor(Math.random() * 100000);
     this.noise = new Noise(this.seed);
     this.treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
+    this.oreNoise = new Noise(this.seed * 7 + 37);
     this.treePlaced = new Set();
     this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
     this.pendingChunkLoads = [];
@@ -51,6 +52,7 @@ export class World {
     this.seed = Math.floor(Math.random() * 100000);
     this.noise = new Noise(this.seed);
     this.treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
+    this.oreNoise = new Noise(this.seed * 7 + 37);
     this._hasFrustum = false;
   }
 
@@ -193,7 +195,12 @@ export class World {
           if (y === 0) {
             blocks[lx][y][lz] = BlockType.STONE;
           } else if (y < height - 4) {
-            blocks[lx][y][lz] = BlockType.STONE;
+            // 鉄鉱石: Y < 20 の石層に約5%の確率で生成
+            if (y < 20 && this.oreNoise.noise2D(wx * 0.6 + 0.5, y * 0.9 + wz * 0.55) > 0.9) {
+              blocks[lx][y][lz] = BlockType.IRON_ORE;
+            } else {
+              blocks[lx][y][lz] = BlockType.STONE;
+            }
           } else if (y < height) {
             blocks[lx][y][lz] = BlockType.DIRT;
           } else if (y === height) {

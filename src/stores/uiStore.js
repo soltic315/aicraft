@@ -4,6 +4,7 @@ export const useUIStore = create((set, get) => ({
   settingsOpen: false,
   craftOpen: false,
   chestOpen: false,
+  furnaceOpen: false,
   inventoryOpen: false,
   resumeHintVisible: false,
   waterOverlay: false,
@@ -40,9 +41,17 @@ export const useUIStore = create((set, get) => ({
     set({ chestOpen: true });
   },
 
-  // インベントリ・クラフト・チェストをまとめて閉じる
+  openFurnacePanel() {
+    set({ furnaceOpen: true });
+  },
+
+  closeFurnacePanel() {
+    set({ furnaceOpen: false });
+  },
+
+  // インベントリ・クラフト・チェスト・かまどをまとめて閉じる
   closeInventoryPanels() {
-    set({ inventoryOpen: false, craftOpen: false, chestOpen: false });
+    set({ inventoryOpen: false, craftOpen: false, chestOpen: false, furnaceOpen: false });
   },
 
   setChestOpen(open) {

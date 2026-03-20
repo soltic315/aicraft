@@ -9,6 +9,7 @@ import { InfoOverlay } from './info/InfoOverlay.jsx';
 import { SettingsPanel } from './panels/SettingsPanel.jsx';
 import { CraftPanel } from './panels/CraftPanel.jsx';
 import { ChestPanel } from './panels/ChestPanel.jsx';
+import { FurnacePanel } from './panels/FurnacePanel.jsx';
 import { InventoryPanel } from './panels/InventoryPanel.jsx';
 import { BreakProgress } from './overlays/BreakProgress.jsx';
 import { ActionFeedback } from './overlays/ActionFeedback.jsx';
@@ -33,6 +34,7 @@ export function App() {
       <InventoryPanel />
       <CraftPanel />
       <ChestPanel />
+      <FurnacePanel />
       <Hotbar />
     </>
   );

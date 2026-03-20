@@ -4,8 +4,9 @@ import { generateBlockIcon, BLOCK_NAMES } from '../../blocks.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';
-import { HOTBAR_SIZE } from '../../config.js';
+import { HOTBAR_SIZE, getStackLimit } from '../../config.js';
 import { ITEM_TO_TOOL_TYPE, TOOL_NAMES } from '../../tools.js';
+import { useDurabilityStore, TOOL_DURABILITY_MAX } from '../../stores/durabilityStore.js';
 
 function getIconUrl(type) {
   if (type == null) return null;
@@ -72,6 +73,8 @@ export function Hotbar() {
     }
   };
 
+  const durability = useDurabilityStore((s) => s.durability);
+
   const selectedSlotData = slots[selectedSlot];
   const selectedType = selectedSlotData?.type ?? null;
   const selectedItemName = useMemo(() => {
@@ -92,6 +95,10 @@ export function Hotbar() {
         const count = slot?.count ?? 0;
         const iconUrl = useMemo(() => getIconUrl(type), [type]);
         const isDropTarget = panelOpen && dragOverIdx === i;
+        const toolType = type != null ? ITEM_TO_TOOL_TYPE[type] : null;
+        const durPct = toolType != null
+          ? durability[toolType] / (TOOL_DURABILITY_MAX[toolType] ?? 60)
+          : null;
 
         return (
           <div
@@ -114,7 +121,18 @@ export function Hotbar() {
                 style={{ imageRendering: 'pixelated', display: 'block' }}
               />
             )}
-            {type != null && <span class="slot-count">{count}</span>}
+            {type != null && getStackLimit(type) > 1 && <span class="slot-count">{count}</span>}
+            {durPct !== null && (
+              <div class="slot-durability-wrap">
+                <div
+                  class="slot-durability-bar"
+                  style={{
+                    width: `${Math.round(durPct * 100)}%`,
+                    background: durPct > 0.5 ? '#4c4' : durPct > 0.25 ? '#cc4' : '#c44',
+                  }}
+                />
+              </div>
+            )}
           </div>
         );
       })}
