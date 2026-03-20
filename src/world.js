@@ -4,8 +4,8 @@ import { BlockType } from './blocks.js';
 import { Noise } from './noise.js';
 
 const CHUNK_SIZE = 16;
-const WORLD_HEIGHT = 64;
-const SEA_LEVEL = 20;
+const WORLD_HEIGHT = 128;
+const SEA_LEVEL = 40;
 const DEFAULT_RENDER_DISTANCE = 5;
 const CHUNK_LOADS_PER_FRAME = 2;
 
@@ -156,12 +156,12 @@ export class World {
     const biome = this.getBiome(x, z);
 
     // バイオームごとに高さを調整
-    let heightScale = 18;
+    let heightScale = 22;
     let heightOffset = 0;
-    if (biome === 'mountain') { heightScale = 26; heightOffset = 4; }
-    else if (biome === 'desert') { heightScale = 10; heightOffset = -2; }
-    else if (biome === 'tundra') { heightScale = 14; }
-    else if (biome === 'forest') { heightScale = 16; }
+    if (biome === 'mountain') { heightScale = 36; heightOffset = 8; }
+    else if (biome === 'desert') { heightScale = 12; heightOffset = -4; }
+    else if (biome === 'tundra') { heightScale = 18; }
+    else if (biome === 'forest') { heightScale = 20; }
 
     return Math.floor(SEA_LEVEL + n * heightScale + heightOffset);
   }
@@ -227,19 +227,19 @@ export class World {
 
         for (let y = 0; y < WORLD_HEIGHT; y++) {
           if (y === 0) {
-            blocks[lx][y][lz] = BlockType.STONE;
+            blocks[lx][y][lz] = BlockType.BEDROCK;
           } else if (y < height - 4) {
             // 鉱石生成（Y位置・ノイズ閾値で分布を制御）
             const oreVal = this.oreNoise.noise2D(wx * 0.6 + 0.5, y * 0.9 + wz * 0.55);
             const oreVal2 = this.oreNoise.noise2D(wx * 0.7 + 33.1, y * 1.1 + wz * 0.65 + 17.3);
-            if (y < 12 && oreVal > 0.94 && oreVal2 > 0.88) {
-              // ダイヤモンド: Y<12 に極まれに生成（~1%）
+            if (y < 20 && oreVal > 0.94 && oreVal2 > 0.88) {
+              // ダイヤモンド: Y<20 に極まれに生成（~1%）
               blocks[lx][y][lz] = BlockType.DIAMOND_ORE;
-            } else if (y < 16 && oreVal > 0.92) {
-              // 金鉱石: Y<16 に稀に生成（~2%）
+            } else if (y < 30 && oreVal > 0.92) {
+              // 金鉱石: Y<30 に稀に生成（~2%）
               blocks[lx][y][lz] = BlockType.GOLD_ORE;
-            } else if (y < 32 && oreVal > 0.88) {
-              // 鉄鉱石: Y<32 に生成（~4%）
+            } else if (y < 55 && oreVal > 0.88) {
+              // 鉄鉱石: Y<55 に生成（~4%）
               blocks[lx][y][lz] = BlockType.IRON_ORE;
             } else if (oreVal2 > 0.82) {
               // 石炭鉱石: 全深度に生成（~9%）
@@ -256,13 +256,13 @@ export class World {
               blocks[lx][y][lz] = BlockType.SAND;
             } else if (biome === 'tundra') {
               blocks[lx][y][lz] = BlockType.SNOW;
-            } else if (biome === 'mountain' && height > SEA_LEVEL + 14) {
+            } else if (biome === 'mountain' && height > SEA_LEVEL + 22) {
               blocks[lx][y][lz] = BlockType.STONE; // 高山の頂上は石
             } else {
               blocks[lx][y][lz] = BlockType.GRASS;
             }
           } else if (y <= SEA_LEVEL) {
-            blocks[lx][y][lz] = BlockType.WATER;
+            blocks[lx][y][lz] = biome === 'tundra' ? BlockType.ICE : BlockType.WATER;
           } else {
             blocks[lx][y][lz] = BlockType.AIR;
           }
@@ -403,10 +403,10 @@ export class World {
     // 洞窟生成: 3D ノイズで地下をくり抜く
     // 2 つのノイズ値を組み合わせてワーム状の洞窟を作る（Minecraft 方式）
     const CAVE_SCALE_H = 0.045; // 水平スケール（小さいほど大きな洞窟）
-    const CAVE_SCALE_V = 0.07;  // 垂直スケール（大きいほど横長）
-    const CAVE_THRESHOLD = 0.18; // ノイズ絶対値がこれ以下の領域をくり抜く
-    const CAVE_MAX_Y = 40;       // この高度以下にのみ洞窟を生成
-    const CAVE_SURFACE_MARGIN = 4; // 地表からこの深さ以上のみ洞窟化
+    const CAVE_SCALE_V = 0.06;  // 垂直スケール（小さいほど縦長の洞窟）
+    const CAVE_THRESHOLD = 0.20; // ノイズ絶対値がこれ以下の領域をくり抜く（大きいほど洞窟多）
+    const CAVE_MAX_Y = 75;       // この高度以下にのみ洞窟を生成
+    const CAVE_SURFACE_MARGIN = 6; // 地表からこの深さ以上のみ洞窟化
 
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -436,8 +436,8 @@ export class World {
 
     // 地下湖・溶岩湖: 洞窟の床に液体を配置
     // AIR ブロックの真下が固体ブロックの場合、そのフロア付近に液体を張る
-    const WATER_LAKE_MAX_Y = 16;  // 地下水が溜まる最大高度
-    const LAVA_LAKE_MAX_Y  = 8;   // 溶岩が溜まる最大高度
+    const WATER_LAKE_MAX_Y = 35;  // 地下水が溜まる最大高度
+    const LAVA_LAKE_MAX_Y  = 15;  // 溶岩が溜まる最大高度
 
     for (let lx = 0; lx < CHUNK_SIZE; lx++) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
@@ -613,6 +613,22 @@ export class World {
       emitMaskFaces(waterMask, CHUNK_SIZE, CHUNK_SIZE, (lx, lz) => {
         addQuad(BlockType.WATER, 'top', cx * CHUNK_SIZE + lx, y - 0.1, cz * CHUNK_SIZE + lz, 1, 1);
       });
+    }
+
+    // Water side/bottom faces（AIRに隣接する場合のみ側面・底面を表示）
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = cx * CHUNK_SIZE + lx;
+        const wz = cz * CHUNK_SIZE + lz;
+        for (let y = 0; y < WORLD_HEIGHT; y++) {
+          if (chunk.blocks[lx][y][lz] !== BlockType.WATER) continue;
+          if (this.getBlock(wx, y, wz + 1) === BlockType.AIR) addQuad(BlockType.WATER, 'front', wx, y, wz, 1, 1);
+          if (this.getBlock(wx, y, wz - 1) === BlockType.AIR) addQuad(BlockType.WATER, 'back', wx, y, wz, 1, 1);
+          if (this.getBlock(wx + 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'right', wx, y, wz, 1, 1);
+          if (this.getBlock(wx - 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'left', wx, y, wz, 1, 1);
+          if (this.getBlock(wx, y - 1, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'bottom', wx, y, wz, 1, 1);
+        }
+      }
     }
 
     // Combine into single geometry with material groups

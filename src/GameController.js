@@ -129,6 +129,7 @@ export class GameController {
         if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; }
         if (type === BlockType.GLASS) { matOptions.transparent = true; matOptions.opacity = 0.42; }
         if (type === BlockType.LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
+        if (type === BlockType.ICE)   { matOptions.transparent = true; matOptions.opacity = 0.78; }
 
         this.blockMaterials[type][face] = new THREE.MeshLambertMaterial(matOptions);
       }
@@ -226,6 +227,10 @@ export class GameController {
     this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
     this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
     this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
+
+    // サボテン・溶岩ダメージタイマー
+    this.cactusContactTimer = 0;
+    this.lavaDamageTimer = 0.5;
 
     // Game loop state
     this.gameStarted = false;
@@ -417,6 +422,8 @@ export class GameController {
       this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
       this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
       this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
+      this.cactusContactTimer = 0;
+      this.lavaDamageTimer = 0.5;
       this.mobManager.removeAll();
       this.droppedItemManager.removeAll();
       this.player.spawn();
@@ -808,6 +815,12 @@ export class GameController {
   }
 
   _updateBreaking(hit, now) {
+    // 岩盤は破壊不可
+    if (hit.blockType === BlockType.BEDROCK) {
+      this._resetBreaking();
+      return;
+    }
+
     const selectedTool = useToolStore.getState().selectedTool;
     // ツールを持っていない場合は補正なし（素手扱い）
     const toolItemType = TOOL_TYPE_TO_ITEM[selectedTool];
@@ -946,6 +959,50 @@ export class GameController {
       }
     } else {
       this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
+    }
+
+    // --- サボテンダメージ（隣接ブロックにサボテンがあると0.5秒毎に -1 HP）---
+    const pfx = Math.floor(this.player.position.x);
+    const pfy = Math.floor(this.player.position.y);
+    const pfz = Math.floor(this.player.position.z);
+    const touchesCactus = [
+      this.world.getBlock(pfx + 1, pfy,     pfz),
+      this.world.getBlock(pfx - 1, pfy,     pfz),
+      this.world.getBlock(pfx,     pfy,     pfz + 1),
+      this.world.getBlock(pfx,     pfy,     pfz - 1),
+      this.world.getBlock(pfx + 1, pfy + 1, pfz),
+      this.world.getBlock(pfx - 1, pfy + 1, pfz),
+      this.world.getBlock(pfx,     pfy + 1, pfz + 1),
+      this.world.getBlock(pfx,     pfy + 1, pfz - 1),
+    ].some(b => b === BlockType.CACTUS);
+
+    if (touchesCactus) {
+      this.cactusContactTimer -= dt;
+      if (this.cactusContactTimer <= 0) {
+        this.cactusContactTimer = 0.5;
+        const dmg = this.player.applyDamage(1);
+        if (dmg > 0) {
+          useUIStore.getState().showFeedback('サボテンに刺さった！ -1 HP', 900);
+          this.sound.playError();
+        }
+      }
+    } else {
+      this.cactusContactTimer = 0;
+    }
+
+    // --- 溶岩ダメージ（溶岩中にいると0.5秒毎に -2 HP）---
+    if (this.player.isInLava) {
+      this.lavaDamageTimer -= dt;
+      if (this.lavaDamageTimer <= 0) {
+        this.lavaDamageTimer = 0.5;
+        const dmg = this.player.applyDamage(2);
+        if (dmg > 0) {
+          useUIStore.getState().showFeedback('溶岩で燃えている！ -2 HP', 900);
+          this.sound.playError();
+        }
+      }
+    } else {
+      this.lavaDamageTimer = 0.5;
     }
 
     // 死亡判定

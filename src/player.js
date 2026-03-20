@@ -40,6 +40,8 @@ export class Player {
     this.isInWater = false;
     this.keys = {};
     this.locked = false;
+    this._wLastPress = 0;
+    this._sprintByDoubleTap = false;
     this.mouseSensitivity = options.mouseSensitivity ?? DEFAULT_MOUSE_SENSITIVITY;
 
     this.maxHealth = options.maxHealth ?? DEFAULT_MAX_HEALTH;
@@ -56,9 +58,19 @@ export class Player {
   _initControls() {
     document.addEventListener('keydown', (e) => {
       this.keys[e.code] = true;
+      // W連打でスプリント開始
+      if (e.code === 'KeyW') {
+        const now = performance.now();
+        if (now - this._wLastPress < 300) this._sprintByDoubleTap = true;
+        this._wLastPress = now;
+      }
+      // 後退キーでスプリント解除
+      if (e.code === 'KeyS') this._sprintByDoubleTap = false;
     });
     document.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
+      // W離したらダブルタップスプリント解除
+      if (e.code === 'KeyW') this._sprintByDoubleTap = false;
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
@@ -86,12 +98,21 @@ export class Player {
   update(dt) {
     dt = Math.min(dt, 0.05); // Cap delta
 
-    // 水中判定（足元ブロック）
-    this.isInWater = this.world.getBlock(
+    // 水中・溶岩中判定（足元ブロック）
+    const feetBlock = this.world.getBlock(
       Math.floor(this.position.x),
       Math.floor(this.position.y + 0.5),
       Math.floor(this.position.z)
-    ) === BlockType.WATER;
+    );
+    this.isInWater = feetBlock === BlockType.WATER;
+    this.isInLava  = feetBlock === BlockType.LAVA;
+
+    // 氷上判定（前フレームの接地状態と足元1マス下ブロックで判定）
+    const isOnIce = this.onGround && this.world.getBlock(
+      Math.floor(this.position.x),
+      Math.floor(this.position.y - 0.01),
+      Math.floor(this.position.z)
+    ) === BlockType.ICE;
 
     // Movement direction
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
@@ -106,17 +127,26 @@ export class Player {
     if (moveDir.length() > 0) moveDir.normalize();
 
     // スプリント（CtrlまたはControl長押し）・スニーク（Shift長押し）
-    this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight']) && this.onGround && moveDir.length() > 0 && !this.isInWater;
+    this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight'] || this._sprintByDoubleTap) && this.onGround && moveDir.length() > 0 && !this.isInWater;
     this.isSneaking = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && !this.isSprinting;
 
     let speed = MOVE_SPEED;
     if (this.isSprinting) speed *= SPRINT_MULTIPLIER;
     else if (this.isSneaking) speed *= SNEAK_MULTIPLIER;
     if (this.isInWater) speed *= WATER_SPEED_MULTIPLIER;
+    else if (this.isInLava) speed *= WATER_SPEED_MULTIPLIER * 0.5; // 溶岩は水より遅い
 
-    // Horizontal velocity
-    this.velocity.x = moveDir.x * speed;
-    this.velocity.z = moveDir.z * speed;
+    // Horizontal velocity（氷上は慣性が大きく滑る）
+    const targetVelX = moveDir.x * speed;
+    const targetVelZ = moveDir.z * speed;
+    if (isOnIce) {
+      const iceAccel = 3.5; // 通常のsetより遅い変化
+      this.velocity.x += (targetVelX - this.velocity.x) * Math.min(1, iceAccel * dt);
+      this.velocity.z += (targetVelZ - this.velocity.z) * Math.min(1, iceAccel * dt);
+    } else {
+      this.velocity.x = targetVelX;
+      this.velocity.z = targetVelZ;
+    }
 
     // ノックバック加算・減衰（1秒でほぼ消える）
     if (this.knockbackVelocity.lengthSq() > 0.01) {
@@ -137,6 +167,13 @@ export class Player {
       this.velocity.y -= WATER_GRAVITY * dt;
       // 水中では速度を減衰させる
       this.velocity.y *= (1 - 2 * dt);
+    } else if (this.isInLava) {
+      // 溶岩中: 水中と同様だが浮力は弱め
+      if (this.keys['Space']) {
+        this.velocity.y = SWIM_FORCE * 0.55;
+      }
+      this.velocity.y -= WATER_GRAVITY * 1.4 * dt;
+      this.velocity.y *= (1 - 3 * dt);
     } else {
       // 通常ジャンプ
       if (this.keys['Space'] && this.onGround) {

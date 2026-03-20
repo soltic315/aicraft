@@ -34,7 +34,6 @@ function ChestItemSlot({ type, count, isDragOver, onDragStart, onDragOver, onDro
           style={{ imageRendering: 'pixelated', display: 'block' }} />
       )}
       {!iconUrl && <span class="inv-slot-icon" />}
-      <span class="inv-slot-name">{BLOCK_NAMES[type] ?? '?'}</span>
       <span class="inv-slot-count">{isTool ? (count > 0 ? '✓' : '✗') : count}</span>
     </div>
   );

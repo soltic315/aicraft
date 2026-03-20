@@ -30,6 +30,9 @@ export const BlockType = {
   TALL_GRASS: 37,
   FLOWER: 38,
   MUSHROOM: 39,
+  ICE: 40,
+  // 特殊ブロック
+  BEDROCK: 41,
   // 追加鉱石・素材
   COAL_ORE: 28,
   GOLD_ORE: 29,
@@ -73,6 +76,8 @@ export const BLOCK_NAMES = {
   [BlockType.LAVA]: '溶岩',
   [BlockType.SNOW]: '雪ブロック',
   [BlockType.CACTUS]: 'サボテン',
+  [BlockType.ICE]: '氷',
+  [BlockType.BEDROCK]: '岩盤',
   [BlockType.TALL_GRASS]: '草',
   [BlockType.FLOWER]: '花',
   [BlockType.MUSHROOM]: 'キノコ',
@@ -115,6 +120,7 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.TALL_GRASS]: 0.1,
   [BlockType.FLOWER]: 0.1,
   [BlockType.MUSHROOM]: 0.15,
+  [BlockType.ICE]: 0.5,
 };
 
 // ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
@@ -288,6 +294,20 @@ const BLOCK_COLORS = {
     bottom: '#2d7a20',
     topDetail: '#1e5a14',
     sideDetail: '#1e5a14',
+  },
+  [BlockType.ICE]: {
+    top: '#a0d8ef',
+    side: '#90c8df',
+    bottom: '#80b8cf',
+    topDetail: '#c8ecff',
+    sideDetail: '#b0d8f0',
+  },
+  [BlockType.BEDROCK]: {
+    top: '#1e1e1e',
+    side: '#1a1a1a',
+    bottom: '#161616',
+    topDetail: '#323232',
+    sideDetail: '#2a2a2a',
   },
 };
 
@@ -613,6 +633,8 @@ export function generateTextures() {
     [BlockType.COAL_ORE]: { top: 'coal_ore', side: 'coal_ore', bottom: 'coal_ore' },
     [BlockType.GOLD_ORE]: { top: 'gold_ore', side: 'gold_ore', bottom: 'gold_ore' },
     [BlockType.DIAMOND_ORE]: { top: 'diamond_ore', side: 'diamond_ore', bottom: 'diamond_ore' },
+    [BlockType.ICE]: { top: 'glass', side: 'glass', bottom: 'glass' },
+    [BlockType.BEDROCK]: { top: 'cobblestone', side: 'cobblestone', bottom: 'cobblestone' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {

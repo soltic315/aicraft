@@ -37,7 +37,6 @@ export function InvSlot({ slotData, index, isActive, isDragOver, onDragStart, on
           style={{ imageRendering: 'pixelated', display: 'block' }} />
       )}
       {!iconUrl && <span class="inv-slot-icon" />}
-      {type != null && <span class="inv-slot-name">{BLOCK_NAMES[type] ?? '?'}</span>}
       {type != null && (
         <span class="inv-slot-count">{isTool ? (count > 0 ? '✓' : '✗') : count}</span>
       )}
@@ -141,7 +140,6 @@ export function InventoryPanel() {
         <span>Tab / ESC: 閉じる</span>
         <span>1〜9: スロット選択</span>
         <span>ドラッグ: スロット入替</span>
-        <span>外にドラッグ: 床に捨てる</span>
       </div>
     </div>
   );
