@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.50.0';
+export const GAME_VERSION = '3.51.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -192,6 +192,48 @@ export const DEFAULT_SETTINGS = {
   uiScale: 1,
   highContrast: false,
   showDebugInfo: false,
+  fov: 75, // 視野角（度）
+};
+
+// 難易度設定
+export const DIFFICULTY = {
+  EASY:   'easy',
+  NORMAL: 'normal',
+  HARD:   'hard',
+};
+
+// 難易度ごとのパラメーター倍率
+export const DIFFICULTY_SETTINGS = {
+  [DIFFICULTY.EASY]: {
+    label: 'イージー',
+    description: '敵が弱く、空腹消費も少ない。初心者向け。',
+    mobDamageMult:   0.5,   // モブの攻撃力倍率
+    mobHpMult:       0.7,   // モブのHP倍率
+    mobSpeedMult:    0.8,   // モブの移動速度倍率
+    mobMaxCount:     5,     // 最大モブ数
+    hungerDrainMult: 0.6,   // 空腹消費倍率
+    playerRegenRate: 1.5,   // 自然回復倍率
+  },
+  [DIFFICULTY.NORMAL]: {
+    label: 'ノーマル',
+    description: 'バランスの取れた標準難易度。',
+    mobDamageMult:   1.0,
+    mobHpMult:       1.0,
+    mobSpeedMult:    1.0,
+    mobMaxCount:     8,
+    hungerDrainMult: 1.0,
+    playerRegenRate: 1.0,
+  },
+  [DIFFICULTY.HARD]: {
+    label: 'ハード',
+    description: '敵が強く、空腹消費も多い。上級者向け。',
+    mobDamageMult:   1.5,   // 攻撃力1.5倍
+    mobHpMult:       1.4,   // HP1.4倍
+    mobSpeedMult:    1.2,   // 速度1.2倍
+    mobMaxCount:     12,    // 最大12体
+    hungerDrainMult: 1.5,   // 空腹消費1.5倍
+    playerRegenRate: 0.6,   // 自然回復60%
+  },
 };
 
 // スタック上限
@@ -655,6 +697,7 @@ export function sanitizeSettings(raw) {
     seVolume: clamp(Number(raw.seVolume) || 0, 0, 1),
     renderDistance: clamp(Math.floor(Number(raw.renderDistance) || DEFAULT_SETTINGS.renderDistance), 2, 8),
     uiScale: clamp(Number(raw.uiScale) || DEFAULT_SETTINGS.uiScale, 0.7, 2),
+    fov: clamp(Math.floor(Number(raw.fov) || DEFAULT_SETTINGS.fov), 50, 120),
     highContrast,
     showDebugInfo,
   };

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find /mnt/c/Users/kille/Documents/git/aicraft -name \"package.json\" -exec head -30 {})"
+      "Bash(find /mnt/c/Users/kille/Documents/git/aicraft -name \"package.json\" -exec head -30 {})",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|BUG\\\\|HACK\\\\|XXX\" /mnt/c/Users/kille/Documents/git/aicraft/src --include=*.js --include=*.jsx)",
+      "Bash(ls -la /mnt/c/Users/kille/Documents/git/aicraft/src/*.js)",
+      "Bash(grep -E \"export|class \" /mnt/c/Users/kille/Documents/git/aicraft/src/*.js)"
     ]
   }
 }

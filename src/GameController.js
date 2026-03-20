@@ -15,6 +15,7 @@ import {
   SAVE_STORAGE_KEY,
   SAVE_SCHEMA_VERSION,
   AUTO_SAVE_INTERVAL_MS,
+  DIFFICULTY_SETTINGS,
   DAY_NIGHT_CYCLE_SECONDS,
   PLACE_COOLDOWN,
   FOOD_ITEMS,
@@ -422,6 +423,14 @@ export class GameController {
 
         this.gameStarted = true;
         this._onSlotChanged(); // 初期スロットのツールを装備
+
+        // 難易度設定をMobManagerに適用
+        const difficulty = useGameStore.getState().difficulty;
+        const diffSettings = DIFFICULTY_SETTINGS[difficulty];
+        if (diffSettings) {
+          this.mobManager.setDifficulty(diffSettings);
+        }
+
         useGameStore.getState().startGame();
         this._startAutoSave();
         this.player.lock();
@@ -516,6 +525,11 @@ export class GameController {
     this.world.setRenderDistance(settings.renderDistance);
     this.sound.setSEVolume(settings.seVolume);
     this.sound.setBGMVolume(settings.bgmVolume);
+
+    // FoV適用
+    const fov = settings.fov ?? 75;
+    this.camera.fov = fov;
+    this.camera.updateProjectionMatrix();
 
     // Accessibility / UI scaling
     document.documentElement.style.setProperty('--ui-scale', String(settings.uiScale ?? 1));
@@ -874,7 +888,7 @@ export class GameController {
     this._consumeFromInventory(selectedType);
     hungerStore.feedHunger(stats.restore);
     useUIStore.getState().showFeedback(`${stats.name}を食べた！ 空腹 +${stats.restore}`, 1000);
-    this.sound.playPlace();
+    this.sound.playEat();
   }
 
   // ---- Block Interaction ----
@@ -1094,11 +1108,13 @@ export class GameController {
     if (useGameStore.getState().isDead) return;
 
     // --- 空腹 ---
+    const difficulty = useGameStore.getState().difficulty;
+    const diffSettings = DIFFICULTY_SETTINGS[difficulty] ?? DIFFICULTY_SETTINGS.normal;
     const isMoving = Math.abs(this.player.velocity.x) > 0.3 || Math.abs(this.player.velocity.z) > 0.3;
     let hungerDrain = HUNGER_DRAIN_IDLE;
     if (this.player.isSprinting) hungerDrain = HUNGER_DRAIN_SPRINT;
     else if (isMoving) hungerDrain = HUNGER_DRAIN_MOVE;
-    useHungerStore.getState().consumeHunger(hungerDrain * dt);
+    useHungerStore.getState().consumeHunger(hungerDrain * diffSettings.hungerDrainMult * dt);
 
     // 最新の空腹値を取得
     const currentHunger = useHungerStore.getState().hunger;
@@ -1222,7 +1238,8 @@ export class GameController {
           this.player.applyKnockback(mobX, mobZ, KNOCKBACK_PLAYER_FORCE);
           useUIStore.getState().showHitFlash();
           useUIStore.getState().showFeedback(`モブに攻撃された！ -${actualDamage} HP`, 900);
-          this.sound.playError();
+          this.sound.playPlayerHit();
+          this.sound.notifyCombat();
           if (this.player.health <= 0 && !useGameStore.getState().isDead) {
             useGameStore.getState().setDead(true);
             document.exitPointerLock();
@@ -1257,7 +1274,7 @@ export class GameController {
             if (actualDamage > 0) {
               useUIStore.getState().showHitFlash();
               useUIStore.getState().showFeedback(`クリーパーが爆発した！ -${actualDamage} HP`, 1200);
-              this.sound.playError();
+              this.sound.playCreeperExplode();
               if (this.player.health <= 0 && !useGameStore.getState().isDead) {
                 useGameStore.getState().setDead(true);
                 document.exitPointerLock();
@@ -1320,9 +1337,11 @@ export class GameController {
     mob.applyKnockback(this.player.position.x, this.player.position.z, KNOCKBACK_MOB_FORCE);
 
     this._attackCooldown = PLAYER_ATTACK_COOLDOWN;
-    this.sound.playBreak(); // 打撃音として流用
+    this.sound.playMeleeHit();
+    this.sound.notifyCombat(); // 戦闘BGMに切り替え
 
     if (!mob.isAlive) {
+      this.sound.playMobDeath();
       // ドロップアイテムをスポーン
       if (typeof mob.drops === 'function') {
         for (const { type, count } of mob.drops()) {
@@ -1489,7 +1508,13 @@ export class GameController {
 
       // Sync stores for Preact UI
       useGameStore.getState().setFps(this.fps);
+      const prevIsDay = this._prevIsDay;
       useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);
+      // 昼夜切り替わり時にBGMを変更（戦闘中でなければ）
+      if (prevIsDay !== dayNight.isDay && this.sound.bgmStarted && this.sound._bgmMode !== 'combat') {
+        this.sound.setBGMMode(dayNight.isDay ? 'day' : 'night');
+      }
+      this._prevIsDay = dayNight.isDay;
       usePlayerStore.getState().syncFromPlayer(this.player);
 
       const eyePos = this.player.getEyePosition();

@@ -49,6 +49,11 @@ export const useSettingsStore = create((set, get) => ({
     get().persist();
   },
 
+  setFov(value) {
+    set({ fov: clamp(Math.floor(Number(value) || DEFAULT_SETTINGS.fov), 50, 120) });
+    get().persist();
+  },
+
   setHighContrast(value) {
     set({ highContrast: Boolean(value) });
     get().persist();
@@ -60,10 +65,10 @@ export const useSettingsStore = create((set, get) => ({
   },
 
   persist() {
-    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, highContrast, showDebugInfo } = get();
+    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, highContrast, showDebugInfo } = get();
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, highContrast, showDebugInfo }),
+      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, highContrast, showDebugInfo }),
     );
   },
 }));

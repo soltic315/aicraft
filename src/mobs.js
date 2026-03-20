@@ -1842,6 +1842,19 @@ export class MobManager {
     this.mobs = [];
     this.spawnTimer = MOB_SPAWN_INTERVAL;
     this.animalSpawnTimer = ANIMAL_SPAWN_INTERVAL * 0.3; // 最初は早めにスポーン
+    // 難易度設定（GameControllerから設定）
+    this.diffMaxCount = MOB_MAX_COUNT;
+    this.diffDamageMult = 1.0;
+    this.diffHpMult = 1.0;
+    this.diffSpeedMult = 1.0;
+  }
+
+  // 難易度設定を適用する
+  setDifficulty(diffSettings) {
+    this.diffMaxCount = diffSettings.mobMaxCount ?? MOB_MAX_COUNT;
+    this.diffDamageMult = diffSettings.mobDamageMult ?? 1.0;
+    this.diffHpMult = diffSettings.mobHpMult ?? 1.0;
+    this.diffSpeedMult = diffSettings.mobSpeedMult ?? 1.0;
   }
 
   get count() {
@@ -1985,7 +1998,7 @@ export class MobManager {
   }
 
   _trySpawn(playerPos) {
-    if (this.mobs.length >= MOB_MAX_COUNT) return;
+    if (this.mobs.length >= this.diffMaxCount) return;
 
     const angle = Math.random() * Math.PI * 2;
     const dist = MOB_SPAWN_MIN_DIST + Math.random() * (MOB_SPAWN_MAX_DIST - MOB_SPAWN_MIN_DIST);

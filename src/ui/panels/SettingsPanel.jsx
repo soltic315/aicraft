@@ -12,6 +12,7 @@ export function SettingsPanel() {
   const seVolume = useSettingsStore((s) => s.seVolume);
   const renderDistance = useSettingsStore((s) => s.renderDistance);
   const uiScale = useSettingsStore((s) => s.uiScale);
+  const fov = useSettingsStore((s) => s.fov);
   const highContrast = useSettingsStore((s) => s.highContrast);
   const showDebugInfo = useSettingsStore((s) => s.showDebugInfo);
 
@@ -131,6 +132,25 @@ export function SettingsPanel() {
             }}
           />
           <span class="setting-value">{uiScale.toFixed(1)}x</span>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label for="setting-fov">視野角 (FOV)</label>
+        <div>
+          <input
+            id="setting-fov"
+            type="range"
+            min="50"
+            max="120"
+            step="5"
+            value={fov ?? 75}
+            onInput={(e) => {
+              useSettingsStore.getState().setFov(Number(e.currentTarget.value));
+              window.__aicraft?.applySettings?.();
+            }}
+          />
+          <span class="setting-value">{fov ?? 75}°</span>
         </div>
       </div>
 
