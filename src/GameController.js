@@ -386,43 +386,50 @@ export class GameController {
       this._openChestAt(hit.blockPos);
     });
 
-    this.eventBus.on('start-clicked', () => {
+    this.eventBus.on('start-clicked', async () => {
       if (this.gameStarted) return;
       void this.sound.ensureStarted();
       useGameStore.getState().setLoading(true, 'ワールドを生成中...');
 
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          try {
-            this.player.spawn();
-            if (this.savedGame?.player?.position && typeof this.savedGame.player.position === 'object') {
-              this.player.position.set(
-                Number(this.savedGame.player.position.x) || this.player.position.x,
-                Number(this.savedGame.player.position.y) || this.player.position.y,
-                Number(this.savedGame.player.position.z) || this.player.position.z
-              );
-            }
-            if (Number.isFinite(this.savedGame?.player?.yaw)) {
-              this.player.yaw = this.savedGame.player.yaw;
-            }
-            if (Number.isFinite(this.savedGame?.player?.pitch)) {
-              this.player.pitch = this.savedGame.player.pitch;
-            }
+      // 1フレーム待機してローディング画面を確実に描画させてから重い処理を開始
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-            this.world.update(this.player.position.x, this.player.position.z, this.camera);
-            this.gameStarted = true;
-            this._onSlotChanged(); // 初期スロットのツールを装備
-            useGameStore.getState().startGame();
-            this._startAutoSave();
-            this.player.lock();
-          } catch (error) {
-            console.error('Failed to start game:', error);
-            useUIStore.getState().showFeedback('ワールド初期化に失敗しました。再読み込みしてください', 2200);
-          } finally {
-            useGameStore.getState().setLoading(false);
+      try {
+        this.player.spawn();
+        if (this.savedGame?.player?.position && typeof this.savedGame.player.position === 'object') {
+          this.player.position.set(
+            Number(this.savedGame.player.position.x) || this.player.position.x,
+            Number(this.savedGame.player.position.y) || this.player.position.y,
+            Number(this.savedGame.player.position.z) || this.player.position.z
+          );
+        }
+        if (Number.isFinite(this.savedGame?.player?.yaw)) {
+          this.player.yaw = this.savedGame.player.yaw;
+        }
+        if (Number.isFinite(this.savedGame?.player?.pitch)) {
+          this.player.pitch = this.savedGame.player.pitch;
+        }
+
+        // 全チャンクをローディング中に一括生成（進捗メッセージを随時更新）
+        await this.world.preloadAllChunks(
+          this.player.position.x,
+          this.player.position.z,
+          (_current, _total, message) => {
+            useGameStore.getState().setLoading(true, message);
           }
-        });
-      });
+        );
+
+        this.gameStarted = true;
+        this._onSlotChanged(); // 初期スロットのツールを装備
+        useGameStore.getState().startGame();
+        this._startAutoSave();
+        this.player.lock();
+      } catch (error) {
+        console.error('Failed to start game:', error);
+        useUIStore.getState().showFeedback('ワールド初期化に失敗しました。再読み込みしてください', 2200);
+      } finally {
+        useGameStore.getState().setLoading(false);
+      }
     });
 
     this.eventBus.on('resume-game', () => {

@@ -77,6 +77,60 @@ export class World {
     this.renderDistance = Math.min(Math.max(next, 2), 8);
   }
 
+  // ゲーム開始前にローディング画面中で全チャンクを一括生成する。
+  // フェーズ1でデータ生成、フェーズ2でメッシュ構築を行い、
+  // 4チャンクごとにメインスレッドへ制御を返してUIを応答可能に保つ。
+  async preloadAllChunks(playerX, playerZ, onProgress) {
+    const yieldToMain = () => new Promise(resolve => setTimeout(resolve, 0));
+    const pcx = Math.floor(playerX / CHUNK_SIZE);
+    const pcz = Math.floor(playerZ / CHUNK_SIZE);
+
+    // 描画距離内の全チャンク座標を収集
+    const coords = [];
+    for (let dx = -this.renderDistance; dx <= this.renderDistance; dx++) {
+      for (let dz = -this.renderDistance; dz <= this.renderDistance; dz++) {
+        coords.push({ cx: pcx + dx, cz: pcz + dz });
+      }
+    }
+
+    const total = coords.length;
+
+    // フェーズ1: 全チャンクのブロックデータを生成（メッシュなし）
+    // 全データが揃ってからメッシュを構築することで境界が正しく描画される
+    for (let i = 0; i < coords.length; i++) {
+      const { cx, cz } = coords[i];
+      const key = this._chunkKey(cx, cz);
+      if (!this.chunks.has(key)) {
+        const data = this._generateChunkData(cx, cz);
+        const boundingBox = new THREE.Box3(
+          new THREE.Vector3(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE),
+          new THREE.Vector3((cx + 1) * CHUNK_SIZE, WORLD_HEIGHT, (cz + 1) * CHUNK_SIZE)
+        );
+        this.chunks.set(key, { ...data, mesh: null, boundingBox });
+        this.pendingChunkSet.delete(key);
+      }
+      if (onProgress) onProgress(i + 1, total * 2, `地形生成中... ${i + 1} / ${total}`);
+      // 4チャンクごとにメインスレッドへ制御を返す
+      if (i % 4 === 3) await yieldToMain();
+    }
+
+    // フェーズ2: 全チャンクのメッシュを構築
+    // 隣接データが揃った状態で行うため境界面の欠けが発生しない
+    for (let i = 0; i < coords.length; i++) {
+      const { cx, cz } = coords[i];
+      this._rebuildChunkMesh(cx, cz, false);
+      if (onProgress) onProgress(total + i + 1, total * 2, `メッシュ構築中... ${i + 1} / ${total}`);
+      if (i % 4 === 3) await yieldToMain();
+    }
+
+    // プリロード完了後は境界再構築キューが不要（全メッシュ済み）
+    this.pendingBorderRebuilds.clear();
+    // ロード済みチャンクをペンディングキューから除去
+    this.pendingChunkLoads = this.pendingChunkLoads.filter(
+      item => !this.chunks.has(item.key)
+    );
+  }
+
   applyChunkEdits(edits = []) {
     this.chunkEdits.clear();
     for (const edit of edits) {
