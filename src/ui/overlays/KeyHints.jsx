@@ -4,6 +4,7 @@ import { useGameStore } from '../../stores/gameStore.js';
 const HINTS = [
   { key: 'TAB', label: 'インベントリ' },
   { key: 'C', label: 'クラフト' },
+  { key: 'Q', label: 'アイテムを1個捨てる' },
   { key: 'P', label: 'オプション' },
 ];
 

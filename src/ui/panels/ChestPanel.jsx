@@ -86,14 +86,23 @@ export function ChestPanel() {
   };
   const handleDragOver  = (key) => setDragOverKey(key);
   const handleDragEnd   = () => {
+    // チェストアイテムがパネル外にドロップされた場合は床に捨てる
+    const droppedChestType = window.__chestDragType;
     setDragFrom(null);
     setDragOverKey(null);
     window.__invDragFrom = null;
     window.__chestDragType = null;
+
+    if (droppedChestType != null) {
+      window.__aicraft?.eventBus?.emit('drop-chest-item-to-floor', { type: droppedChestType });
+    }
   };
 
   const handleDrop = (toKey) => {
     const from = dragFrom;
+    // 有効ドロップとしてマーク（handleDragEnd が床ドロップしないようクリア）
+    window.__chestDragType = null;
+    window.__invDragFrom = null;
     if (!from || from === toKey) { handleDragEnd(); return; }
     const chest = useChestStore.getState();
 
@@ -119,6 +128,8 @@ export function ChestPanel() {
   // チェストエリアへのドロップ（インベントリ or ホットバーから）
   const handleChestAreaDrop = (e) => {
     e.preventDefault();
+    // 有効ドロップとしてマーク
+    window.__invDragFrom = null;
     const localFrom  = dragFrom;
     const hotbarFrom = (window.__invDragFrom != null) ? 'inv-' + window.__invDragFrom : null;
     const from = localFrom || hotbarFrom;

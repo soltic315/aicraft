@@ -21,6 +21,19 @@ export const useInventoryStore = create((set, get) => ({
     }
   },
 
+  removeFromSlot(index, count = 1) {
+    set((state) => {
+      const newSlots = state.slots.map((s) => ({ ...s }));
+      const slot = newSlots[index];
+      if (!slot || slot.type === null) return {};
+      slot.count -= count;
+      if (slot.count <= 0) {
+        newSlots[index] = { type: null, count: 0 };
+      }
+      return { slots: newSlots };
+    });
+  },
+
   swapSlots(fromIdx, toIdx) {
     const { slots } = get();
     if (fromIdx < 0 || toIdx < 0 || fromIdx >= slots.length || toIdx >= slots.length) return;

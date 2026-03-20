@@ -50,6 +50,7 @@ export class InputManager {
       if (e.code === 'KeyP') this.eventBus.emit('toggle-settings');
       if (e.code === 'Tab') { e.preventDefault(); this.eventBus.emit('toggle-inventory'); }
       if (e.code === 'KeyC') this.eventBus.emit('toggle-craft');
+      if (e.code === 'KeyQ') this.eventBus.emit('drop-held-item');
     });
 
     document.addEventListener('wheel', (e) => {

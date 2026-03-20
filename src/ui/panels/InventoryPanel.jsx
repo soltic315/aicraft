@@ -81,6 +81,7 @@ export function InventoryPanel() {
       if (ok) window.__aicraft?.sound?.playPlace();
       window.__chestDragType = null;
       setDragFrom(null); setDragOverIdx(null);
+      window.__invDragFrom = null;
       return;
     }
     const from = dragFrom ?? window.__invDragFrom;
@@ -89,12 +90,24 @@ export function InventoryPanel() {
     }
     setDragFrom(null);
     setDragOverIdx(null);
+    // ドロップ成功を示すためクリア（handleDragEnd が床ドロップしないように）
     window.__invDragFrom = null;
   };
+
   const handleDragEnd = () => {
+    // window.__invDragFrom がまだセットされている = どの有効スロットにもドロップされなかった
+    const from = window.__invDragFrom;
     setDragFrom(null);
     setDragOverIdx(null);
     window.__invDragFrom = null;
+
+    if (from != null) {
+      // パネル外にドロップ → 床に捨てる
+      const slot = useInventoryStore.getState().slots[from];
+      if (slot && slot.type !== null && slot.count > 0) {
+        window.__aicraft?.eventBus?.emit('drop-item-from-slot', { slotIndex: from, count: slot.count });
+      }
+    }
   };
 
   const backpackSlots = slots.slice(HOTBAR_SIZE, TOTAL_SLOTS);
@@ -128,6 +141,7 @@ export function InventoryPanel() {
         <span>Tab / ESC: 閉じる</span>
         <span>1〜9: スロット選択</span>
         <span>ドラッグ: スロット入替</span>
+        <span>外にドラッグ: 床に捨てる</span>
       </div>
     </div>
   );

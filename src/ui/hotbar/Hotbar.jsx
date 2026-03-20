@@ -37,12 +37,14 @@ export function Hotbar() {
       if (ok) window.__aicraft?.sound?.playPlace();
       window.__chestDragType = null;
       setDragOverIdx(null);
+      window.__invDragFrom = null;
       return;
     }
     const from = window.__invDragFrom;
     if (from !== null && from !== undefined && from !== i) {
       useInventoryStore.getState().swapSlots(from, i);
     }
+    // ドロップ成功を示すためクリア
     window.__invDragFrom = null;
     setDragOverIdx(null);
   };
@@ -53,6 +55,21 @@ export function Hotbar() {
   const handleDragStart = (e, i) => {
     if (!panelOpen) { e.preventDefault(); return; }
     window.__invDragFrom = i;
+  };
+
+  // ドラッグ終了: window.__invDragFrom がまだセットされていれば外にドロップ → 床に捨てる
+  const handleDragEnd = (e, i) => {
+    if (!panelOpen) return;
+    const from = window.__invDragFrom;
+    window.__invDragFrom = null;
+    setDragOverIdx(null);
+
+    if (from != null) {
+      const slot = useInventoryStore.getState().slots[from];
+      if (slot && slot.type !== null && slot.count > 0) {
+        window.__aicraft?.eventBus?.emit('drop-item-from-slot', { slotIndex: from, count: slot.count });
+      }
+    }
   };
 
   const selectedSlotData = slots[selectedSlot];
@@ -74,17 +91,18 @@ export function Hotbar() {
         const type = slot?.type ?? null;
         const count = slot?.count ?? 0;
         const iconUrl = useMemo(() => getIconUrl(type), [type]);
-        const isDropTarget = inventoryOpen && dragOverIdx === i;
+        const isDropTarget = panelOpen && dragOverIdx === i;
 
         return (
           <div
             key={i}
             class={`hotbar-slot${i === selectedSlot ? ' active' : ''}${isDropTarget ? ' hotbar-drop-target' : ''}`}
-            draggable={inventoryOpen && type != null}
+            draggable={panelOpen && type != null}
             onDragStart={(e) => handleDragStart(e, i)}
             onDragOver={(e) => handleDragOver(e, i)}
             onDrop={(e) => handleDrop(e, i)}
             onDragLeave={handleDragLeave}
+            onDragEnd={(e) => handleDragEnd(e, i)}
           >
             <span class="slot-num">{String(i + 1)}</span>
             {iconUrl && (

@@ -64,6 +64,18 @@ export const useChestStore = create((set, get) => ({
   },
 
   // チェストから全スタックをインベントリへ転送（空きスロット自動）
+  // 開いているチェストから全スタックを除去してカウントを返す（インベントリには追加しない）
+  removeAllFromOpenedChest(type) {
+    const { openedChestKey, storage } = get();
+    if (!openedChestKey) return 0;
+    const chestData = storage.get(openedChestKey);
+    const count = chestData ? Math.max(0, Number(chestData[type] ?? 0)) : 0;
+    if (count <= 0) return 0;
+    chestData[type] = 0;
+    set({ storage: new Map(storage) });
+    return count;
+  },
+
   transferAllFromChest(type) {
     const { openedChestKey, storage } = get();
     if (!openedChestKey) return false;

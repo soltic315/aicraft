@@ -65,6 +65,7 @@ import { useToolStore } from './stores/toolStore.js';
 import { useHungerStore } from './stores/hungerStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
 import { MobManager } from './mobs.js';
+import { DroppedItemManager } from './DroppedItemManager.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -195,6 +196,9 @@ export class GameController {
 
     // モブマネージャー
     this.mobManager = new MobManager(this.scene, this.world);
+
+    // ドロップアイテムマネージャー
+    this.droppedItemManager = new DroppedItemManager(this.scene, this.world);
 
     // Break state (internal tracking for game loop)
     this.breakState = {
@@ -402,6 +406,7 @@ export class GameController {
       this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
       this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
       this.mobManager.removeAll();
+      this.droppedItemManager.removeAll();
       this.player.spawn();
       this.player.lock();
     });
@@ -409,6 +414,37 @@ export class GameController {
     this.eventBus.on('eat-food', (foodType) => {
       if (!this.gameStarted) return;
       this._tryEatFood(foodType);
+    });
+
+    // Qキー: 選択ホットバースロットから1個床にドロップ
+    this.eventBus.on('drop-held-item', () => {
+      if (!this.gameStarted || useGameStore.getState().isDead) return;
+      const { slots, selectedSlot } = useInventoryStore.getState();
+      const slot = slots[selectedSlot];
+      if (!slot || slot.type === null || slot.count === 0) return;
+      this._dropItemFromSlot(selectedSlot, 1);
+    });
+
+    // インベントリUI: スロット外ドラッグで床にドロップ
+    this.eventBus.on('drop-item-from-slot', ({ slotIndex, count }) => {
+      if (!this.gameStarted || useGameStore.getState().isDead) return;
+      this._dropItemFromSlot(slotIndex, count);
+    });
+
+    // チェストUI: チェストアイテムをパネル外にドラッグで床にドロップ
+    this.eventBus.on('drop-chest-item-to-floor', ({ type }) => {
+      if (!this.gameStarted || useGameStore.getState().isDead) return;
+      const count = useChestStore.getState().removeAllFromOpenedChest(type);
+      if (count <= 0) return;
+      const pos = this.player.position;
+      const fwd = this.player.getDirection();
+      this.droppedItemManager.spawnAt(
+        pos.x + fwd.x * 0.6,
+        pos.y + 0.5,
+        pos.z + fwd.z * 0.6,
+        type,
+        count,
+      );
     });
   }
 
@@ -514,6 +550,7 @@ export class GameController {
     useHungerStore.getState().reset();
     useBreakStore.getState().reset();
     this.mobManager.removeAll();
+    this.droppedItemManager.removeAll();
     // ワールドのチャンク・地形データをリセット
     this.world.reset();
     // ストアをタイトル状態へ（設定パネルも閉じる）
@@ -692,28 +729,27 @@ export class GameController {
     const { selectedSlot, slots } = useInventoryStore.getState();
     const placeType = slots[selectedSlot]?.type ?? null;
 
-    if (placeType == null) {
-      useUIStore.getState().showFeedback('選択中のスロットは空です', 800);
-      this.sound.playError();
-      return;
-    }
-
     // 食料アイテムはブロックを見ていなくても右クリックで食べる
-    if (FOOD_ITEMS.has(placeType)) {
+    if (placeType != null && FOOD_ITEMS.has(placeType)) {
       this._tryEatFood(placeType);
       return;
     }
 
     const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
-    if (!hit) {
-      useUIStore.getState().showFeedback('設置失敗: 射程外です');
-      this.sound.playError();
+
+    // 右クリックでチェストを開く（手が空でも可）
+    if (hit && hit.blockType === BlockType.CHEST) {
+      this._openChestAt(hit.blockPos);
       return;
     }
 
-    // 右クリックでチェストを開く
-    if (hit.blockType === BlockType.CHEST) {
-      this._openChestAt(hit.blockPos);
+    if (placeType == null) {
+      return;
+    }
+
+    if (!hit) {
+      useUIStore.getState().showFeedback('設置失敗: 射程外です');
+      this.sound.playError();
       return;
     }
 
@@ -789,11 +825,11 @@ export class GameController {
         }
       }
 
-      this._addToInventory(hit.blockType, 1);
-      // 葉ブロック破壊時に30%の確率でリンゴドロップ
+      // ブロックを床にドロップ
+      this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, hit.blockType, 1);
+      // 葉ブロック破壊時に30%の確率でリンゴをドロップ
       if (hit.blockType === BlockType.LEAVES && Math.random() < 0.3) {
-        this._addToInventory(BlockType.APPLE, 1);
-        useUIStore.getState().showFeedback('リンゴをゲット！', 1000);
+        this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.APPLE, 1);
       }
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.sound.playBreak();
@@ -893,6 +929,45 @@ export class GameController {
         }
       }
     });
+  }
+
+  // ---- ドロップアイテムシステム ----
+
+  /**
+   * 指定スロットからアイテムをドロップする
+   * @param {number} slotIndex - インベントリスロットインデックス
+   * @param {number} count - ドロップ個数
+   */
+  _dropItemFromSlot(slotIndex, count) {
+    const { slots } = useInventoryStore.getState();
+    const slot = slots[slotIndex];
+    if (!slot || slot.type === null || slot.count === 0) return;
+
+    const dropCount = Math.min(count, slot.count);
+    const type = slot.type;
+
+    useInventoryStore.getState().removeFromSlot(slotIndex, dropCount);
+
+    // プレイヤーの前方向に少し飛ばす
+    const pos = this.player.position;
+    const fwd = this.player.getDirection();
+    this.droppedItemManager.spawnAt(
+      pos.x + fwd.x * 0.6,
+      pos.y + 0.5,
+      pos.z + fwd.z * 0.6,
+      type,
+      dropCount,
+    );
+  }
+
+  _updateDroppedItems(dt) {
+    if (useGameStore.getState().isDead) return;
+    const playerPos = this.player.position;
+    const pickedUp = this.droppedItemManager.update(dt, playerPos);
+    for (const { type, count } of pickedUp) {
+      useInventoryStore.getState().addItem(type, count);
+      this.sound.playPlace(); // ピックアップ音として流用
+    }
   }
 
   /** プレイヤーがモブを攻撃する */
@@ -1062,6 +1137,7 @@ export class GameController {
 
       this._updateSurvivalSystems(dt);
       this._updateMobs(dt, dayNight.isDay);
+      this._updateDroppedItems(dt);
     } else {
       // タイトル画面
       useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);
