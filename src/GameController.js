@@ -69,6 +69,7 @@ import { useDurabilityStore } from './stores/durabilityStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
 import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './DroppedItemManager.js';
+import { ParticleManager } from './particles.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -207,6 +208,9 @@ export class GameController {
 
     // ドロップアイテムマネージャー
     this.droppedItemManager = new DroppedItemManager(this.scene, this.world);
+
+    // パーティクルマネージャー
+    this.particleManager = new ParticleManager(this.scene);
 
     // Break state (internal tracking for game loop)
     this.breakState = {
@@ -562,6 +566,7 @@ export class GameController {
     useBreakStore.getState().reset();
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
+    this.particleManager.dispose();
     // ワールドのチャンク・地形データをリセット
     this.world.reset();
     // ストアをタイトル状態へ（設定パネルも閉じる）
@@ -851,6 +856,12 @@ export class GameController {
       if (hit.blockType === BlockType.LEAVES && Math.random() < 0.3) {
         this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.APPLE, 1);
       }
+      // 破壊パーティクルを生成（ブロックの上面マテリアルを使用）
+      const breakMat = this.blockMaterials[hit.blockType]?.top ?? this.blockMaterials[1]?.top;
+      if (breakMat) {
+        this.particleManager.spawnBreak(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
+      }
+
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.sound.playBreak();
 
@@ -1178,6 +1189,7 @@ export class GameController {
       this._updateSurvivalSystems(dt);
       this._updateMobs(dt, dayNight.isDay);
       this._updateDroppedItems(dt);
+      this.particleManager.update(dt);
     } else {
       // タイトル画面
       useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);

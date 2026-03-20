@@ -1,6 +1,6 @@
 {
   "name": "aicraft",
-  "version": "3.21.0",
+  "version": "3.26.0",
   "description": "Minecraft-style browser game",
   "type": "module",
   "scripts": {

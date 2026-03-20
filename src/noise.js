@@ -36,6 +36,49 @@ export class Noise {
     return u + v;
   }
 
+  _grad3(hash, x, y, z) {
+    const h = hash & 15;
+    const u = h < 8 ? x : y;
+    const v = h < 4 ? y : (h === 12 || h === 14 ? x : z);
+    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+  }
+
+  noise3D(x, y, z) {
+    const p = this.perm;
+    const xi = Math.floor(x) & 255;
+    const yi = Math.floor(y) & 255;
+    const zi = Math.floor(z) & 255;
+    const xf = x - Math.floor(x);
+    const yf = y - Math.floor(y);
+    const zf = z - Math.floor(z);
+    const u = this._fade(xf);
+    const v = this._fade(yf);
+    const w = this._fade(zf);
+
+    const aaa = p[p[p[xi]     + yi]     + zi];
+    const aba = p[p[p[xi]     + yi + 1] + zi];
+    const aab = p[p[p[xi]     + yi]     + zi + 1];
+    const abb = p[p[p[xi]     + yi + 1] + zi + 1];
+    const baa = p[p[p[xi + 1] + yi]     + zi];
+    const bba = p[p[p[xi + 1] + yi + 1] + zi];
+    const bab = p[p[p[xi + 1] + yi]     + zi + 1];
+    const bbb = p[p[p[xi + 1] + yi + 1] + zi + 1];
+
+    return this._lerp(
+      this._lerp(
+        this._lerp(this._grad3(aaa, xf,     yf,     zf    ), this._grad3(baa, xf - 1, yf,     zf    ), u),
+        this._lerp(this._grad3(aba, xf,     yf - 1, zf    ), this._grad3(bba, xf - 1, yf - 1, zf    ), u),
+        v
+      ),
+      this._lerp(
+        this._lerp(this._grad3(aab, xf,     yf,     zf - 1), this._grad3(bab, xf - 1, yf,     zf - 1), u),
+        this._lerp(this._grad3(abb, xf,     yf - 1, zf - 1), this._grad3(bbb, xf - 1, yf - 1, zf - 1), u),
+        v
+      ),
+      w
+    );
+  }
+
   noise2D(x, y) {
     const xi = Math.floor(x) & 255;
     const yi = Math.floor(y) & 255;

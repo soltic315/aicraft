@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.21.0';
+export const GAME_VERSION = '3.26.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -18,6 +18,9 @@ export const ALL_ITEM_TYPES = [
   BlockType.LEAVES, BlockType.SAND, BlockType.WATER, BlockType.PLANK,
   BlockType.GLASS, BlockType.CRAFTING_TABLE, BlockType.CHEST,
   BlockType.COBBLESTONE, BlockType.IRON_ORE, BlockType.IRON_INGOT,
+  BlockType.COAL_ORE, BlockType.GOLD_ORE, BlockType.DIAMOND_ORE,
+  BlockType.COAL, BlockType.GOLD_INGOT, BlockType.DIAMOND,
+  BlockType.LAVA,
   BlockType.APPLE, BlockType.BEEF, BlockType.COOKED_BEEF,
   BlockType.FURNACE,
   BlockType.PICKAXE, BlockType.AXE, BlockType.SHOVEL,
@@ -155,7 +158,8 @@ export const TOOL_ITEMS = new Set([
   BlockType.PICKAXE,       BlockType.AXE,       BlockType.SHOVEL,
   BlockType.STONE_PICKAXE, BlockType.STONE_AXE, BlockType.STONE_SHOVEL,
   BlockType.IRON_PICKAXE,  BlockType.IRON_AXE,  BlockType.IRON_SHOVEL,
-  BlockType.IRON_INGOT,
+  BlockType.IRON_INGOT, BlockType.COAL, BlockType.GOLD_INGOT, BlockType.DIAMOND,
+  BlockType.LAVA, // 溶岩は設置不可（液体は破壊のみ）
 ]);
 
 // 全アイテムを 0 から開始（ブロック破壊・クラフトで入手）
@@ -181,6 +185,12 @@ export const STARTER_INVENTORY = {
   [BlockType.COBBLESTONE]: 0,
   [BlockType.IRON_ORE]: 0,
   [BlockType.IRON_INGOT]: 0,
+  [BlockType.COAL_ORE]: 0,
+  [BlockType.GOLD_ORE]: 0,
+  [BlockType.DIAMOND_ORE]: 0,
+  [BlockType.COAL]: 0,
+  [BlockType.GOLD_INGOT]: 0,
+  [BlockType.DIAMOND]: 0,
   [BlockType.STONE_PICKAXE]: 0,
   [BlockType.STONE_AXE]: 0,
   [BlockType.STONE_SHOVEL]: 0,
@@ -354,6 +364,13 @@ export const CRAFT_RECIPES = [
   },
 ];
 
+// 精錬の燃料として使えるアイテム（いずれか1つを消費）
+export const SMELT_FUELS = [
+  { type: BlockType.COAL,  count: 1 }, // 石炭: 効率的な燃料
+  { type: BlockType.WOOD,  count: 2 }, // 木材: 2本で1回分
+  { type: BlockType.PLANK, count: 2 }, // 板材: 2枚で1回分
+];
+
 // 精錬レシピ（かまどで使用）
 export const SMELT_RECIPES = [
   {
@@ -363,8 +380,14 @@ export const SMELT_RECIPES = [
     inputCount: 1,
     outputType: BlockType.IRON_INGOT,
     outputCount: 1,
-    fuelType: BlockType.WOOD,
-    fuelCount: 1,
+  },
+  {
+    id: 'smelt_gold_ore',
+    label: '金鉱石 -> 金インゴット',
+    inputType: BlockType.GOLD_ORE,
+    inputCount: 1,
+    outputType: BlockType.GOLD_INGOT,
+    outputCount: 1,
   },
   {
     id: 'smelt_beef',
@@ -373,8 +396,6 @@ export const SMELT_RECIPES = [
     inputCount: 1,
     outputType: BlockType.COOKED_BEEF,
     outputCount: 1,
-    fuelType: BlockType.WOOD,
-    fuelCount: 1,
   },
 ];
 

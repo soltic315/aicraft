@@ -297,7 +297,12 @@ export class Player {
 
   _isSolidBlock(x, y, z) {
     const block = this.world.getBlock(x, y, z);
-    return block !== BlockType.AIR && block !== BlockType.WATER;
+    return block !== BlockType.AIR &&
+           block !== BlockType.WATER &&
+           block !== BlockType.LAVA &&
+           block !== BlockType.TALL_GRASS &&
+           block !== BlockType.FLOWER &&
+           block !== BlockType.MUSHROOM;
   }
 
   // 頭部が水中にあるか判定

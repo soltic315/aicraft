@@ -22,6 +22,21 @@ export const BlockType = {
   COOKED_BEEF: 27,
   // 設備ブロック
   FURNACE: 26,
+  // 液体
+  LAVA: 34,
+  // 装飾・バイオームブロック
+  SNOW: 35,
+  CACTUS: 36,
+  TALL_GRASS: 37,
+  FLOWER: 38,
+  MUSHROOM: 39,
+  // 追加鉱石・素材
+  COAL_ORE: 28,
+  GOLD_ORE: 29,
+  DIAMOND_ORE: 30,
+  COAL: 31,
+  GOLD_INGOT: 32,
+  DIAMOND: 33,
   // 石・鉄ティア素材
   COBBLESTONE: 16,
   IRON_ORE: 17,
@@ -55,6 +70,18 @@ export const BLOCK_NAMES = {
   [BlockType.SHOVEL]: 'シャベル（木）',
   [BlockType.FURNACE]: 'かまど',
   [BlockType.COOKED_BEEF]: '焼き肉',
+  [BlockType.LAVA]: '溶岩',
+  [BlockType.SNOW]: '雪ブロック',
+  [BlockType.CACTUS]: 'サボテン',
+  [BlockType.TALL_GRASS]: '草',
+  [BlockType.FLOWER]: '花',
+  [BlockType.MUSHROOM]: 'キノコ',
+  [BlockType.COAL_ORE]: '石炭鉱石',
+  [BlockType.GOLD_ORE]: '金鉱石',
+  [BlockType.DIAMOND_ORE]: 'ダイヤモンド鉱石',
+  [BlockType.COAL]: '石炭',
+  [BlockType.GOLD_INGOT]: '金インゴット',
+  [BlockType.DIAMOND]: 'ダイヤモンド',
   [BlockType.COBBLESTONE]: '丸石',
   [BlockType.IRON_ORE]: '鉄鉱石',
   [BlockType.IRON_INGOT]: '鉄インゴット',
@@ -80,12 +107,23 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.COBBLESTONE]: 1.8,
   [BlockType.IRON_ORE]: 2.0,
   [BlockType.FURNACE]: 1.5,
+  [BlockType.COAL_ORE]: 1.6,
+  [BlockType.GOLD_ORE]: 2.2,
+  [BlockType.DIAMOND_ORE]: 3.0,
+  [BlockType.SNOW]: 0.3,
+  [BlockType.CACTUS]: 0.4,
+  [BlockType.TALL_GRASS]: 0.1,
+  [BlockType.FLOWER]: 0.1,
+  [BlockType.MUSHROOM]: 0.15,
 };
 
 // ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
 export const BLOCK_DROP_OVERRIDES = {
   [BlockType.STONE]: BlockType.COBBLESTONE,
   [BlockType.IRON_ORE]: BlockType.IRON_INGOT,
+  [BlockType.COAL_ORE]: BlockType.COAL,
+  [BlockType.DIAMOND_ORE]: BlockType.DIAMOND,
+  // 金鉱石はかまどで精錬が必要（鉱石自体をドロップ）
 };
 
 // Color palettes for each block type (top, side, bottom)
@@ -187,6 +225,69 @@ const BLOCK_COLORS = {
     bottom: '#686868',
     topDetail: '#505050',
     sideDetail: '#382820',
+  },
+  [BlockType.COAL_ORE]: {
+    top: '#808080',
+    side: '#808080',
+    bottom: '#808080',
+    topDetail: '#1a1a1a',
+    sideDetail: '#1a1a1a',
+  },
+  [BlockType.GOLD_ORE]: {
+    top: '#808080',
+    side: '#808080',
+    bottom: '#808080',
+    topDetail: '#d4a010',
+    sideDetail: '#b88800',
+  },
+  [BlockType.DIAMOND_ORE]: {
+    top: '#808080',
+    side: '#808080',
+    bottom: '#808080',
+    topDetail: '#20c8d0',
+    sideDetail: '#10a8b0',
+  },
+  [BlockType.LAVA]: {
+    top: '#e04010',
+    side: '#c83000',
+    bottom: '#b02000',
+    topDetail: '#f07020',
+    sideDetail: '#a02000',
+  },
+  [BlockType.SNOW]: {
+    top: '#f4f4f8',
+    side: '#e8e8f0',
+    bottom: '#dcdce4',
+    topDetail: '#dcdce4',
+    sideDetail: '#d0d0d8',
+  },
+  [BlockType.TALL_GRASS]: {
+    top: '#4a9a30',
+    side: '#4a9a30',
+    bottom: '#4a9a30',
+    topDetail: '#3a7a20',
+    sideDetail: '#3a7a20',
+  },
+  [BlockType.FLOWER]: {
+    top: '#e84030',
+    side: '#e84030',
+    bottom: '#e84030',
+    topDetail: '#ffd020',
+    sideDetail: '#3a8020',
+  },
+  [BlockType.MUSHROOM]: {
+    top: '#c05020',
+    side: '#c05020',
+    bottom: '#c05020',
+    topDetail: '#f0e8e0',
+    sideDetail: '#905018',
+  },
+  [BlockType.CACTUS]: {
+    top: '#2d7a20',
+    side: '#2a6a1c',
+    bottom: '#2d7a20',
+    topDetail: '#1e5a14',
+    sideDetail: '#1e5a14',
   },
 };
 
@@ -357,6 +458,42 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
     // 上部の煙突穴
     ctx.fillStyle = '#181818';
     ctx.fillRect(pixelSize * 7, pixelSize * 1, pixelSize * 2, pixelSize * 3);
+  } else if (pattern === 'cactus_side') {
+    // サボテン側面: 縦線と横の刺
+    for (let y = 0; y < 16; y += 2) {
+      ctx.fillStyle = '#1e5a14';
+      ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.6));
+    }
+    // トゲ
+    ctx.fillStyle = '#3a8a28';
+    for (let y = 3; y < 16; y += 4) {
+      ctx.fillRect(0, y * pixelSize, pixelSize * 2, pixelSize);
+      ctx.fillRect(size - pixelSize * 2, y * pixelSize, pixelSize * 2, pixelSize);
+    }
+  } else if (pattern === 'coal_ore') {
+    // 石炭鉱石: 黒いドット
+    for (let i = 0; i < 10; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.4 ? '#1a1a1a' : '#2e2e2e';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
+    }
+  } else if (pattern === 'gold_ore') {
+    // 金鉱石: 黄色の鉱脈スポット
+    for (let i = 0; i < 8; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#d4a010' : '#b88800';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
+    }
+  } else if (pattern === 'diamond_ore') {
+    // ダイヤ鉱石: 水色の結晶スポット
+    for (let i = 0; i < 7; i++) {
+      const px = Math.floor(rand() * 13) * pixelSize;
+      const py = Math.floor(rand() * 13) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#20c8d0' : '#10a8b8';
+      ctx.fillRect(px, py, pixelSize * (1 + Math.floor(rand() * 2)), pixelSize * (1 + Math.floor(rand() * 2)));
+    }
   } else if (pattern === 'chest_side') {
     for (let y = 1; y < 16; y += 3) {
       ctx.fillStyle = y % 2 === 0 ? '#7f4f26' : '#9a6532';
@@ -467,6 +604,15 @@ export function generateTextures() {
     [BlockType.COBBLESTONE]: { top: 'cobblestone', side: 'cobblestone', bottom: 'cobblestone' },
     [BlockType.IRON_ORE]: { top: 'iron_ore', side: 'iron_ore', bottom: 'iron_ore' },
     [BlockType.FURNACE]: { top: 'cobblestone', side: 'furnace_side', bottom: 'cobblestone' },
+    [BlockType.LAVA]: { top: 'noise', side: 'noise', bottom: 'noise' },
+    [BlockType.SNOW]: { top: 'noise', side: 'noise', bottom: 'noise' },
+    [BlockType.TALL_GRASS]: { top: 'leaves', side: 'leaves', bottom: 'leaves' },
+    [BlockType.FLOWER]: { top: 'noise', side: 'noise', bottom: 'noise' },
+    [BlockType.MUSHROOM]: { top: 'noise', side: 'noise', bottom: 'noise' },
+    [BlockType.CACTUS]: { top: 'leaves', side: 'cactus_side', bottom: 'leaves' },
+    [BlockType.COAL_ORE]: { top: 'coal_ore', side: 'coal_ore', bottom: 'coal_ore' },
+    [BlockType.GOLD_ORE]: { top: 'gold_ore', side: 'gold_ore', bottom: 'gold_ore' },
+    [BlockType.DIAMOND_ORE]: { top: 'diamond_ore', side: 'diamond_ore', bottom: 'diamond_ore' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -633,6 +779,59 @@ function generateShovelIcon(headColor = '#B0BCC8') {
   return c;
 }
 
+// 石炭アイコン
+function generateCoalIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.roundRect(8, 8, 16, 16, 3);
+  ctx.fill();
+  ctx.fillStyle = '#303030';
+  ctx.fillRect(10, 10, 6, 6);
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(16, 16, 6, 6);
+  return c;
+}
+
+// 金インゴットアイコン
+function generateGoldIngotIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#c89010';
+  ctx.beginPath();
+  ctx.moveTo(6, 22); ctx.lineTo(10, 10); ctx.lineTo(22, 10); ctx.lineTo(26, 22);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#e8b820';
+  ctx.fillRect(10, 10, 12, 4);
+  ctx.fillStyle = '#a07008';
+  ctx.fillRect(6, 20, 20, 2);
+  return c;
+}
+
+// ダイヤモンドアイコン
+function generateDiamondIcon() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#20c8d0';
+  // ダイヤ形
+  ctx.beginPath();
+  ctx.moveTo(16, 5); ctx.lineTo(27, 14); ctx.lineTo(16, 27); ctx.lineTo(5, 14);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#80e8ec';
+  ctx.beginPath();
+  ctx.moveTo(16, 5); ctx.lineTo(22, 12); ctx.lineTo(16, 14); ctx.lineTo(10, 12);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#10a8b0';
+  ctx.beginPath();
+  ctx.moveTo(16, 14); ctx.lineTo(22, 12); ctx.lineTo(27, 14); ctx.lineTo(16, 27);
+  ctx.closePath(); ctx.fill();
+  return c;
+}
+
 // 鉄インゴットアイコン
 function generateIronIngotIcon() {
   const c = document.createElement('canvas');
@@ -661,6 +860,9 @@ export function generateBlockIcon(type) {
   if (type === BlockType.AXE)     return generateAxeIcon('#B0BCC8');
   if (type === BlockType.SHOVEL)  return generateShovelIcon('#B0BCC8');
   if (type === BlockType.IRON_INGOT)    return generateIronIngotIcon();
+  if (type === BlockType.COAL)          return generateCoalIcon();
+  if (type === BlockType.GOLD_INGOT)    return generateGoldIngotIcon();
+  if (type === BlockType.DIAMOND)       return generateDiamondIcon();
   if (type === BlockType.STONE_PICKAXE) return generatePickaxeIcon('#8a8a8a');
   if (type === BlockType.STONE_AXE)     return generateAxeIcon('#8a8a8a');
   if (type === BlockType.STONE_SHOVEL)  return generateShovelIcon('#8a8a8a');

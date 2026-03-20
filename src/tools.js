@@ -69,6 +69,10 @@ const TOOL_BREAK_MULTIPLIERS = {
     [BlockType.COBBLESTONE]: 2.4,
     [BlockType.GLASS]:       1.6,
     [BlockType.IRON_ORE]:    2.0,
+    [BlockType.COAL_ORE]:    2.0,
+    [BlockType.GOLD_ORE]:    2.0,
+    [BlockType.DIAMOND_ORE]: 1.5,
+    [BlockType.FURNACE]:     2.0,
   },
   [ToolType.AXE]: {
     [BlockType.WOOD]:           2.2,
@@ -88,6 +92,10 @@ const TOOL_BREAK_MULTIPLIERS = {
     [BlockType.COBBLESTONE]: 5.0,
     [BlockType.GLASS]:       3.5,
     [BlockType.IRON_ORE]:    5.0,
+    [BlockType.COAL_ORE]:    5.0,
+    [BlockType.GOLD_ORE]:    5.0,
+    [BlockType.DIAMOND_ORE]: 3.5,
+    [BlockType.FURNACE]:     4.5,
   },
   [ToolType.STONE_AXE]: {
     [BlockType.WOOD]:           4.5,
@@ -107,6 +115,10 @@ const TOOL_BREAK_MULTIPLIERS = {
     [BlockType.COBBLESTONE]: 9.0,
     [BlockType.GLASS]:       6.0,
     [BlockType.IRON_ORE]:    9.0,
+    [BlockType.COAL_ORE]:    9.0,
+    [BlockType.GOLD_ORE]:    9.0,
+    [BlockType.DIAMOND_ORE]: 7.0,
+    [BlockType.FURNACE]:     8.0,
   },
   [ToolType.IRON_AXE]: {
     [BlockType.WOOD]:           8.0,

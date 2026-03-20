@@ -18,6 +18,9 @@ export class World {
     this.noise = new Noise(this.seed);
     this.treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
     this.oreNoise = new Noise(this.seed * 7 + 37);
+    this.caveNoise = new Noise(this.seed * 13 + 91);
+    this.tempNoise = new Noise(this.seed * 19 + 53);     // バイオーム温度ノイズ
+    this.humidNoise = new Noise(this.seed * 23 + 137);   // バイオーム湿度ノイズ
     this.treePlaced = new Set();
     this.renderDistance = options.renderDistance ?? DEFAULT_RENDER_DISTANCE;
     this.pendingChunkLoads = [];
@@ -31,6 +34,9 @@ export class World {
     // Chunk-level edits applied after terrain generation.
     // Keyed by chunk key ("cx,cz") and contains an array of {x,y,z,type} edits.
     this.chunkEdits = new Map();
+
+    // 面方向別明るさを適用したマテリアルのキャッシュ
+    this._dimmedMaterialCache = new Map();
   }
 
   // 全チャンクを破棄してワールドを初期状態に戻す
@@ -53,6 +59,9 @@ export class World {
     this.noise = new Noise(this.seed);
     this.treeNoise = new Noise(this.noise.perm[0] * 1000 + 7);
     this.oreNoise = new Noise(this.seed * 7 + 37);
+    this.caveNoise = new Noise(this.seed * 13 + 91);
+    this.tempNoise = new Noise(this.seed * 19 + 53);
+    this.humidNoise = new Noise(this.seed * 23 + 137);
     this._hasFrustum = false;
   }
 
@@ -126,11 +135,35 @@ export class World {
     return next;
   }
 
+  // バイオームを取得（温度・湿度ノイズで分類）
+  // 戻り値: 'plains' | 'forest' | 'desert' | 'tundra' | 'mountain'
+  getBiome(x, z) {
+    const scale = 0.006; // 低スケールで広いバイオームを生成
+    const temp  = this.tempNoise.noise2D(x * scale, z * scale);    // -1 〜 +1
+    const humid = this.humidNoise.noise2D(x * scale + 100, z * scale + 100); // -1 〜 +1
+
+    if (temp < -0.3) return 'tundra';
+    if (temp > 0.35 && humid < -0.1) return 'desert';
+    if (temp > 0.2 && humid > 0.25) return 'mountain';
+    if (humid > 0.15) return 'forest';
+    return 'plains';
+  }
+
   // Get terrain height at world (x, z)
   getHeight(x, z) {
     const scale = 0.02;
     const n = this.noise.fbm(x * scale, z * scale, 5, 2, 0.5);
-    return Math.floor(SEA_LEVEL + n * 18);
+    const biome = this.getBiome(x, z);
+
+    // バイオームごとに高さを調整
+    let heightScale = 18;
+    let heightOffset = 0;
+    if (biome === 'mountain') { heightScale = 26; heightOffset = 4; }
+    else if (biome === 'desert') { heightScale = 10; heightOffset = -2; }
+    else if (biome === 'tundra') { heightScale = 14; }
+    else if (biome === 'forest') { heightScale = 16; }
+
+    return Math.floor(SEA_LEVEL + n * heightScale + heightOffset);
   }
 
   // Get block type at world position
@@ -190,14 +223,27 @@ export class World {
         const wx = cx * CHUNK_SIZE + lx;
         const wz = cz * CHUNK_SIZE + lz;
         const height = this.getHeight(wx, wz);
+        const biome = this.getBiome(wx, wz);
 
         for (let y = 0; y < WORLD_HEIGHT; y++) {
           if (y === 0) {
             blocks[lx][y][lz] = BlockType.STONE;
           } else if (y < height - 4) {
-            // 鉄鉱石: Y < 20 の石層に約5%の確率で生成
-            if (y < 20 && this.oreNoise.noise2D(wx * 0.6 + 0.5, y * 0.9 + wz * 0.55) > 0.9) {
+            // 鉱石生成（Y位置・ノイズ閾値で分布を制御）
+            const oreVal = this.oreNoise.noise2D(wx * 0.6 + 0.5, y * 0.9 + wz * 0.55);
+            const oreVal2 = this.oreNoise.noise2D(wx * 0.7 + 33.1, y * 1.1 + wz * 0.65 + 17.3);
+            if (y < 12 && oreVal > 0.94 && oreVal2 > 0.88) {
+              // ダイヤモンド: Y<12 に極まれに生成（~1%）
+              blocks[lx][y][lz] = BlockType.DIAMOND_ORE;
+            } else if (y < 16 && oreVal > 0.92) {
+              // 金鉱石: Y<16 に稀に生成（~2%）
+              blocks[lx][y][lz] = BlockType.GOLD_ORE;
+            } else if (y < 32 && oreVal > 0.88) {
+              // 鉄鉱石: Y<32 に生成（~4%）
               blocks[lx][y][lz] = BlockType.IRON_ORE;
+            } else if (oreVal2 > 0.82) {
+              // 石炭鉱石: 全深度に生成（~9%）
+              blocks[lx][y][lz] = BlockType.COAL_ORE;
             } else {
               blocks[lx][y][lz] = BlockType.STONE;
             }
@@ -206,6 +252,12 @@ export class World {
           } else if (y === height) {
             if (height <= SEA_LEVEL) {
               blocks[lx][y][lz] = BlockType.SAND;
+            } else if (biome === 'desert') {
+              blocks[lx][y][lz] = BlockType.SAND;
+            } else if (biome === 'tundra') {
+              blocks[lx][y][lz] = BlockType.SNOW;
+            } else if (biome === 'mountain' && height > SEA_LEVEL + 14) {
+              blocks[lx][y][lz] = BlockType.STONE; // 高山の頂上は石
             } else {
               blocks[lx][y][lz] = BlockType.GRASS;
             }
@@ -216,43 +268,190 @@ export class World {
           }
         }
 
-        // Trees (only on grass, sparse)
+        // バイオームごとの地上装飾（木・サボテン）
         if (height > SEA_LEVEL + 1) {
           const treeVal = this.treeNoise.noise2D(wx * 0.5, wz * 0.5);
-          if (treeVal > 0.35 && lx > 2 && lx < CHUNK_SIZE - 3 && lz > 2 && lz < CHUNK_SIZE - 3) {
+          // バイオーム別の生成閾値・条件
+          const isForest  = biome === 'forest';
+          const isDesert  = biome === 'desert';
+          const isTundra  = biome === 'tundra';
+          const isMountain = biome === 'mountain';
+          const treeThreshold = isForest ? 0.15 : isTundra ? 0.55 : isMountain ? 0.60 : 0.35;
+
+          if (isDesert) {
+            // 砂漠: サボテン（稀に）
+            if (treeVal > 0.65 && lx > 0 && lx < CHUNK_SIZE - 1 && lz > 0 && lz < CHUNK_SIZE - 1) {
+              const cactusKey = `${wx},${wz}`;
+              if (!this.treePlaced.has(cactusKey)) {
+                this.treePlaced.add(cactusKey);
+                const cactusHeight = 2 + Math.floor(Math.abs(this.treeNoise.noise2D(wx * 8, wz * 8)) * 2);
+                for (let cy = 1; cy <= cactusHeight && height + cy < WORLD_HEIGHT; cy++) {
+                  blocks[lx][height + cy][lz] = BlockType.CACTUS;
+                }
+              }
+            }
+          } else if (treeVal > treeThreshold && lx > 2 && lx < CHUNK_SIZE - 3 && lz > 2 && lz < CHUNK_SIZE - 3) {
+            // バイオーム別樹木生成
             const treeKey = `${wx},${wz}`;
             if (!this.treePlaced.has(treeKey)) {
               this.treePlaced.add(treeKey);
-              // Trunk
-              // 地表高 + 幹の高さがワールド高さを超えないようにクランプ
-              const maxTrunkHeight = Math.max(1, WORLD_HEIGHT - height - 4);
-              const trunkHeight = Math.min(4 + Math.floor(Math.abs(this.treeNoise.noise2D(wx * 10, wz * 10)) * 3), maxTrunkHeight);
-              for (let ty = 1; ty <= trunkHeight; ty++) {
-                if (height + ty < WORLD_HEIGHT) {
+              const rndH = Math.abs(this.treeNoise.noise2D(wx * 10, wz * 10));
+              const maxTrunkH = Math.max(1, WORLD_HEIGHT - height - 5);
+
+              const placeLeaf = (nlx, ny, nlz) => {
+                if (nlx >= 0 && nlx < CHUNK_SIZE && nlz >= 0 && nlz < CHUNK_SIZE && ny >= 0 && ny < WORLD_HEIGHT) {
+                  if (blocks[nlx][ny][nlz] === BlockType.AIR) blocks[nlx][ny][nlz] = BlockType.LEAVES;
+                }
+              };
+
+              if (isTundra || isMountain) {
+                // トウヒ型: 細い幹＋円錐状の葉（上ほど細い）
+                const trunkH = Math.min(6 + Math.floor(rndH * 3), maxTrunkH);
+                for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
                   blocks[lx][height + ty][lz] = BlockType.WOOD;
                 }
-              }
-              // Leaves sphere
-              const leafStart = trunkHeight - 1;
-              const leafEnd = trunkHeight + 2;
-              for (let ly = leafStart; ly <= leafEnd; ly++) {
-                const radius = ly === leafEnd ? 1 : 2;
-                for (let dx = -radius; dx <= radius; dx++) {
-                  for (let dz = -radius; dz <= radius; dz++) {
-                    if (dx === 0 && dz === 0 && ly < leafEnd) continue; // trunk goes through
-                    if (Math.abs(dx) + Math.abs(dz) > radius + 1) continue;
-                    const nlx = lx + dx;
-                    const nlz = lz + dz;
-                    const ny = height + ly;
-                    if (nlx >= 0 && nlx < CHUNK_SIZE && nlz >= 0 && nlz < CHUNK_SIZE && ny < WORLD_HEIGHT) {
-                      if (blocks[nlx][ny][nlz] === BlockType.AIR) {
-                        blocks[nlx][ny][nlz] = BlockType.LEAVES;
-                      }
+                // 下から各層で半径が狭まる円錐
+                for (let ly = 1; ly <= trunkH + 1; ly++) {
+                  const radius = Math.max(0, Math.floor((trunkH + 2 - ly) * 0.5));
+                  const ny = height + ly;
+                  for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                      if (dx === 0 && dz === 0) continue;
+                      if (Math.abs(dx) + Math.abs(dz) > radius + (radius > 0 ? 1 : 0)) continue;
+                      placeLeaf(lx + dx, ny, lz + dz);
+                    }
+                  }
+                }
+                // 頂点
+                placeLeaf(lx, height + trunkH + 1, lz);
+              } else if (isForest) {
+                // 大オーク型: 太い幹＋大きな球状の葉
+                const trunkH = Math.min(5 + Math.floor(rndH * 4), maxTrunkH);
+                for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
+                  blocks[lx][height + ty][lz] = BlockType.WOOD;
+                }
+                const leafStart = trunkH - 1;
+                const leafEnd = trunkH + 3;
+                for (let ly = leafStart; ly <= leafEnd; ly++) {
+                  const radius = ly >= leafEnd - 1 ? 1 : 3;
+                  for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                      if (dx === 0 && dz === 0 && ly < leafEnd) continue;
+                      if (dx * dx + dz * dz > (radius + 0.5) * (radius + 0.5)) continue;
+                      placeLeaf(lx + dx, height + ly, lz + dz);
+                    }
+                  }
+                }
+              } else {
+                // 標準オーク型（plains デフォルト）
+                const trunkH = Math.min(4 + Math.floor(rndH * 3), maxTrunkH);
+                for (let ty = 1; ty <= trunkH && height + ty < WORLD_HEIGHT; ty++) {
+                  blocks[lx][height + ty][lz] = BlockType.WOOD;
+                }
+                const leafStart = trunkH - 1;
+                const leafEnd = trunkH + 2;
+                for (let ly = leafStart; ly <= leafEnd; ly++) {
+                  const radius = ly === leafEnd ? 1 : 2;
+                  for (let dx = -radius; dx <= radius; dx++) {
+                    for (let dz = -radius; dz <= radius; dz++) {
+                      if (dx === 0 && dz === 0 && ly < leafEnd) continue;
+                      if (Math.abs(dx) + Math.abs(dz) > radius + 1) continue;
+                      placeLeaf(lx + dx, height + ly, lz + dz);
                     }
                   }
                 }
               }
             }
+          }
+        }
+      }
+    }
+
+    // 地表装飾（草・花・キノコ）の配置
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = cx * CHUNK_SIZE + lx;
+        const wz = cz * CHUNK_SIZE + lz;
+        const height = this.getHeight(wx, wz);
+        const biome = this.getBiome(wx, wz);
+        const surface = blocks[lx][height][lz];
+        const above   = height + 1 < WORLD_HEIGHT ? blocks[lx][height + 1][lz] : BlockType.AIR;
+
+        // 地表が草か雪で、直上が空気のときのみ
+        if (above !== BlockType.AIR) continue;
+        if (surface !== BlockType.GRASS && surface !== BlockType.SNOW) continue;
+
+        const decVal = this.treeNoise.noise2D(wx * 3.5 + 500, wz * 3.5 + 500);
+        const decVal2 = this.treeNoise.noise2D(wx * 5.1 + 800, wz * 5.1 + 200);
+
+        if (biome === 'tundra') {
+          // 雪原: キノコを稀に
+          if (decVal > 0.72) blocks[lx][height + 1][lz] = BlockType.MUSHROOM;
+        } else if (biome === 'forest') {
+          // 森林: 草と花とキノコ
+          if (decVal > 0.0) blocks[lx][height + 1][lz] = BlockType.TALL_GRASS;
+          if (decVal > 0.55 && decVal2 > 0.3) blocks[lx][height + 1][lz] = BlockType.FLOWER;
+          if (decVal > 0.78 && decVal2 < -0.2) blocks[lx][height + 1][lz] = BlockType.MUSHROOM;
+        } else {
+          // 平原・山: 草と花を疎らに
+          if (decVal > 0.3) blocks[lx][height + 1][lz] = BlockType.TALL_GRASS;
+          if (decVal > 0.65 && decVal2 > 0.4) blocks[lx][height + 1][lz] = BlockType.FLOWER;
+        }
+      }
+    }
+
+    // 洞窟生成: 3D ノイズで地下をくり抜く
+    // 2 つのノイズ値を組み合わせてワーム状の洞窟を作る（Minecraft 方式）
+    const CAVE_SCALE_H = 0.045; // 水平スケール（小さいほど大きな洞窟）
+    const CAVE_SCALE_V = 0.07;  // 垂直スケール（大きいほど横長）
+    const CAVE_THRESHOLD = 0.18; // ノイズ絶対値がこれ以下の領域をくり抜く
+    const CAVE_MAX_Y = 40;       // この高度以下にのみ洞窟を生成
+    const CAVE_SURFACE_MARGIN = 4; // 地表からこの深さ以上のみ洞窟化
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = cx * CHUNK_SIZE + lx;
+        const wz = cz * CHUNK_SIZE + lz;
+        const surfaceHeight = this.getHeight(wx, wz);
+
+        for (let y = 1; y < Math.min(CAVE_MAX_Y, surfaceHeight - CAVE_SURFACE_MARGIN); y++) {
+          const block = blocks[lx][y][lz];
+          if (block !== BlockType.STONE && block !== BlockType.IRON_ORE &&
+              block !== BlockType.COAL_ORE && block !== BlockType.GOLD_ORE &&
+              block !== BlockType.DIAMOND_ORE) continue;
+
+          // 2 つの独立したノイズ値がどちらも閾値内ならくり抜く（ワーム洞窟）
+          const n1 = this.caveNoise.noise3D(wx * CAVE_SCALE_H, y * CAVE_SCALE_V, wz * CAVE_SCALE_H);
+          const n2 = this.caveNoise.noise3D(
+            wx * CAVE_SCALE_H + 100.5,
+            y * CAVE_SCALE_V + 33.7,
+            wz * CAVE_SCALE_H + 77.3
+          );
+          if (Math.abs(n1) < CAVE_THRESHOLD && Math.abs(n2) < CAVE_THRESHOLD) {
+            blocks[lx][y][lz] = BlockType.AIR;
+          }
+        }
+      }
+    }
+
+    // 地下湖・溶岩湖: 洞窟の床に液体を配置
+    // AIR ブロックの真下が固体ブロックの場合、そのフロア付近に液体を張る
+    const WATER_LAKE_MAX_Y = 16;  // 地下水が溜まる最大高度
+    const LAVA_LAKE_MAX_Y  = 8;   // 溶岩が溜まる最大高度
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = cx * CHUNK_SIZE + lx;
+        const wz = cz * CHUNK_SIZE + lz;
+        for (let y = 1; y < WATER_LAKE_MAX_Y; y++) {
+          if (blocks[lx][y][lz] !== BlockType.AIR) continue;
+          if (blocks[lx][y - 1][lz] === BlockType.AIR) continue; // フロアがない
+          // ノイズで液体の広がりを決定
+          const lakeVal = this.caveNoise.noise2D(wx * 0.08 + 200.5, wz * 0.08 + 100.3);
+          if (y < LAVA_LAKE_MAX_Y && lakeVal > 0.3) {
+            blocks[lx][y][lz] = BlockType.LAVA;
+          } else if (lakeVal > 0.15) {
+            blocks[lx][y][lz] = BlockType.WATER;
           }
         }
       }
@@ -463,12 +662,31 @@ export class World {
       geometry.addGroup(g.start, g.count, g.materialIndex);
     }
 
+    // 面方向別の明るさ係数（上面が最明るく、底面が最暗い）
+    const FACE_BRIGHTNESS = {
+      top:    1.0,
+      front:  0.85,
+      back:   0.85,
+      right:  0.75,
+      left:   0.75,
+      bottom: 0.60,
+    };
+
     // Build materials array
     const materials = materialList.map(key => {
       const [typeStr, face] = key.split('_');
       const type = Number(typeStr);
       const faceKey = (face === 'top' || face === 'bottom') ? face : 'side';
-      return this.blockMaterials[type]?.[faceKey] || this.blockMaterials[BlockType.STONE].side;
+      const baseMat = this.blockMaterials[type]?.[faceKey] || this.blockMaterials[BlockType.STONE].side;
+      const brightness = FACE_BRIGHTNESS[face] ?? 1.0;
+      if (brightness === 1.0) return baseMat;
+      // クローンして明るさを適用（既存のマテリアルを変更しないようにクローン）
+      const cacheKey = `${key}_dim`;
+      if (this._dimmedMaterialCache.has(cacheKey)) return this._dimmedMaterialCache.get(cacheKey);
+      const mat = baseMat.clone();
+      mat.color.setRGB(brightness, brightness, brightness);
+      this._dimmedMaterialCache.set(cacheKey, mat);
+      return mat;
     });
 
     const mesh = new THREE.Mesh(geometry, materials);

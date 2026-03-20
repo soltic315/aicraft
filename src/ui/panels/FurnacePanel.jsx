@@ -3,7 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { useDraggable } from '../hooks/useDraggable.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
-import { SMELT_RECIPES } from '../../config.js';
+import { SMELT_RECIPES, SMELT_FUELS } from '../../config.js';
 import { BLOCK_NAMES } from '../../blocks.js';
 
 export function FurnacePanel() {
@@ -30,21 +30,24 @@ export function FurnacePanel() {
   const getCount = (type) =>
     slots.reduce((sum, s) => (s.type === type ? sum + s.count : sum), 0);
 
+  // 使用可能な燃料を探す（最初にマッチしたものを使用）
+  const findAvailableFuel = () =>
+    SMELT_FUELS.find((f) => getCount(f.type) >= f.count) ?? null;
+
   const canSmelt = (recipe) =>
-    getCount(recipe.inputType) >= recipe.inputCount &&
-    getCount(recipe.fuelType) >= recipe.fuelCount;
+    getCount(recipe.inputType) >= recipe.inputCount && findAvailableFuel() !== null;
 
   const handleSmelt = (recipe) => {
     const inv = useInventoryStore.getState();
-    // 素材とその確認
-    if (!canSmelt(recipe)) {
+    const fuel = findAvailableFuel();
+    if (!fuel || getCount(recipe.inputType) < recipe.inputCount) {
       window.__aicraft?.sound?.playError();
       useUIStore.getState().showFeedback('精錬失敗: 素材または燃料が不足しています');
       return;
     }
-    // 素材消費
+    // 素材と燃料を消費
     inv.consumeItem(recipe.inputType, recipe.inputCount);
-    inv.consumeItem(recipe.fuelType, recipe.fuelCount);
+    inv.consumeItem(fuel.type, fuel.count);
     // 成果物追加
     inv.addItem(recipe.outputType, recipe.outputCount);
     window.__aicraft?.sound?.playPlace();
@@ -68,7 +71,7 @@ export function FurnacePanel() {
             <span>
               {recipe.label}
               <span class="smelt-fuel-hint">
-                （燃料: {BLOCK_NAMES[recipe.fuelType] ?? '?'} x{recipe.fuelCount}）
+                （燃料: 石炭 x1 / 木材 x2 / 板材 x2）
               </span>
             </span>
             <button
