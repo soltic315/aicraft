@@ -53,6 +53,11 @@ export class Player {
     // ノックバック速度（攻撃を受けたときに加算、毎フレーム減衰）
     this.knockbackVelocity = new THREE.Vector3();
 
+    // カメラヘッドボブ（歩行時の上下揺れ）
+    this._bobPhase = 0;
+    this._bobAmplitude = 0;
+    this._bobTargetAmp = 0;
+
     this._initControls();
   }
 
@@ -197,9 +202,20 @@ export class Player {
 
     this._updateHealth(dt);
 
+    // カメラヘッドボブ: 地上歩行時に自然な揺れを追加
+    const isMovingOnGround = moveDir.length() > 0 && this.onGround && !this.isInWater && !this.isInLava;
+    this._bobTargetAmp = isMovingOnGround ? (this.isSprinting ? 0.072 : 0.042) : 0;
+    // 滑らかに振幅を変化させる
+    this._bobAmplitude += (this._bobTargetAmp - this._bobAmplitude) * Math.min(1, 10 * dt);
+    if (this._bobAmplitude > 0.002) {
+      const bobSpeed = this.isSprinting ? 13 : 8.5;
+      this._bobPhase += bobSpeed * dt;
+    }
+    const bobOffset = Math.sin(this._bobPhase) * this._bobAmplitude;
+
     // Update camera
     this.camera.position.copy(this.position);
-    this.camera.position.y += PLAYER_HEIGHT;
+    this.camera.position.y += PLAYER_HEIGHT + bobOffset;
 
     const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ');
     this.camera.quaternion.setFromEuler(euler);

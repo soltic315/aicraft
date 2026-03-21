@@ -1,5 +1,9 @@
 // Game orchestration: scene, state, game loop, save/load
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
   BlockType,
   BLOCK_NAMES,
@@ -103,10 +107,17 @@ export class GameController {
     // Scene
     this.webglSupported = true;
     try {
-      this.renderer = new THREE.WebGLRenderer({ antialias: true });
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       this.renderer.setClearColor(0x87CEEB);
+      // ACESFilm トーンマッピングで映画的な色彩表現
+      this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      this.renderer.toneMappingExposure = 1.05;
+      this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+      // シャドウマップ（動的影）
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       this.renderer.domElement.style.touchAction = 'none';
       this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
       document.body.appendChild(this.renderer.domElement);
@@ -126,7 +137,36 @@ export class GameController {
     this.scene.add(this.ambientLight);
     this.dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     this.dirLight.position.set(50, 100, 30);
+    // ソフトシャドウ設定（プレイヤー周辺の影を動的に描画）
+    this.dirLight.castShadow = true;
+    this.dirLight.shadow.mapSize.width = 1024;
+    this.dirLight.shadow.mapSize.height = 1024;
+    this.dirLight.shadow.camera.near = 0.5;
+    this.dirLight.shadow.camera.far = 200;
+    this.dirLight.shadow.camera.left   = -72;
+    this.dirLight.shadow.camera.right  =  72;
+    this.dirLight.shadow.camera.top    =  72;
+    this.dirLight.shadow.camera.bottom = -72;
+    this.dirLight.shadow.bias = -0.0005;
+    this.dirLight.shadow.normalBias = 0.02;
     this.scene.add(this.dirLight);
+    this.scene.add(this.dirLight.target); // シャドウカメラターゲットをシーンに追加
+
+    // ポストプロセッシング: EffectComposer + ブルーム
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.45,  // 強度（subtle bloom）
+      0.5,   // 半径
+      0.72   // 閾値（明るい部分のみ）
+    );
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass());
+
+    // 水・溶岩アニメーション用タイムトラッカー
+    this._waterAnimTime = 0;
+    this._lavaAnimTime = 0;
 
     // Reusable temp colors for day/night interpolation
     this._tempSkyColor = new THREE.Color();
@@ -147,14 +187,67 @@ export class GameController {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
 
-        const matOptions = { map: texture, vertexColors: true };
-        if (type === BlockType.WATER) { matOptions.transparent = true; matOptions.opacity = 0.6; matOptions.depthWrite = false; }
-        if (type === BlockType.GLASS) { matOptions.transparent = true; matOptions.opacity = 0.42; }
-        if (type === BlockType.LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
-        if (type === BlockType.JUNGLE_LEAVES) { matOptions.transparent = true; matOptions.opacity = 0.9; }
-        if (type === BlockType.ICE)   { matOptions.transparent = true; matOptions.opacity = 0.92; matOptions.depthWrite = false; }
+        // PBR（物理ベースレンダリング）マテリアルで各ブロックの質感を表現
+        const matOptions = { map: texture, vertexColors: true, roughness: 0.85, metalness: 0.0 };
 
-        this.blockMaterials[type][face] = new THREE.MeshLambertMaterial(matOptions);
+        // 透明・特殊マテリアル設定
+        if (type === BlockType.WATER) {
+          matOptions.transparent = true; matOptions.opacity = 0.72; matOptions.depthWrite = false;
+          matOptions.roughness = 0.05; matOptions.metalness = 0.15; // 水は滑らか・やや光沢
+        }
+        if (type === BlockType.GLASS) {
+          matOptions.transparent = true; matOptions.opacity = 0.42;
+          matOptions.roughness = 0.0; matOptions.metalness = 0.05;
+        }
+        if (type === BlockType.LEAVES) {
+          matOptions.transparent = true; matOptions.opacity = 0.9;
+          matOptions.roughness = 0.95;
+        }
+        if (type === BlockType.JUNGLE_LEAVES) {
+          matOptions.transparent = true; matOptions.opacity = 0.9;
+          matOptions.roughness = 0.95;
+        }
+        if (type === BlockType.ICE) {
+          matOptions.transparent = true; matOptions.opacity = 0.88; matOptions.depthWrite = false;
+          matOptions.roughness = 0.02; matOptions.metalness = 0.08; // 氷は非常に滑らか
+        }
+        // 金属鉱石・素材のメタリック感
+        if (type === BlockType.IRON_ORE) { matOptions.roughness = 0.7; matOptions.metalness = 0.3; }
+        if (type === BlockType.GOLD_ORE) { matOptions.roughness = 0.5; matOptions.metalness = 0.6; }
+        if (type === BlockType.DIAMOND_ORE) { matOptions.roughness = 0.2; matOptions.metalness = 0.15; }
+        if (type === BlockType.AMETHYST_ORE) {
+          matOptions.roughness = 0.25; matOptions.metalness = 0.1;
+          matOptions.emissive = new THREE.Color(0x6020a0);
+          matOptions.emissiveIntensity = 0.18;
+        }
+        if (type === BlockType.DEEPSLATE) { matOptions.roughness = 0.92; matOptions.metalness = 0.05; }
+        // 溶岩: 発光エフェクトでブルームを誘発
+        if (type === BlockType.LAVA) {
+          matOptions.emissive = new THREE.Color(0xff4400);
+          matOptions.emissiveIntensity = 0.8;
+          matOptions.roughness = 0.9;
+        }
+        // ダイヤモンド鉱石: 淡い発光（希少感を演出）
+        if (type === BlockType.DIAMOND_ORE) {
+          matOptions.emissive = new THREE.Color(0x00b8c8);
+          matOptions.emissiveIntensity = 0.12;
+        }
+        // 金鉱石: 淡い金色の光
+        if (type === BlockType.GOLD_ORE) {
+          matOptions.emissive = new THREE.Color(0xb07800);
+          matOptions.emissiveIntensity = 0.1;
+        }
+        // 雪: 白く輝く
+        if (type === BlockType.SNOW) { matOptions.roughness = 0.65; }
+
+        const mat = new THREE.MeshStandardMaterial(matOptions);
+        this.blockMaterials[type][face] = mat;
+
+        // 水・溶岩マテリアルへの参照を保持（アニメーション用）
+        if (type === BlockType.WATER && !this._waterMaterials) this._waterMaterials = [];
+        if (type === BlockType.WATER) this._waterMaterials.push(mat);
+        if (type === BlockType.LAVA && !this._lavaMaterials) this._lavaMaterials = [];
+        if (type === BlockType.LAVA) this._lavaMaterials.push(mat);
       }
     }
 
@@ -315,6 +408,10 @@ export class GameController {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
+      if (this.bloomPass) {
+        this.bloomPass.resolution.set(window.innerWidth, window.innerHeight);
+      }
     });
 
     // Auto-save before unload
@@ -1426,6 +1523,13 @@ export class GameController {
     // スカイドーム更新（常時）
     if (this.gameStarted) {
       this.skyDome.update(dayNight.sunAngle, dayNight.daylight, this.player.position, dt);
+      // シャドウカメラをプレイヤーに追従させる
+      this.dirLight.target.position.set(
+        this.player.position.x,
+        this.player.position.y,
+        this.player.position.z
+      );
+      this.dirLight.target.updateMatrixWorld();
     }
 
     if (this.gameStarted && !useGameStore.getState().paused) {
@@ -1564,6 +1668,36 @@ export class GameController {
       this._validateOpenedFurnace();
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // 水・溶岩テクスチャアニメーション（UVスクロール）
+    if (this.gameStarted) {
+      this._waterAnimTime += dt;
+      this._lavaAnimTime += dt * 0.25;
+      if (this._waterMaterials) {
+        for (const mat of this._waterMaterials) {
+          if (mat.map) {
+            mat.map.offset.set(
+              Math.sin(this._waterAnimTime * 0.4) * 0.08,
+              this._waterAnimTime * 0.06
+            );
+            mat.map.needsUpdate = true;
+          }
+        }
+      }
+      if (this._lavaMaterials) {
+        for (const mat of this._lavaMaterials) {
+          if (mat.map) {
+            mat.map.offset.set(
+              Math.sin(this._lavaAnimTime * 0.3) * 0.05,
+              this._lavaAnimTime * 0.04
+            );
+            mat.map.needsUpdate = true;
+          }
+          // 溶岩の脈動発光
+          mat.emissiveIntensity = 0.65 + Math.sin(this._lavaAnimTime * 1.8) * 0.25;
+        }
+      }
+    }
+
+    this.composer.render();
   }
 }

@@ -3,6 +3,41 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [5.2.0] - 2026-03-22
+
+### Added
+
+- **ポストプロセッシングパイプライン**: EffectComposer + UnrealBloomPass + OutputPass を追加
+  - 溶岩・鉱石・太陽などの明輝部にブルーム（滲み光）エフェクト
+  - ACESFilmicToneMapping で映画的な色彩表現
+  - `OutputPass` でsRGB色空間変換を一元化
+- **PCFソフトシャドウマップ**: 動的シャドウを実装（1024×1024, PCFSoft）
+  - DirectionalLight がプレイヤー周辺（±72ブロック）に影を投影
+  - 全チャンクメッシュが影を投影・受け取り
+  - ゲームループ内でシャドウカメラターゲットをプレイヤーに追従
+- **PBRマテリアル（MeshStandardMaterial）**: 全ブロックをLambertからStandardへ移行
+  - 水・氷・ガラス: 低roughness・微metalness で光沢感
+  - 鉄鉱石・金鉱石: PBR係数でメタリック感
+  - 溶岩: `emissive` + `emissiveIntensity` でブルームを誘発する発光
+  - ダイヤモンド鉱石・金鉱石・アメジスト鉱石: 鉱石の希少感を微光で演出
+- **カメラヘッドボブ**: 歩行・ダッシュ時の自然なカメラ上下揺れ
+  - 通常歩行: 振幅0.042、周期8.5Hz
+  - ダッシュ: 振幅0.072、周期13Hz
+  - 水中・溶岩中は無効化、スムーズに振幅が変化
+- **水・溶岩テクスチャアニメーション**: UVオフセットスクロールで水面・溶岩を動的表現
+  - 水: sin波横ドリフト + 縦スクロール
+  - 溶岩: sin波横ドリフト + 縦スクロール + 脈動発光（`emissiveIntensity` 変化）
+- **AOコントラスト強化**: アンビエントオクルージョンの暗部を0.72→0.62に強化
+- **ビネットエフェクト**: 全画面に周辺光量落ちオーバーレイを常時表示
+
+### Changed
+
+- **ホットバーUI**: backdrop-filter blur・border-radius・アクティブ時のglow追加
+- **体力・空腹HUD**: backdrop-filter blur・border-radius・glow bar・配置改善
+- **クロスヘア**: 中央ドット追加、角丸・drop-shadow でポリッシュ
+- **水中オーバーレイ**: backdrop-filter blur + saturate で水中感強化
+- **ブロックテクスチャ強化**: 石・草・葉・板材のパターンをより詳細に改善
+
 ## [5.1.1] - 2026-03-22
 
 ### Fixed

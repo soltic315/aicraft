@@ -535,19 +535,35 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
 
   // Pattern-specific details
   if (pattern === 'grass_top') {
-    for (let i = 0; i < 20; i++) {
+    // 草の上面: 複数色で密度と自然感を表現
+    for (let i = 0; i < 30; i++) {
       const px = Math.floor(rand() * 16) * pixelSize;
       const py = Math.floor(rand() * 16) * pixelSize;
-      ctx.fillStyle = rand() > 0.5 ? '#4a8530' : '#6ab348';
+      const v = rand();
+      ctx.fillStyle = v > 0.72 ? '#3a7022' : v > 0.45 ? '#4a8530' : v > 0.2 ? '#5da040' : '#72b850';
       ctx.fillRect(px, py, pixelSize, pixelSize);
     }
+    // 花や雑草の点
+    for (let i = 0; i < 5; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = rand() > 0.5 ? '#80c060' : '#6aaa48';
+      ctx.fillRect(px, py, pixelSize, pixelSize * 2);
+    }
   } else if (pattern === 'grass_side') {
-    // Green top strip on side of grass
+    // 草ブロック側面: 上部に草の緑、下部に土
     for (let x = 0; x < 16; x++) {
-      const h = 2 + Math.floor(rand() * 2);
+      const h = 2 + Math.floor(rand() * 3);
       for (let y = 0; y < h; y++) {
-        ctx.fillStyle = rand() > 0.4 ? '#5d9e3e' : '#4a8030';
+        ctx.fillStyle = y === 0 ? '#5da040' : (rand() > 0.4 ? '#4a8030' : '#3a7022');
         ctx.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
+      }
+    }
+    // 土の垂れ下がり
+    for (let x = 0; x < 16; x++) {
+      if (rand() > 0.6) {
+        ctx.fillStyle = '#4a8030';
+        ctx.fillRect(x * pixelSize, 3 * pixelSize, pixelSize, pixelSize);
       }
     }
   } else if (pattern === 'wood_side') {
@@ -568,32 +584,80 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
       ctx.stroke();
     }
   } else if (pattern === 'stone') {
-    // Crack-like features
-    for (let i = 0; i < 8; i++) {
-      const sx = Math.floor(rand() * 14) * pixelSize;
+    // 石: 自然なひび割れとカラーバリエーション
+    // 大きな明暗パッチで石の塊感を表現
+    for (let i = 0; i < 5; i++) {
+      const sx = Math.floor(rand() * 10) * pixelSize;
+      const sy = Math.floor(rand() * 10) * pixelSize;
+      const bw = (3 + Math.floor(rand() * 3)) * pixelSize;
+      const bh = (3 + Math.floor(rand() * 3)) * pixelSize;
+      const brightness = rand() > 0.5 ? 0.06 : -0.06;
+      ctx.fillStyle = adjustBrightness(color, brightness);
+      ctx.fillRect(sx, sy, bw, bh);
+    }
+    // 亀裂ライン（水平・垂直）
+    ctx.fillStyle = adjustBrightness(detailColor, -0.1);
+    for (let i = 0; i < 5; i++) {
+      const sx = Math.floor(rand() * 12) * pixelSize;
       const sy = Math.floor(rand() * 14) * pixelSize;
-      ctx.fillStyle = rand() > 0.5 ? '#707070' : '#909090';
-      ctx.fillRect(sx, sy, pixelSize * 2, pixelSize);
+      if (rand() > 0.5) {
+        ctx.fillRect(sx, sy, pixelSize * (2 + Math.floor(rand() * 3)), pixelSize);
+      } else {
+        ctx.fillRect(sx, sy, pixelSize, pixelSize * (2 + Math.floor(rand() * 3)));
+      }
+    }
+    // 明るいハイライト
+    for (let i = 0; i < 4; i++) {
+      const px = Math.floor(rand() * 15) * pixelSize;
+      const py = Math.floor(rand() * 15) * pixelSize;
+      ctx.fillStyle = adjustBrightness(color, 0.12);
+      ctx.fillRect(px, py, pixelSize, pixelSize);
     }
   } else if (pattern === 'leaves') {
-    for (let i = 0; i < 30; i++) {
+    // 葉: 重なり合う葉の密度感
+    for (let i = 0; i < 40; i++) {
       const px = Math.floor(rand() * 16) * pixelSize;
       const py = Math.floor(rand() * 16) * pixelSize;
-      ctx.fillStyle = rand() > 0.5 ? '#2d6018' : '#48a228';
+      const v = rand();
+      ctx.fillStyle = v > 0.65 ? '#2d6018' : v > 0.35 ? '#3a7a22' : '#4a9030';
+      ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+    // 明るい葉のハイライト
+    for (let i = 0; i < 8; i++) {
+      const px = Math.floor(rand() * 16) * pixelSize;
+      const py = Math.floor(rand() * 16) * pixelSize;
+      ctx.fillStyle = '#5ab840';
       ctx.fillRect(px, py, pixelSize, pixelSize);
     }
   } else if (pattern === 'plank') {
+    // 板材: 木目の方向線と節目
     for (let y = 0; y < 16; y++) {
       if (y % 4 === 0) {
-        ctx.fillStyle = '#9f7441';
-        ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.6));
+        ctx.fillStyle = '#8a6030';
+        ctx.fillRect(0, y * pixelSize, size, Math.max(1, pixelSize * 0.7));
+      }
+      // 縦の板分割（2板構成）
+      if (y % 8 === 0) {
+        const offset = (y < 8) ? 7 : 9;
+        ctx.fillStyle = '#8a6030';
+        ctx.fillRect(offset * pixelSize, y * pixelSize, pixelSize * 0.7, pixelSize * 4);
       }
     }
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 18; i++) {
       const px = Math.floor(rand() * 16) * pixelSize;
       const py = Math.floor(rand() * 16) * pixelSize;
-      ctx.fillStyle = rand() > 0.5 ? '#d1a36a' : '#ae824c';
+      const v = rand();
+      ctx.fillStyle = v > 0.5 ? '#d1a36a' : '#ae824c';
       ctx.fillRect(px, py, pixelSize, pixelSize);
+    }
+    // 節目（木の丸い塊）
+    if (rand() > 0.5) {
+      const nx = (3 + Math.floor(rand() * 8)) * pixelSize;
+      const ny = (3 + Math.floor(rand() * 8)) * pixelSize;
+      ctx.fillStyle = '#8a6030';
+      ctx.fillRect(nx, ny, pixelSize * 2, pixelSize * 2);
+      ctx.fillStyle = '#704e26';
+      ctx.fillRect(nx + pixelSize * 0.5, ny + pixelSize * 0.5, pixelSize, pixelSize);
     }
   } else if (pattern === 'glass') {
     ctx.strokeStyle = 'rgba(235, 248, 255, 0.7)';

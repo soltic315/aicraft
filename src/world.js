@@ -388,6 +388,9 @@ export class World {
 
     const mesh = new THREE.Mesh(geometry, materials);
     mesh.name = `chunk_${cx}_${cz}`;
+    // 動的シャドウ（影の投影・受け取り）
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     chunk.mesh = mesh;
 
     if (chunk.boundingBox && this._hasFrustum) {

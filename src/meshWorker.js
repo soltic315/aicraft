@@ -62,8 +62,8 @@ const aoVal = (s1, s2, c) => {
   return 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
 };
 
-// AO値(0-3)を明るさ(0.72-1.0)に変換
-const toBright = (v) => 0.72 + 0.28 * (v / 3);
+// AO値(0-3)を明るさ(0.62-1.0)に変換（より深みのある影）
+const toBright = (v) => 0.62 + 0.38 * (v / 3);
 
 function computeAO(blockType, face, x, y, z) {
   if (blockType === BlockType.WATER || blockType === BlockType.GLASS ||
