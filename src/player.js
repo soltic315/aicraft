@@ -48,6 +48,7 @@ export class Player {
     this.health = this.maxHealth;
     this.healthRegenCooldown = 0;
     this.regenEnabled = true;
+    this.armorDefense = 0; // 防具による防御ポイント（1pt = 4%軽減, 最大20pt = 80%）
 
     // ノックバック速度（攻撃を受けたときに加算、毎フレーム減衰）
     this.knockbackVelocity = new THREE.Vector3();
@@ -419,8 +420,14 @@ export class Player {
     const damage = Math.max(0, Number(amount) || 0);
     if (damage <= 0) return 0;
 
+    // 防具による軽減（最大80%、1ポイント = 4%軽減）
+    const reduction = Math.min(0.8, this.armorDefense * 0.04);
+    const effectiveDamage = reduction > 0
+      ? Math.max(1, Math.ceil(damage * (1 - reduction)))
+      : damage;
+
     const prev = this.health;
-    this.health = Math.max(0, this.health - damage);
+    this.health = Math.max(0, this.health - effectiveDamage);
     this.healthRegenCooldown = HEALTH_REGEN_COOLDOWN;
     return prev - this.health;
   }

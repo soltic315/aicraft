@@ -90,6 +90,21 @@ export const BlockType = {
   CHICKEN: 66,        // 生チキン（ニワトリからドロップ）
   COOKED_CHICKEN: 67, // 焼きチキン（かまどで精錬）
   MUSHROOM_STEW: 68,  // きのこシチュー（キノコからクラフト）
+  // 防具（革）
+  LEATHER_HELMET:     69,
+  LEATHER_CHESTPLATE: 70,
+  LEATHER_LEGGINGS:   71,
+  LEATHER_BOOTS:      72,
+  // 防具（鉄）
+  IRON_HELMET:        73,
+  IRON_CHESTPLATE:    74,
+  IRON_LEGGINGS:      75,
+  IRON_BOOTS:         76,
+  // 防具（ダイヤモンド）
+  DIAMOND_HELMET:     77,
+  DIAMOND_CHESTPLATE: 78,
+  DIAMOND_LEGGINGS:   79,
+  DIAMOND_BOOTS:      80,
 };
 
 export const BLOCK_NAMES = {
@@ -161,6 +176,19 @@ export const BLOCK_NAMES = {
   [BlockType.CHICKEN]: '生チキン',
   [BlockType.COOKED_CHICKEN]: '焼きチキン',
   [BlockType.MUSHROOM_STEW]: 'きのこシチュー',
+  // 防具
+  [BlockType.LEATHER_HELMET]:     '革のヘルメット',
+  [BlockType.LEATHER_CHESTPLATE]: '革のチェストプレート',
+  [BlockType.LEATHER_LEGGINGS]:   '革のレギンス',
+  [BlockType.LEATHER_BOOTS]:      '革のブーツ',
+  [BlockType.IRON_HELMET]:        '鉄のヘルメット',
+  [BlockType.IRON_CHESTPLATE]:    '鉄のチェストプレート',
+  [BlockType.IRON_LEGGINGS]:      '鉄のレギンス',
+  [BlockType.IRON_BOOTS]:         '鉄のブーツ',
+  [BlockType.DIAMOND_HELMET]:     'ダイヤのヘルメット',
+  [BlockType.DIAMOND_CHESTPLATE]: 'ダイヤのチェストプレート',
+  [BlockType.DIAMOND_LEGGINGS]:   'ダイヤのレギンス',
+  [BlockType.DIAMOND_BOOTS]:      'ダイヤのブーツ',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -1516,6 +1544,124 @@ function generateStringIcon() {
   return c;
 }
 
+// ---- 防具アイコン生成 ----
+
+// ヘルメットアイコン
+function generateHelmetIcon(color, shine) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // ヘルメット本体
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(16, 16, 11, Math.PI, 0);
+  ctx.rect(5, 16, 22, 8);
+  ctx.fill();
+  // 光沢
+  ctx.fillStyle = shine;
+  ctx.beginPath();
+  ctx.arc(12, 11, 4, Math.PI * 1.2, Math.PI * 1.8);
+  ctx.fill();
+  // 縁取り
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(16, 16, 11, Math.PI, 0);
+  ctx.moveTo(5, 16); ctx.lineTo(5, 24); ctx.lineTo(27, 24); ctx.lineTo(27, 16);
+  ctx.stroke();
+  return c;
+}
+
+// チェストプレートアイコン
+function generateChestplateIcon(color, shine) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 胴体
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(5, 6, 22, 20, 2);
+  ctx.fill();
+  // 光沢
+  ctx.fillStyle = shine;
+  ctx.beginPath();
+  ctx.roundRect(7, 8, 10, 8, 1);
+  ctx.fill();
+  // 縁取り・線
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(5.75, 6.75, 20.5, 18.5);
+  ctx.beginPath();
+  ctx.moveTo(16, 6); ctx.lineTo(16, 26);
+  ctx.stroke();
+  return c;
+}
+
+// レギンスアイコン
+function generateLeggingsIcon(color, shine) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 左脚
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(4, 4, 10, 24, 2);
+  ctx.fill();
+  // 右脚
+  ctx.beginPath();
+  ctx.roundRect(18, 4, 10, 24, 2);
+  ctx.fill();
+  // 光沢
+  ctx.fillStyle = shine;
+  ctx.fillRect(6, 6, 6, 10);
+  ctx.fillRect(20, 6, 6, 10);
+  // 縁取り
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(4.75, 4.75, 8.5, 22.5);
+  ctx.strokeRect(18.75, 4.75, 8.5, 22.5);
+  return c;
+}
+
+// ブーツアイコン
+function generateBootsIcon(color, shine) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const ctx = c.getContext('2d');
+  // 左ブーツ
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(3, 8, 10, 18, 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(3, 23, 12, 6, 1); // つま先
+  ctx.fill();
+  // 右ブーツ
+  ctx.beginPath();
+  ctx.roundRect(19, 8, 10, 18, 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(17, 23, 12, 6, 1);
+  ctx.fill();
+  // 光沢
+  ctx.fillStyle = shine;
+  ctx.fillRect(5, 10, 6, 8);
+  ctx.fillRect(21, 10, 6, 8);
+  // 縁取り
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(3.75, 8.75, 8.5, 16.5);
+  ctx.strokeRect(19.75, 8.75, 8.5, 16.5);
+  return c;
+}
+
+// 素材色定義
+const ARMOR_COLORS = {
+  leather:  { base: '#a0642c', shine: 'rgba(200,140,80,0.5)'  },
+  iron:     { base: '#c0c8d0', shine: 'rgba(230,240,255,0.5)' },
+  diamond:  { base: '#40d8e8', shine: 'rgba(160,255,255,0.6)' },
+};
+
 // Generate a small icon canvas for hotbar display
 export function generateBlockIcon(type) {
   if (type === BlockType.APPLE)       return generateAppleIcon();
@@ -1550,6 +1696,19 @@ export function generateBlockIcon(type) {
   if (type === BlockType.CHICKEN)       return generateChickenIcon();
   if (type === BlockType.COOKED_CHICKEN) return generateCookedChickenIcon();
   if (type === BlockType.MUSHROOM_STEW) return generateMushroomStewIcon();
+  // 防具アイコン
+  if (type === BlockType.LEATHER_HELMET)     return generateHelmetIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);
+  if (type === BlockType.LEATHER_CHESTPLATE) return generateChestplateIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);
+  if (type === BlockType.LEATHER_LEGGINGS)   return generateLeggingsIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);
+  if (type === BlockType.LEATHER_BOOTS)      return generateBootsIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);
+  if (type === BlockType.IRON_HELMET)        return generateHelmetIcon(ARMOR_COLORS.iron.base, ARMOR_COLORS.iron.shine);
+  if (type === BlockType.IRON_CHESTPLATE)    return generateChestplateIcon(ARMOR_COLORS.iron.base, ARMOR_COLORS.iron.shine);
+  if (type === BlockType.IRON_LEGGINGS)      return generateLeggingsIcon(ARMOR_COLORS.iron.base, ARMOR_COLORS.iron.shine);
+  if (type === BlockType.IRON_BOOTS)         return generateBootsIcon(ARMOR_COLORS.iron.base, ARMOR_COLORS.iron.shine);
+  if (type === BlockType.DIAMOND_HELMET)     return generateHelmetIcon(ARMOR_COLORS.diamond.base, ARMOR_COLORS.diamond.shine);
+  if (type === BlockType.DIAMOND_CHESTPLATE) return generateChestplateIcon(ARMOR_COLORS.diamond.base, ARMOR_COLORS.diamond.shine);
+  if (type === BlockType.DIAMOND_LEGGINGS)   return generateLeggingsIcon(ARMOR_COLORS.diamond.base, ARMOR_COLORS.diamond.shine);
+  if (type === BlockType.DIAMOND_BOOTS)      return generateBootsIcon(ARMOR_COLORS.diamond.base, ARMOR_COLORS.diamond.shine);
 
   const colors = BLOCK_COLORS[type];
   if (!colors) return null;

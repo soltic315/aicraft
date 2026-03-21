@@ -68,7 +68,7 @@ export class World {
     this._pendingMeshDispatch = [];   // { cx, cz } メッシュワーカーへの送信待ちキュー
     this._inFlightMeshes = new Set(); // メッシュワーカーで処理中のチャンクキー
     this._completedMeshes = [];       // { cx, cz, geoData } 完成したジオメトリ
-    const meshWorkerCount = Math.max(1, Math.min(2, Math.floor((navigator.hardwareConcurrency ?? 4) / 2)));
+    const meshWorkerCount = Math.max(1, Math.min(3, Math.floor((navigator.hardwareConcurrency ?? 4) / 2)));
     this._meshWorkers = [];
     this._freeMeshWorkerIndices = [];
     for (let i = 0; i < meshWorkerCount; i++) {

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { BlockType } from './blocks.js';
 
-export const GAME_VERSION = '3.51.0';
+export const GAME_VERSION = '4.0.0';
 export const SETTINGS_STORAGE_KEY = 'aicraft_settings_v1';
 export const SAVE_STORAGE_KEY = 'aicraft_save_slot_1';
 export const SAVE_SCHEMA_VERSION = 2;
@@ -36,6 +36,10 @@ export const ALL_ITEM_TYPES = [
   BlockType.DEEPSLATE, BlockType.AMETHYST_ORE, BlockType.AMETHYST,
   BlockType.WOOL, BlockType.FEATHER,
   BlockType.CHICKEN, BlockType.COOKED_CHICKEN, BlockType.MUSHROOM_STEW,
+  // 防具
+  BlockType.LEATHER_HELMET, BlockType.LEATHER_CHESTPLATE, BlockType.LEATHER_LEGGINGS, BlockType.LEATHER_BOOTS,
+  BlockType.IRON_HELMET,    BlockType.IRON_CHESTPLATE,    BlockType.IRON_LEGGINGS,    BlockType.IRON_BOOTS,
+  BlockType.DIAMOND_HELMET, BlockType.DIAMOND_CHESTPLATE, BlockType.DIAMOND_LEGGINGS, BlockType.DIAMOND_BOOTS,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
@@ -255,6 +259,19 @@ export const ITEM_STACK_LIMITS = {
   [BlockType.DIAMOND_AXE]:      1,
   [BlockType.DIAMOND_SHOVEL]:   1,
   [BlockType.BOW]:              1,
+  // 防具もスタック1
+  [BlockType.LEATHER_HELMET]:     1,
+  [BlockType.LEATHER_CHESTPLATE]: 1,
+  [BlockType.LEATHER_LEGGINGS]:   1,
+  [BlockType.LEATHER_BOOTS]:      1,
+  [BlockType.IRON_HELMET]:        1,
+  [BlockType.IRON_CHESTPLATE]:    1,
+  [BlockType.IRON_LEGGINGS]:      1,
+  [BlockType.IRON_BOOTS]:         1,
+  [BlockType.DIAMOND_HELMET]:     1,
+  [BlockType.DIAMOND_CHESTPLATE]: 1,
+  [BlockType.DIAMOND_LEGGINGS]:   1,
+  [BlockType.DIAMOND_BOOTS]:      1,
 };
 
 export function getStackLimit(type) {
@@ -268,7 +285,7 @@ export const FOOD_ITEMS = new Set([
   BlockType.CHICKEN, BlockType.COOKED_CHICKEN, BlockType.MUSHROOM_STEW,
 ]);
 
-// 設置不可アイテムのセット（ツール類 + 素材アイテム）
+// 設置不可アイテムのセット（ツール類 + 素材アイテム + 防具）
 export const TOOL_ITEMS = new Set([
   BlockType.PICKAXE,       BlockType.AXE,       BlockType.SHOVEL,
   BlockType.STONE_PICKAXE, BlockType.STONE_AXE, BlockType.STONE_SHOVEL,
@@ -279,7 +296,30 @@ export const TOOL_ITEMS = new Set([
   BlockType.LEATHER, BlockType.BONE, BlockType.STRING,
   BlockType.AMETHYST, BlockType.WOOL, BlockType.FEATHER,
   BlockType.LAVA, // 溶岩は設置不可（液体は破壊のみ）
+  // 防具
+  BlockType.LEATHER_HELMET, BlockType.LEATHER_CHESTPLATE, BlockType.LEATHER_LEGGINGS, BlockType.LEATHER_BOOTS,
+  BlockType.IRON_HELMET,    BlockType.IRON_CHESTPLATE,    BlockType.IRON_LEGGINGS,    BlockType.IRON_BOOTS,
+  BlockType.DIAMOND_HELMET, BlockType.DIAMOND_CHESTPLATE, BlockType.DIAMOND_LEGGINGS, BlockType.DIAMOND_BOOTS,
 ]);
+
+// 防具アイテムのセット（クリックで装備できる）
+export const ARMOR_ITEMS = new Set([
+  BlockType.LEATHER_HELMET, BlockType.LEATHER_CHESTPLATE, BlockType.LEATHER_LEGGINGS, BlockType.LEATHER_BOOTS,
+  BlockType.IRON_HELMET,    BlockType.IRON_CHESTPLATE,    BlockType.IRON_LEGGINGS,    BlockType.IRON_BOOTS,
+  BlockType.DIAMOND_HELMET, BlockType.DIAMOND_CHESTPLATE, BlockType.DIAMOND_LEGGINGS, BlockType.DIAMOND_BOOTS,
+]);
+
+// モブ討伐XP報酬
+export const MOB_XP_REWARDS = {
+  'ゾンビ':     5,
+  'スケルトン': 7,
+  'クリーパー': 12,
+  'クモ':       5,
+  '牛':         1,
+  '豚':         1,
+  '羊':         2,
+  'ニワトリ':   1,
+};
 
 // 全アイテムを 0 から開始（ブロック破壊・クラフトで入手）
 export const STARTER_INVENTORY = {
@@ -342,6 +382,13 @@ export const STARTER_INVENTORY = {
   [BlockType.CHICKEN]: 0,
   [BlockType.COOKED_CHICKEN]: 0,
   [BlockType.MUSHROOM_STEW]: 0,
+  // 防具
+  [BlockType.LEATHER_HELMET]: 0,     [BlockType.LEATHER_CHESTPLATE]: 0,
+  [BlockType.LEATHER_LEGGINGS]: 0,   [BlockType.LEATHER_BOOTS]: 0,
+  [BlockType.IRON_HELMET]: 0,        [BlockType.IRON_CHESTPLATE]: 0,
+  [BlockType.IRON_LEGGINGS]: 0,      [BlockType.IRON_BOOTS]: 0,
+  [BlockType.DIAMOND_HELMET]: 0,     [BlockType.DIAMOND_CHESTPLATE]: 0,
+  [BlockType.DIAMOND_LEGGINGS]: 0,   [BlockType.DIAMOND_BOOTS]: 0,
 };
 
 export const CRAFT_RECIPES = [
@@ -618,6 +665,94 @@ export const CRAFT_RECIPES = [
     produces: { [BlockType.DIAMOND_SHOVEL]: 1 },
     repairTool: 'diamond_shovel',
     repairAmount: 200,
+  },
+  // ---- 防具クラフトレシピ（作業台必要）----
+  // 革防具
+  {
+    id: 'leather_helmet',
+    label: '革 x5 -> 革のヘルメット x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.LEATHER]: 5 },
+    produces: { [BlockType.LEATHER_HELMET]: 1 },
+  },
+  {
+    id: 'leather_chestplate',
+    label: '革 x8 -> 革のチェストプレート x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.LEATHER]: 8 },
+    produces: { [BlockType.LEATHER_CHESTPLATE]: 1 },
+  },
+  {
+    id: 'leather_leggings',
+    label: '革 x7 -> 革のレギンス x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.LEATHER]: 7 },
+    produces: { [BlockType.LEATHER_LEGGINGS]: 1 },
+  },
+  {
+    id: 'leather_boots',
+    label: '革 x4 -> 革のブーツ x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.LEATHER]: 4 },
+    produces: { [BlockType.LEATHER_BOOTS]: 1 },
+  },
+  // 鉄防具
+  {
+    id: 'iron_helmet',
+    label: '鉄インゴット x5 -> 鉄のヘルメット x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.IRON_INGOT]: 5 },
+    produces: { [BlockType.IRON_HELMET]: 1 },
+  },
+  {
+    id: 'iron_chestplate',
+    label: '鉄インゴット x8 -> 鉄のチェストプレート x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.IRON_INGOT]: 8 },
+    produces: { [BlockType.IRON_CHESTPLATE]: 1 },
+  },
+  {
+    id: 'iron_leggings',
+    label: '鉄インゴット x7 -> 鉄のレギンス x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.IRON_INGOT]: 7 },
+    produces: { [BlockType.IRON_LEGGINGS]: 1 },
+  },
+  {
+    id: 'iron_boots',
+    label: '鉄インゴット x4 -> 鉄のブーツ x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.IRON_INGOT]: 4 },
+    produces: { [BlockType.IRON_BOOTS]: 1 },
+  },
+  // ダイヤモンド防具
+  {
+    id: 'diamond_helmet',
+    label: 'ダイヤモンド x5 -> ダイヤのヘルメット x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 5 },
+    produces: { [BlockType.DIAMOND_HELMET]: 1 },
+  },
+  {
+    id: 'diamond_chestplate',
+    label: 'ダイヤモンド x8 -> ダイヤのチェストプレート x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 8 },
+    produces: { [BlockType.DIAMOND_CHESTPLATE]: 1 },
+  },
+  {
+    id: 'diamond_leggings',
+    label: 'ダイヤモンド x7 -> ダイヤのレギンス x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 7 },
+    produces: { [BlockType.DIAMOND_LEGGINGS]: 1 },
+  },
+  {
+    id: 'diamond_boots',
+    label: 'ダイヤモンド x4 -> ダイヤのブーツ x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 4 },
+    produces: { [BlockType.DIAMOND_BOOTS]: 1 },
   },
 ];
 

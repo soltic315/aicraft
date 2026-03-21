@@ -6,6 +6,7 @@ export const useGameStore = create((set) => ({
   fps: 0,
   loading: false,
   loadingMessage: '',
+  loadingProgress: 0, // 読み込み進捗（0〜100）
   isDead: false,
   paused: false,
   difficulty: DIFFICULTY.NORMAL, // 難易度（デフォルト: ノーマル）
@@ -26,8 +27,8 @@ export const useGameStore = create((set) => ({
     set({ fps });
   },
 
-  setLoading(loading, message = '') {
-    set({ loading, loadingMessage: message });
+  setLoading(loading, message = '', progress = 0) {
+    set({ loading, loadingMessage: message, loadingProgress: progress });
   },
 
   setDead(isDead) {

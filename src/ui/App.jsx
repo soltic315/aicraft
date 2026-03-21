@@ -6,7 +6,10 @@ import { DeathScreen } from './screens/DeathScreen.jsx';
 import { Hotbar } from './hotbar/Hotbar.jsx';
 import { HealthDisplay } from './health/HealthDisplay.jsx';
 import { HungerDisplay } from './health/HungerDisplay.jsx';
+import { ArmorDisplay } from './health/ArmorDisplay.jsx';
+import { XpDisplay } from './health/XpDisplay.jsx';
 import { InfoOverlay } from './info/InfoOverlay.jsx';
+import { TimeDisplay } from './info/TimeDisplay.jsx';
 import { SettingsPanel } from './panels/SettingsPanel.jsx';
 import { CraftPanel } from './panels/CraftPanel.jsx';
 import { ChestPanel } from './panels/ChestPanel.jsx';
@@ -18,6 +21,8 @@ import { WaterOverlay } from './overlays/WaterOverlay.jsx';
 import { HitOverlay } from './overlays/HitOverlay.jsx';
 import { KeyHints } from './overlays/KeyHints.jsx';
 import { ResumeHint } from './overlays/ResumeHint.jsx';
+import { AchievementToast } from './overlays/AchievementToast.jsx';
+
 export function App() {
   const anyPanelOpen = useUIStore((s) =>
     s.inventoryOpen || s.craftOpen || s.settingsOpen || s.chestOpen || s.furnaceOpen
@@ -38,15 +43,19 @@ export function App() {
       <BreakProgress />
       <ActionFeedback />
       <InfoOverlay />
+      <TimeDisplay />
       <KeyHints />
       <HealthDisplay />
       <HungerDisplay />
+      <ArmorDisplay />
+      <XpDisplay />
       <SettingsPanel />
       <InventoryPanel />
       <CraftPanel />
       <ChestPanel />
       <FurnacePanel />
       <Hotbar />
+      <AchievementToast />
     </>
   );
 }

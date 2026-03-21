@@ -20,6 +20,7 @@ import {
   PLACE_COOLDOWN,
   FOOD_ITEMS,
   TOOL_ITEMS,
+  ARMOR_ITEMS,
   CHEST_STORAGE_LIMIT,
   DAY_SKY_COLOR,
   NIGHT_SKY_COLOR,
@@ -56,6 +57,7 @@ import {
   PLAYER_ATTACK_COOLDOWN,
   KNOCKBACK_MOB_FORCE,
   KNOCKBACK_PLAYER_FORCE,
+  MOB_XP_REWARDS,
 } from './config.js';
 import { useSettingsStore } from './stores/settingsStore.js';
 import { useInventoryStore } from './stores/inventoryStore.js';
@@ -68,6 +70,9 @@ import { useUIStore } from './stores/uiStore.js';
 import { useToolStore } from './stores/toolStore.js';
 import { useHungerStore } from './stores/hungerStore.js';
 import { useDurabilityStore } from './stores/durabilityStore.js';
+import { useArmorStore, ARMOR_TYPE_TO_SLOT, BLOCK_TO_ARMOR_KEY, ARMOR_KEY_TO_BLOCK } from './stores/armorStore.js';
+import { useXpStore } from './stores/xpStore.js';
+import { useAchievementStore } from './stores/achievementStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
 import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './DroppedItemManager.js';
@@ -217,6 +222,21 @@ export class GameController {
     // ツール耐久値を復元
     if (this.savedGame?.player?.toolDurability) {
       useDurabilityStore.getState().restoreFromSave(this.savedGame.player.toolDurability);
+    }
+
+    // 防具を復元
+    if (this.savedGame?.player?.armorEquipped) {
+      useArmorStore.getState().restoreFromSave(this.savedGame.player.armorEquipped);
+    }
+
+    // XPを復元
+    if (Number.isFinite(this.savedGame?.player?.xp)) {
+      useXpStore.getState().restoreFromSave(this.savedGame.player.xp);
+    }
+
+    // 実績を復元
+    if (this.savedGame?.achievements) {
+      useAchievementStore.getState().restoreFromSave(this.savedGame.achievements);
     }
 
     this.lastPlaceTime = 0;
@@ -439,13 +459,17 @@ export class GameController {
         await this.world.preloadAllChunks(
           this.player.position.x,
           this.player.position.z,
-          (_current, _total, message) => {
-            useGameStore.getState().setLoading(true, message);
+          (current, total, message) => {
+            const progress = Math.round((current / total) * 100);
+            useGameStore.getState().setLoading(true, message, progress);
           }
         );
 
         this.gameStarted = true;
         this._onSlotChanged(); // 初期スロットのツールを装備
+
+        // 防具の防御値をプレイヤーに反映
+        this.player.armorDefense = useArmorStore.getState().totalDefense;
 
         // 難易度設定をMobManagerに適用
         const difficulty = useGameStore.getState().difficulty;
@@ -499,6 +523,8 @@ export class GameController {
       this.mobManager.removeAll();
       this.droppedItemManager.removeAll();
       this.player.spawn();
+      // 防具の防御値をリスポーン後も維持
+      this.player.armorDefense = useArmorStore.getState().totalDefense;
       this.player.lock();
     });
 
@@ -537,6 +563,69 @@ export class GameController {
         count,
       );
     });
+
+    // ---- 防具装備イベント ----
+    this.eventBus.on('equip-armor-from-slot', ({ slotIndex, armorType }) => {
+      if (!this.gameStarted) return;
+      const armorStore = useArmorStore.getState();
+      // armorType は BlockType 数値 → キー文字列に変換
+      const armorKey = BLOCK_TO_ARMOR_KEY[armorType];
+      if (!armorKey) return;
+      const slot = ARMOR_TYPE_TO_SLOT[armorKey];
+      if (!slot) return;
+      // 既存装備がある場合はインベントリに戻す（BlockType数値で返す）
+      const currentEquippedKey = armorStore.equipped[slot];
+      if (currentEquippedKey) {
+        const currentBlockType = ARMOR_KEY_TO_BLOCK[currentEquippedKey];
+        if (currentBlockType != null) useInventoryStore.getState().addItem(currentBlockType, 1);
+      }
+      // スロットから防具を消費して装備
+      useInventoryStore.getState().removeFromSlot(slotIndex, 1);
+      armorStore.equipAutoSlot(armorType);
+      this.player.armorDefense = useArmorStore.getState().totalDefense;
+      useUIStore.getState().showFeedback(`${BLOCK_NAMES[armorType] ?? '防具'} を装備`, 1000);
+      this.sound.playPlace();
+      this._checkArmorAchievements();
+    });
+
+    this.eventBus.on('unequip-armor', ({ slot, type }) => {
+      if (!this.gameStarted) return;
+      useArmorStore.getState().unequip(slot);
+      // type はBlockType数値
+      if (type != null) useInventoryStore.getState().addItem(type, 1);
+      this.player.armorDefense = useArmorStore.getState().totalDefense;
+      useUIStore.getState().showFeedback('防具を外した', 800);
+    });
+  }
+
+  // ---- 実績チェック ----
+  _checkArmorAchievements() {
+    const achieveStore = useAchievementStore.getState();
+    achieveStore.unlock('first_armor');
+    const { equipped } = useArmorStore.getState();
+    const allEquipped = ['helmet', 'chestplate', 'leggings', 'boots'].every((s) => equipped[s] != null);
+    if (allEquipped) achieveStore.unlock('full_armor');
+  }
+
+  _checkMiningAchievement(blockType, dropType) {
+    const achieveStore = useAchievementStore.getState();
+    if (blockType === BlockType.WOOD || blockType === BlockType.JUNGLE_WOOD ||
+        blockType === BlockType.ACACIA_WOOD || blockType === BlockType.CHERRY_WOOD) {
+      achieveStore.unlock('first_wood');
+    }
+    if (blockType === BlockType.STONE || blockType === BlockType.COBBLESTONE) {
+      achieveStore.unlock('first_stone');
+    }
+    if (dropType === BlockType.IRON_INGOT || blockType === BlockType.IRON_ORE) {
+      achieveStore.unlock('first_iron');
+    }
+    if (dropType === BlockType.DIAMOND || blockType === BlockType.DIAMOND_ORE) {
+      achieveStore.unlock('first_diamond');
+    }
+  }
+
+  _checkCraftAchievement() {
+    useAchievementStore.getState().unlock('first_craft');
   }
 
   // ---- Settings ----
@@ -607,6 +696,9 @@ export class GameController {
       const settings = useSettingsStore.getState();
       const { hunger } = useHungerStore.getState();
       const { durability } = useDurabilityStore.getState();
+      const { equipped: armorEquipped } = useArmorStore.getState();
+      const { xp } = useXpStore.getState();
+      const { unlocked: achievements } = useAchievementStore.getState();
 
       const data = {
         schemaVersion: SAVE_SCHEMA_VERSION,
@@ -625,7 +717,10 @@ export class GameController {
           selectedTool,
           hunger,
           toolDurability: { ...durability },
+          armorEquipped: { ...armorEquipped },
+          xp,
         },
+        achievements: [...achievements],
         settings: {
           sensitivity: settings.sensitivity,
           bgmVolume: settings.bgmVolume,
@@ -674,6 +769,10 @@ export class GameController {
     useHungerStore.getState().reset();
     useDurabilityStore.getState().reset();
     useBreakStore.getState().reset();
+    useArmorStore.getState().reset();
+    useXpStore.getState().reset();
+    useAchievementStore.getState().reset();
+    this.player.armorDefense = 0;
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
     this.particleManager.dispose();
@@ -714,6 +813,7 @@ export class GameController {
 
     this.sound.playPlace();
     useUIStore.getState().showFeedback(`クラフト成功: ${recipe.label}`, 900);
+    this._checkCraftAchievement();
     return true;
   }
 
@@ -1014,6 +1114,7 @@ export class GameController {
     if (hit && hit.blockType === BlockType.FURNACE) {
       useUIStore.getState().openFurnacePanel();
       this.openedFurnacePos = hit.blockPos;
+      useAchievementStore.getState().unlock('first_furnace');
       if (document.pointerLockElement === document.body) {
         document.exitPointerLock();
       }
@@ -1134,6 +1235,9 @@ export class GameController {
 
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.sound.playBreak();
+
+      // ブロック採掘実績チェック
+      this._checkMiningAchievement(hit.blockType, dropType);
 
       // ツール耐久値を消耗
       if (hasTool && selectedTool) {
@@ -1398,7 +1502,20 @@ export class GameController {
         }
       }
       const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
-      useUIStore.getState().showFeedback(`${name}を倒した！`, 1200);
+      // XP付与
+      const xpReward = MOB_XP_REWARDS[name] ?? 3;
+      const { levelUp, newLevel } = useXpStore.getState().addXp(xpReward);
+      if (levelUp) {
+        useUIStore.getState().showFeedback(`レベルアップ！ Lv.${newLevel} ✨ (+${xpReward} XP)`, 2000);
+        this.sound.playPlace(); // レベルアップ音
+        // レベル実績チェック
+        if (newLevel >= 5)  useAchievementStore.getState().unlock('reach_level5');
+        if (newLevel >= 10) useAchievementStore.getState().unlock('reach_level10');
+      } else {
+        useUIStore.getState().showFeedback(`${name}を倒した！ +${xpReward} XP`, 1200);
+      }
+      // 初討伐実績
+      useAchievementStore.getState().unlock('first_kill');
     }
   }
 
@@ -1569,6 +1686,10 @@ export class GameController {
       // 昼夜切り替わり時にBGMを変更（戦闘中でなければ）
       if (prevIsDay !== dayNight.isDay && this.sound.bgmStarted && this.sound._bgmMode !== 'combat') {
         this.sound.setBGMMode(dayNight.isDay ? 'day' : 'night');
+        // 夜→朝に変わった時（=夜を生き延びた）
+        if (dayNight.isDay && prevIsDay === false && !useGameStore.getState().isDead) {
+          useAchievementStore.getState().unlock('night_survive');
+        }
       }
       this._prevIsDay = dayNight.isDay;
       usePlayerStore.getState().syncFromPlayer(this.player);
