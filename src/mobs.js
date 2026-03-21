@@ -212,8 +212,20 @@ class BaseMob {
     if (!this.isAlive) return;
     this.isAlive = false;
     this.scene.remove(this.mesh);
-    for (const mat of Object.values(this._mats)) mat.dispose();
-    this.mesh.traverse((obj) => { if (obj.isMesh) obj.geometry.dispose(); });
+    for (const mat of Object.values(this._mats)) {
+      if (mat.map) mat.map.dispose();
+      mat.dispose();
+    }
+    this.mesh.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.geometry.dispose();
+        // _matsで管理されていない追加マテリアルも解放
+        if (obj.material && !Object.values(this._mats).includes(obj.material)) {
+          if (obj.material.map) obj.material.map.dispose();
+          obj.material.dispose();
+        }
+      }
+    });
   }
 
   _restoreColors() {

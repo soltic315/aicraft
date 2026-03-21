@@ -111,6 +111,9 @@ export class World {
     this._pendingMeshDispatch = [];
     this._inFlightMeshes.clear();
     this._completedMeshes = [];
+    // 面輝度キャッシュのマテリアルを解放（メモリリーク防止）
+    for (const mat of this._dimmedMaterialCache.values()) mat.dispose();
+    this._dimmedMaterialCache.clear();
 
     // 新しいシードで地形ノイズを再生成
     this.seed = Math.floor(Math.random() * 100000);

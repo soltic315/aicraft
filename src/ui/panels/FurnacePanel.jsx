@@ -39,15 +39,23 @@ export function FurnacePanel() {
 
   const handleSmelt = (recipe) => {
     const inv = useInventoryStore.getState();
-    const fuel = findAvailableFuel();
-    if (!fuel || getCount(recipe.inputType) < recipe.inputCount) {
+    // 最新のストア状態で素材・燃料を確認（古いクロージャの slots を使わない）
+    const freshSlots = inv.slots;
+    const freshGetCount = (type) => freshSlots.reduce((sum, s) => (s.type === type ? sum + s.count : sum), 0);
+    const freshFuel = SMELT_FUELS.find((f) => freshGetCount(f.type) >= f.count) ?? null;
+    if (!freshFuel || freshGetCount(recipe.inputType) < recipe.inputCount) {
       window.__aicraft?.sound?.playError();
       useUIStore.getState().showFeedback('精錬失敗: 素材または燃料が不足しています');
       return;
     }
-    // 素材と燃料を消費
-    inv.consumeItem(recipe.inputType, recipe.inputCount);
-    inv.consumeItem(fuel.type, fuel.count);
+    // 素材と燃料を消費（両方成功した場合のみ成果物を追加）
+    const inputOk = inv.consumeItem(recipe.inputType, recipe.inputCount);
+    const fuelOk = inv.consumeItem(freshFuel.type, freshFuel.count);
+    if (!inputOk || !fuelOk) {
+      window.__aicraft?.sound?.playError();
+      useUIStore.getState().showFeedback('精錬失敗: 素材または燃料が不足しています');
+      return;
+    }
     // 成果物追加
     inv.addItem(recipe.outputType, recipe.outputCount);
     window.__aicraft?.sound?.playPlace();

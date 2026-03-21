@@ -283,6 +283,7 @@ export class GameController {
     this.frameCount = 0;
     this.fpsTime = 0;
     this.fps = 0;
+    this._prevIsDay = null; // 未初期化を防ぐ（最初のフレームで不正なBGM変更を防止）
   }
 
   init() {
@@ -453,9 +454,9 @@ export class GameController {
         this.player.spawn();
         if (this.savedGame?.player?.position && typeof this.savedGame.player.position === 'object') {
           this.player.position.set(
-            Number(this.savedGame.player.position.x) || this.player.position.x,
-            Number(this.savedGame.player.position.y) || this.player.position.y,
-            Number(this.savedGame.player.position.z) || this.player.position.z
+            Number.isFinite(Number(this.savedGame.player.position.x)) ? Number(this.savedGame.player.position.x) : this.player.position.x,
+            Number.isFinite(Number(this.savedGame.player.position.y)) ? Number(this.savedGame.player.position.y) : this.player.position.y,
+            Number.isFinite(Number(this.savedGame.player.position.z)) ? Number(this.savedGame.player.position.z) : this.player.position.z
           );
         }
         if (Number.isFinite(this.savedGame?.player?.yaw)) {
@@ -702,6 +703,8 @@ export class GameController {
     this.saveSystem.stopAutoSave();
     // ポインターロック解除
     document.exitPointerLock();
+    // キー状態をリセット（タイトルへ戻った際にキーが押し続けとして残らないように）
+    this.player.keys = {};
     // 内部状態をリセット
     this.gameStarted = false;
     this.savedGame = null;
@@ -716,12 +719,18 @@ export class GameController {
     useXpStore.getState().reset();
     useAchievementStore.getState().reset();
     this.player.armorDefense = 0;
+    // 作業台・修理台・かまどの開放状態をリセット
+    this.openedCraftingTablePos = null;
+    this.openedRepairTablePos = null;
+    this.openedFurnacePos = null;
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
     this.particleManager.dispose();
     // ワールドのチャンク・地形データをリセット
     this.world.reset();
-    // ストアをタイトル状態へ（設定パネルも閉じる）
+    // 全UIパネルを閉じる
+    useUIStore.getState().closeInventoryPanels();
+    useUIStore.getState().setChestOpen(false);
     if (useUIStore.getState().settingsOpen) {
       useUIStore.getState().toggleSettings();
     }
