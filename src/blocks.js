@@ -503,6 +503,14 @@ function seededRandom(seed) {
   };
 }
 
+// アイコン用 32x32 キャンバスを生成するヘルパー
+function makeIcon(drawFn) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  drawFn(c.getContext('2d'));
+  return c;
+}
+
 function generateFaceTexture(color, detailColor, size, seed, pattern) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
@@ -981,678 +989,621 @@ export function generateTextures() {
 
 // 生肉アイコン
 function generateBeefIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 肉本体（赤）
-  ctx.fillStyle = '#b83020';
-  ctx.beginPath();
-  ctx.roundRect(6, 11, 20, 13, 3);
-  ctx.fill();
-  // 脂の白いライン
-  ctx.fillStyle = '#e8c090';
-  ctx.fillRect(7, 15, 18, 3);
-  // 上部のハイライト
-  ctx.fillStyle = '#d04030';
-  ctx.fillRect(8, 9, 14, 4);
-  // 骨（白い棒）
-  ctx.fillStyle = '#f2eedc';
-  ctx.fillRect(6, 12, 3, 9);
-  ctx.beginPath();
-  ctx.arc(7.5, 12, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 肉本体（赤）
+    ctx.fillStyle = '#b83020';
+    ctx.beginPath();
+    ctx.roundRect(6, 11, 20, 13, 3);
+    ctx.fill();
+    // 脂の白いライン
+    ctx.fillStyle = '#e8c090';
+    ctx.fillRect(7, 15, 18, 3);
+    // 上部のハイライト
+    ctx.fillStyle = '#d04030';
+    ctx.fillRect(8, 9, 14, 4);
+    // 骨（白い棒）
+    ctx.fillStyle = '#f2eedc';
+    ctx.fillRect(6, 12, 3, 9);
+    ctx.beginPath();
+    ctx.arc(7.5, 12, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // 焼き肉アイコン
 function generateCookedBeefIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 肉本体（焦げ茶）
-  ctx.fillStyle = '#6b2810';
-  ctx.beginPath();
-  ctx.roundRect(6, 11, 20, 13, 3);
-  ctx.fill();
-  // 焼き色のライン
-  ctx.fillStyle = '#4a1808';
-  ctx.fillRect(7, 15, 18, 3);
-  // 表面ハイライト
-  ctx.fillStyle = '#8b3818';
-  ctx.fillRect(8, 9, 14, 4);
-  // 骨
-  ctx.fillStyle = '#f2eedc';
-  ctx.fillRect(6, 12, 3, 9);
-  ctx.beginPath();
-  ctx.arc(7.5, 12, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 肉本体（焦げ茶）
+    ctx.fillStyle = '#6b2810';
+    ctx.beginPath();
+    ctx.roundRect(6, 11, 20, 13, 3);
+    ctx.fill();
+    // 焼き色のライン
+    ctx.fillStyle = '#4a1808';
+    ctx.fillRect(7, 15, 18, 3);
+    // 表面ハイライト
+    ctx.fillStyle = '#8b3818';
+    ctx.fillRect(8, 9, 14, 4);
+    // 骨
+    ctx.fillStyle = '#f2eedc';
+    ctx.fillRect(6, 12, 3, 9);
+    ctx.beginPath();
+    ctx.arc(7.5, 12, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // リンゴ専用アイコンを描画
 function generateAppleIcon() {
-  const size = 32;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
+  return makeIcon((ctx) => {
+    const size = 32;
+    const cx = size / 2;
+    const cy = size / 2 + 2;
+    const r = size * 0.36;
 
-  const cx = size / 2;
-  const cy = size / 2 + 2;
-  const r = size * 0.36;
+    // リンゴ本体（赤）
+    ctx.fillStyle = '#d63020';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
 
-  // リンゴ本体（赤）
-  ctx.fillStyle = '#d63020';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+    // ハイライト
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
 
-  // ハイライト
-  ctx.fillStyle = 'rgba(255,255,255,0.28)';
-  ctx.beginPath();
-  ctx.arc(cx - r * 0.28, cy - r * 0.28, r * 0.28, 0, Math.PI * 2);
-  ctx.fill();
+    // 茎
+    ctx.strokeStyle = '#3a2010';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r);
+    ctx.lineTo(cx + 1.5, cy - r - 5);
+    ctx.stroke();
 
-  // 茎
-  ctx.strokeStyle = '#3a2010';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - r);
-  ctx.lineTo(cx + 1.5, cy - r - 5);
-  ctx.stroke();
-
-  // 葉
-  ctx.fillStyle = '#2e7a18';
-  ctx.beginPath();
-  ctx.ellipse(cx + 4, cy - r - 3, 4, 2, Math.PI / 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  return canvas;
+    // 葉
+    ctx.fillStyle = '#2e7a18';
+    ctx.beginPath();
+    ctx.ellipse(cx + 4, cy - r - 3, 4, 2, Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // ツルハシアイコン（headColor で素材色変更可）
 function generatePickaxeIcon(headColor = '#B0BCC8') {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#7B4F2E';
-  ctx.lineWidth = 3.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(7, 25); ctx.lineTo(20, 12); ctx.stroke();
-  ctx.fillStyle = headColor;
-  ctx.fillRect(16, 8, 12, 4);
-  ctx.fillRect(16, 12, 4, 5);
-  ctx.fillRect(24, 3, 4, 5);
-  return c;
+  return makeIcon((ctx) => {
+    ctx.strokeStyle = '#7B4F2E';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(7, 25); ctx.lineTo(20, 12); ctx.stroke();
+    ctx.fillStyle = headColor;
+    ctx.fillRect(16, 8, 12, 4);
+    ctx.fillRect(16, 12, 4, 5);
+    ctx.fillRect(24, 3, 4, 5);
+  });
 }
 
 // 斧アイコン
 function generateAxeIcon(headColor = '#B0BCC8') {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#7B4F2E';
-  ctx.lineWidth = 3.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(22, 25); ctx.lineTo(12, 10); ctx.stroke();
-  ctx.fillStyle = headColor;
-  ctx.beginPath();
-  ctx.moveTo(8, 5); ctx.lineTo(20, 8); ctx.lineTo(17, 20); ctx.lineTo(8, 16);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = adjustBrightness(headColor, 0.15);
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(8, 5); ctx.lineTo(8, 16); ctx.stroke();
-  return c;
+  return makeIcon((ctx) => {
+    ctx.strokeStyle = '#7B4F2E';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(22, 25); ctx.lineTo(12, 10); ctx.stroke();
+    ctx.fillStyle = headColor;
+    ctx.beginPath();
+    ctx.moveTo(8, 5); ctx.lineTo(20, 8); ctx.lineTo(17, 20); ctx.lineTo(8, 16);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = adjustBrightness(headColor, 0.15);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(8, 5); ctx.lineTo(8, 16); ctx.stroke();
+  });
 }
 
 // シャベルアイコン
 function generateShovelIcon(headColor = '#B0BCC8') {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#7B4F2E';
-  ctx.lineWidth = 3.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(16, 4); ctx.lineTo(16, 20); ctx.stroke();
-  ctx.fillStyle = headColor;
-  ctx.fillRect(10, 18, 12, 8);
-  ctx.beginPath();
-  ctx.arc(16, 26, 6, 0, Math.PI);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    ctx.strokeStyle = '#7B4F2E';
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(16, 4); ctx.lineTo(16, 20); ctx.stroke();
+    ctx.fillStyle = headColor;
+    ctx.fillRect(10, 18, 12, 8);
+    ctx.beginPath();
+    ctx.arc(16, 26, 6, 0, Math.PI);
+    ctx.fill();
+  });
 }
 
 // 石炭アイコン
 function generateCoalIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath();
-  ctx.roundRect(8, 8, 16, 16, 3);
-  ctx.fill();
-  ctx.fillStyle = '#303030';
-  ctx.fillRect(10, 10, 6, 6);
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(16, 16, 6, 6);
-  return c;
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, 16, 16, 3);
+    ctx.fill();
+    ctx.fillStyle = '#303030';
+    ctx.fillRect(10, 10, 6, 6);
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(16, 16, 6, 6);
+  });
 }
 
 // 金インゴットアイコン
 function generateGoldIngotIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#c89010';
-  ctx.beginPath();
-  ctx.moveTo(6, 22); ctx.lineTo(10, 10); ctx.lineTo(22, 10); ctx.lineTo(26, 22);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#e8b820';
-  ctx.fillRect(10, 10, 12, 4);
-  ctx.fillStyle = '#a07008';
-  ctx.fillRect(6, 20, 20, 2);
-  return c;
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#c89010';
+    ctx.beginPath();
+    ctx.moveTo(6, 22); ctx.lineTo(10, 10); ctx.lineTo(22, 10); ctx.lineTo(26, 22);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#e8b820';
+    ctx.fillRect(10, 10, 12, 4);
+    ctx.fillStyle = '#a07008';
+    ctx.fillRect(6, 20, 20, 2);
+  });
 }
 
 // ダイヤモンドアイコン
 function generateDiamondIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#20c8d0';
-  // ダイヤ形
-  ctx.beginPath();
-  ctx.moveTo(16, 5); ctx.lineTo(27, 14); ctx.lineTo(16, 27); ctx.lineTo(5, 14);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#80e8ec';
-  ctx.beginPath();
-  ctx.moveTo(16, 5); ctx.lineTo(22, 12); ctx.lineTo(16, 14); ctx.lineTo(10, 12);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#10a8b0';
-  ctx.beginPath();
-  ctx.moveTo(16, 14); ctx.lineTo(22, 12); ctx.lineTo(27, 14); ctx.lineTo(16, 27);
-  ctx.closePath(); ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#20c8d0';
+    // ダイヤ形
+    ctx.beginPath();
+    ctx.moveTo(16, 5); ctx.lineTo(27, 14); ctx.lineTo(16, 27); ctx.lineTo(5, 14);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#80e8ec';
+    ctx.beginPath();
+    ctx.moveTo(16, 5); ctx.lineTo(22, 12); ctx.lineTo(16, 14); ctx.lineTo(10, 12);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#10a8b0';
+    ctx.beginPath();
+    ctx.moveTo(16, 14); ctx.lineTo(22, 12); ctx.lineTo(27, 14); ctx.lineTo(16, 27);
+    ctx.closePath(); ctx.fill();
+  });
 }
 
 // 鉄インゴットアイコン
 function generateIronIngotIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // インゴット本体（台形）
-  ctx.fillStyle = '#b8c0c8';
-  ctx.beginPath();
-  ctx.moveTo(6, 22); ctx.lineTo(10, 10); ctx.lineTo(22, 10); ctx.lineTo(26, 22);
-  ctx.closePath(); ctx.fill();
-  // 上面ハイライト
-  ctx.fillStyle = '#d4dce4';
-  ctx.fillRect(10, 10, 12, 4);
-  // 下影
-  ctx.fillStyle = '#8890a0';
-  ctx.fillRect(6, 20, 20, 2);
-  return c;
+  return makeIcon((ctx) => {
+    // インゴット本体（台形）
+    ctx.fillStyle = '#b8c0c8';
+    ctx.beginPath();
+    ctx.moveTo(6, 22); ctx.lineTo(10, 10); ctx.lineTo(22, 10); ctx.lineTo(26, 22);
+    ctx.closePath(); ctx.fill();
+    // 上面ハイライト
+    ctx.fillStyle = '#d4dce4';
+    ctx.fillRect(10, 10, 12, 4);
+    // 下影
+    ctx.fillStyle = '#8890a0';
+    ctx.fillRect(6, 20, 20, 2);
+  });
 }
 
 // 革アイコン
 function generateLeatherIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#8B5A2B';
-  ctx.beginPath();
-  ctx.roundRect(5, 8, 22, 16, 4);
-  ctx.fill();
-  ctx.fillStyle = '#6B3E1E';
-  ctx.fillRect(8, 11, 16, 3);
-  ctx.fillRect(8, 18, 16, 3);
-  ctx.fillStyle = '#A0724A';
-  ctx.fillRect(6, 9, 20, 2);
-  return c;
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#8B5A2B';
+    ctx.beginPath();
+    ctx.roundRect(5, 8, 22, 16, 4);
+    ctx.fill();
+    ctx.fillStyle = '#6B3E1E';
+    ctx.fillRect(8, 11, 16, 3);
+    ctx.fillRect(8, 18, 16, 3);
+    ctx.fillStyle = '#A0724A';
+    ctx.fillRect(6, 9, 20, 2);
+  });
 }
 
 // 骨アイコン
 function generateBoneIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f0ece0';
-  // 本体（斜め棒）
-  ctx.save();
-  ctx.translate(16, 16);
-  ctx.rotate(Math.PI / 4);
-  ctx.fillRect(-2, -10, 4, 20);
-  ctx.restore();
-  // 端の丸み
-  const ends = [[7, 7], [25, 25], [7, 25], [25, 7]];
-  for (const [ex, ey] of ends) {
-    ctx.beginPath();
-    ctx.arc(ex, ey, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  return c;
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#f0ece0';
+    // 本体（斜め棒）
+    ctx.save();
+    ctx.translate(16, 16);
+    ctx.rotate(Math.PI / 4);
+    ctx.fillRect(-2, -10, 4, 20);
+    ctx.restore();
+    // 端の丸み
+    const ends = [[7, 7], [25, 25], [7, 25], [25, 7]];
+    for (const [ex, ey] of ends) {
+      ctx.beginPath();
+      ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
 }
 
 // 矢アイコン
 function generateArrowIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 矢柄（茶色）
-  ctx.strokeStyle = '#8B6914';
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(6, 26);
-  ctx.lineTo(24, 8);
-  ctx.stroke();
-  // 矢じり（灰色）
-  ctx.fillStyle = '#a0a8b0';
-  ctx.beginPath();
-  ctx.moveTo(24, 8);
-  ctx.lineTo(20, 10);
-  ctx.lineTo(22, 14);
-  ctx.closePath();
-  ctx.fill();
-  // 羽根（白）
-  ctx.fillStyle = '#e8e8e8';
-  ctx.beginPath();
-  ctx.moveTo(6, 26);
-  ctx.lineTo(4, 20);
-  ctx.lineTo(10, 22);
-  ctx.closePath();
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 矢柄（茶色）
+    ctx.strokeStyle = '#8B6914';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(6, 26);
+    ctx.lineTo(24, 8);
+    ctx.stroke();
+    // 矢じり（灰色）
+    ctx.fillStyle = '#a0a8b0';
+    ctx.beginPath();
+    ctx.moveTo(24, 8);
+    ctx.lineTo(20, 10);
+    ctx.lineTo(22, 14);
+    ctx.closePath();
+    ctx.fill();
+    // 羽根（白）
+    ctx.fillStyle = '#e8e8e8';
+    ctx.beginPath();
+    ctx.moveTo(6, 26);
+    ctx.lineTo(4, 20);
+    ctx.lineTo(10, 22);
+    ctx.closePath();
+    ctx.fill();
+  });
 }
 
 // 弓アイコン
 function generateBowIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 弓本体（弧）
-  ctx.strokeStyle = '#8B5E3C';
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.arc(20, 16, 12, Math.PI * 0.6, Math.PI * 1.4);
-  ctx.stroke();
-  // 弦（細い線）
-  ctx.strokeStyle = '#e8e8d0';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(11, 7);
-  ctx.lineTo(11, 25);
-  ctx.stroke();
-  // 矢（弦に添える）
-  ctx.strokeStyle = '#a0784a';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(11, 16);
-  ctx.lineTo(22, 16);
-  ctx.stroke();
-  return c;
+  return makeIcon((ctx) => {
+    // 弓本体（弧）
+    ctx.strokeStyle = '#8B5E3C';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(20, 16, 12, Math.PI * 0.6, Math.PI * 1.4);
+    ctx.stroke();
+    // 弦（細い線）
+    ctx.strokeStyle = '#e8e8d0';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(11, 7);
+    ctx.lineTo(11, 25);
+    ctx.stroke();
+    // 矢（弦に添える）
+    ctx.strokeStyle = '#a0784a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(11, 16);
+    ctx.lineTo(22, 16);
+    ctx.stroke();
+  });
 }
 
 // 豚肉アイコン
 function generatePorkChopIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 肉本体（ピンク系）
-  ctx.fillStyle = '#d06878';
-  ctx.beginPath();
-  ctx.roundRect(6, 10, 20, 14, 3);
-  ctx.fill();
-  ctx.fillStyle = '#f0a8a8';
-  ctx.fillRect(8, 12, 16, 4);
-  ctx.fillStyle = '#b04858';
-  ctx.fillRect(7, 18, 18, 4);
-  // 骨
-  ctx.fillStyle = '#f2eedc';
-  ctx.fillRect(6, 11, 3, 10);
-  ctx.beginPath();
-  ctx.arc(7.5, 11, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 肉本体（ピンク系）
+    ctx.fillStyle = '#d06878';
+    ctx.beginPath();
+    ctx.roundRect(6, 10, 20, 14, 3);
+    ctx.fill();
+    ctx.fillStyle = '#f0a8a8';
+    ctx.fillRect(8, 12, 16, 4);
+    ctx.fillStyle = '#b04858';
+    ctx.fillRect(7, 18, 18, 4);
+    // 骨
+    ctx.fillStyle = '#f2eedc';
+    ctx.fillRect(6, 11, 3, 10);
+    ctx.beginPath();
+    ctx.arc(7.5, 11, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // 焼き豚肉アイコン
 function generateCookedPorkIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 焼けた肉（暗い茶）
-  ctx.fillStyle = '#703018';
-  ctx.beginPath();
-  ctx.roundRect(6, 10, 20, 14, 3);
-  ctx.fill();
-  ctx.fillStyle = '#5a2010';
-  ctx.fillRect(8, 14, 16, 4);
-  ctx.fillStyle = '#8a4020';
-  ctx.fillRect(7, 10, 18, 4);
-  // 骨
-  ctx.fillStyle = '#f2eedc';
-  ctx.fillRect(6, 11, 3, 10);
-  ctx.beginPath();
-  ctx.arc(7.5, 11, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 焼けた肉（暗い茶）
+    ctx.fillStyle = '#703018';
+    ctx.beginPath();
+    ctx.roundRect(6, 10, 20, 14, 3);
+    ctx.fill();
+    ctx.fillStyle = '#5a2010';
+    ctx.fillRect(8, 14, 16, 4);
+    ctx.fillStyle = '#8a4020';
+    ctx.fillRect(7, 10, 18, 4);
+    // 骨
+    ctx.fillStyle = '#f2eedc';
+    ctx.fillRect(6, 11, 3, 10);
+    ctx.beginPath();
+    ctx.arc(7.5, 11, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(7.5, 21, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // アメジストアイコン
 function generateAmethystIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#9050c8';
-  // 六角形風の結晶
-  ctx.beginPath();
-  ctx.moveTo(16, 4);
-  ctx.lineTo(24, 10);
-  ctx.lineTo(24, 22);
-  ctx.lineTo(16, 28);
-  ctx.lineTo(8, 22);
-  ctx.lineTo(8, 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#c080f0';
-  ctx.beginPath();
-  ctx.moveTo(16, 4);
-  ctx.lineTo(24, 10);
-  ctx.lineTo(16, 14);
-  ctx.lineTo(8, 10);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#6030a0';
-  ctx.beginPath();
-  ctx.moveTo(8, 22);
-  ctx.lineTo(16, 28);
-  ctx.lineTo(16, 14);
-  ctx.lineTo(8, 10);
-  ctx.closePath();
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#9050c8';
+    // 六角形風の結晶
+    ctx.beginPath();
+    ctx.moveTo(16, 4);
+    ctx.lineTo(24, 10);
+    ctx.lineTo(24, 22);
+    ctx.lineTo(16, 28);
+    ctx.lineTo(8, 22);
+    ctx.lineTo(8, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#c080f0';
+    ctx.beginPath();
+    ctx.moveTo(16, 4);
+    ctx.lineTo(24, 10);
+    ctx.lineTo(16, 14);
+    ctx.lineTo(8, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#6030a0';
+    ctx.beginPath();
+    ctx.moveTo(8, 22);
+    ctx.lineTo(16, 28);
+    ctx.lineTo(16, 14);
+    ctx.lineTo(8, 10);
+    ctx.closePath();
+    ctx.fill();
+  });
 }
 
 // 羊毛アイコン
 function generateWoolIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f0ece8';
-  ctx.beginPath();
-  ctx.roundRect(4, 8, 24, 18, 5);
-  ctx.fill();
-  // 毛並みの波状表現
-  for (let x = 4; x < 28; x += 5) {
-    ctx.fillStyle = '#d8d0c8';
+  return makeIcon((ctx) => {
+    ctx.fillStyle = '#f0ece8';
     ctx.beginPath();
-    ctx.arc(x + 2, 12, 4, Math.PI, 0);
+    ctx.roundRect(4, 8, 24, 18, 5);
     ctx.fill();
-  }
-  ctx.fillStyle = '#e0dcd8';
-  ctx.fillRect(5, 13, 22, 10);
-  return c;
+    // 毛並みの波状表現
+    for (let x = 4; x < 28; x += 5) {
+      ctx.fillStyle = '#d8d0c8';
+      ctx.beginPath();
+      ctx.arc(x + 2, 12, 4, Math.PI, 0);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#e0dcd8';
+    ctx.fillRect(5, 13, 22, 10);
+  });
 }
 
 // 羽根アイコン
 function generateFeatherIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 羽根の軸
-  ctx.strokeStyle = '#b8a890';
-  ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(6, 26);
-  ctx.lineTo(26, 6);
-  ctx.stroke();
-  // 羽根のウェブ（片側）
-  ctx.fillStyle = '#f0ece8';
-  ctx.beginPath();
-  ctx.moveTo(6, 26);
-  ctx.quadraticCurveTo(6, 10, 26, 6);
-  ctx.quadraticCurveTo(20, 16, 6, 26);
-  ctx.fill();
-  ctx.fillStyle = '#d8d4d0';
-  ctx.beginPath();
-  ctx.moveTo(6, 26);
-  ctx.quadraticCurveTo(14, 22, 26, 6);
-  ctx.quadraticCurveTo(18, 20, 6, 26);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 羽根の軸
+    ctx.strokeStyle = '#b8a890';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(6, 26);
+    ctx.lineTo(26, 6);
+    ctx.stroke();
+    // 羽根のウェブ（片側）
+    ctx.fillStyle = '#f0ece8';
+    ctx.beginPath();
+    ctx.moveTo(6, 26);
+    ctx.quadraticCurveTo(6, 10, 26, 6);
+    ctx.quadraticCurveTo(20, 16, 6, 26);
+    ctx.fill();
+    ctx.fillStyle = '#d8d4d0';
+    ctx.beginPath();
+    ctx.moveTo(6, 26);
+    ctx.quadraticCurveTo(14, 22, 26, 6);
+    ctx.quadraticCurveTo(18, 20, 6, 26);
+    ctx.fill();
+  });
 }
 
 // 生チキンアイコン
 function generateChickenIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 鶏肉本体（淡いピンク）
-  ctx.fillStyle = '#e0a890';
-  ctx.beginPath();
-  ctx.roundRect(7, 10, 18, 14, 4);
-  ctx.fill();
-  ctx.fillStyle = '#c88878';
-  ctx.fillRect(8, 14, 16, 4);
-  ctx.fillStyle = '#e8c0b0';
-  ctx.fillRect(8, 11, 16, 4);
-  // 骨
-  ctx.fillStyle = '#f2eedc';
-  ctx.fillRect(7, 11, 3, 10);
-  ctx.beginPath();
-  ctx.arc(8.5, 11, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(8.5, 21, 3, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 鶏肉本体（淡いピンク）
+    ctx.fillStyle = '#e0a890';
+    ctx.beginPath();
+    ctx.roundRect(7, 10, 18, 14, 4);
+    ctx.fill();
+    ctx.fillStyle = '#c88878';
+    ctx.fillRect(8, 14, 16, 4);
+    ctx.fillStyle = '#e8c0b0';
+    ctx.fillRect(8, 11, 16, 4);
+    // 骨
+    ctx.fillStyle = '#f2eedc';
+    ctx.fillRect(7, 11, 3, 10);
+    ctx.beginPath();
+    ctx.arc(8.5, 11, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8.5, 21, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // 焼きチキンアイコン
 function generateCookedChickenIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 焼き色（黄茶）
-  ctx.fillStyle = '#c07840';
-  ctx.beginPath();
-  ctx.roundRect(7, 10, 18, 14, 4);
-  ctx.fill();
-  ctx.fillStyle = '#a05820';
-  ctx.fillRect(8, 14, 16, 4);
-  ctx.fillStyle = '#d89050';
-  ctx.fillRect(8, 11, 16, 4);
-  // 骨
-  ctx.fillStyle = '#f2eedc';
-  ctx.fillRect(7, 11, 3, 10);
-  ctx.beginPath();
-  ctx.arc(8.5, 11, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(8.5, 21, 3, 0, Math.PI * 2);
-  ctx.fill();
-  return c;
+  return makeIcon((ctx) => {
+    // 焼き色（黄茶）
+    ctx.fillStyle = '#c07840';
+    ctx.beginPath();
+    ctx.roundRect(7, 10, 18, 14, 4);
+    ctx.fill();
+    ctx.fillStyle = '#a05820';
+    ctx.fillRect(8, 14, 16, 4);
+    ctx.fillStyle = '#d89050';
+    ctx.fillRect(8, 11, 16, 4);
+    // 骨
+    ctx.fillStyle = '#f2eedc';
+    ctx.fillRect(7, 11, 3, 10);
+    ctx.beginPath();
+    ctx.arc(8.5, 11, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(8.5, 21, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
 }
 
 // きのこシチューアイコン
 function generateMushroomStewIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // ボウル
-  ctx.fillStyle = '#8b5e3c';
-  ctx.beginPath();
-  ctx.moveTo(5, 14);
-  ctx.lineTo(27, 14);
-  ctx.lineTo(24, 26);
-  ctx.lineTo(8, 26);
-  ctx.closePath();
-  ctx.fill();
-  // スープ（赤茶）
-  ctx.fillStyle = '#c04020';
-  ctx.beginPath();
-  ctx.moveTo(7, 16);
-  ctx.lineTo(25, 16);
-  ctx.lineTo(23, 24);
-  ctx.lineTo(9, 24);
-  ctx.closePath();
-  ctx.fill();
-  // キノコのかけら
-  ctx.fillStyle = '#e06030';
-  ctx.beginPath();
-  ctx.arc(14, 18, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#f0e8e0';
-  ctx.fillRect(12, 18, 4, 3);
-  // ボウルの縁
-  ctx.fillStyle = '#6a4024';
-  ctx.fillRect(5, 13, 22, 3);
-  return c;
+  return makeIcon((ctx) => {
+    // ボウル
+    ctx.fillStyle = '#8b5e3c';
+    ctx.beginPath();
+    ctx.moveTo(5, 14);
+    ctx.lineTo(27, 14);
+    ctx.lineTo(24, 26);
+    ctx.lineTo(8, 26);
+    ctx.closePath();
+    ctx.fill();
+    // スープ（赤茶）
+    ctx.fillStyle = '#c04020';
+    ctx.beginPath();
+    ctx.moveTo(7, 16);
+    ctx.lineTo(25, 16);
+    ctx.lineTo(23, 24);
+    ctx.lineTo(9, 24);
+    ctx.closePath();
+    ctx.fill();
+    // キノコのかけら
+    ctx.fillStyle = '#e06030';
+    ctx.beginPath();
+    ctx.arc(14, 18, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f0e8e0';
+    ctx.fillRect(12, 18, 4, 3);
+    // ボウルの縁
+    ctx.fillStyle = '#6a4024';
+    ctx.fillRect(5, 13, 22, 3);
+  });
 }
 
 // 糸アイコン
 function generateStringIcon() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.strokeStyle = '#e8e8d8';
-  ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
-  // 糸を縦に3本
-  for (let i = 0; i < 3; i++) {
-    const x = 8 + i * 8;
-    ctx.beginPath();
-    ctx.moveTo(x, 4);
-    ctx.bezierCurveTo(x - 3, 12, x + 3, 20, x, 28);
-    ctx.stroke();
-  }
-  return c;
+  return makeIcon((ctx) => {
+    ctx.strokeStyle = '#e8e8d8';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    // 糸を縦に3本
+    for (let i = 0; i < 3; i++) {
+      const x = 8 + i * 8;
+      ctx.beginPath();
+      ctx.moveTo(x, 4);
+      ctx.bezierCurveTo(x - 3, 12, x + 3, 20, x, 28);
+      ctx.stroke();
+    }
+  });
 }
 
 // ---- 防具アイコン生成 ----
 
 // ヘルメットアイコン
 function generateHelmetIcon(color, shine) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // ヘルメット本体
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(16, 16, 11, Math.PI, 0);
-  ctx.rect(5, 16, 22, 8);
-  ctx.fill();
-  // 光沢
-  ctx.fillStyle = shine;
-  ctx.beginPath();
-  ctx.arc(12, 11, 4, Math.PI * 1.2, Math.PI * 1.8);
-  ctx.fill();
-  // 縁取り
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(16, 16, 11, Math.PI, 0);
-  ctx.moveTo(5, 16); ctx.lineTo(5, 24); ctx.lineTo(27, 24); ctx.lineTo(27, 16);
-  ctx.stroke();
-  return c;
+  return makeIcon((ctx) => {
+    // ヘルメット本体
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(16, 16, 11, Math.PI, 0);
+    ctx.rect(5, 16, 22, 8);
+    ctx.fill();
+    // 光沢
+    ctx.fillStyle = shine;
+    ctx.beginPath();
+    ctx.arc(12, 11, 4, Math.PI * 1.2, Math.PI * 1.8);
+    ctx.fill();
+    // 縁取り
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(16, 16, 11, Math.PI, 0);
+    ctx.moveTo(5, 16); ctx.lineTo(5, 24); ctx.lineTo(27, 24); ctx.lineTo(27, 16);
+    ctx.stroke();
+  });
 }
 
 // チェストプレートアイコン
 function generateChestplateIcon(color, shine) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 胴体
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(5, 6, 22, 20, 2);
-  ctx.fill();
-  // 光沢
-  ctx.fillStyle = shine;
-  ctx.beginPath();
-  ctx.roundRect(7, 8, 10, 8, 1);
-  ctx.fill();
-  // 縁取り・線
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(5.75, 6.75, 20.5, 18.5);
-  ctx.beginPath();
-  ctx.moveTo(16, 6); ctx.lineTo(16, 26);
-  ctx.stroke();
-  return c;
+  return makeIcon((ctx) => {
+    // 胴体
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(5, 6, 22, 20, 2);
+    ctx.fill();
+    // 光沢
+    ctx.fillStyle = shine;
+    ctx.beginPath();
+    ctx.roundRect(7, 8, 10, 8, 1);
+    ctx.fill();
+    // 縁取り・線
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(5.75, 6.75, 20.5, 18.5);
+    ctx.beginPath();
+    ctx.moveTo(16, 6); ctx.lineTo(16, 26);
+    ctx.stroke();
+  });
 }
 
 // レギンスアイコン
 function generateLeggingsIcon(color, shine) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 左脚
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(4, 4, 10, 24, 2);
-  ctx.fill();
-  // 右脚
-  ctx.beginPath();
-  ctx.roundRect(18, 4, 10, 24, 2);
-  ctx.fill();
-  // 光沢
-  ctx.fillStyle = shine;
-  ctx.fillRect(6, 6, 6, 10);
-  ctx.fillRect(20, 6, 6, 10);
-  // 縁取り
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(4.75, 4.75, 8.5, 22.5);
-  ctx.strokeRect(18.75, 4.75, 8.5, 22.5);
-  return c;
+  return makeIcon((ctx) => {
+    // 左脚
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(4, 4, 10, 24, 2);
+    ctx.fill();
+    // 右脚
+    ctx.beginPath();
+    ctx.roundRect(18, 4, 10, 24, 2);
+    ctx.fill();
+    // 光沢
+    ctx.fillStyle = shine;
+    ctx.fillRect(6, 6, 6, 10);
+    ctx.fillRect(20, 6, 6, 10);
+    // 縁取り
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(4.75, 4.75, 8.5, 22.5);
+    ctx.strokeRect(18.75, 4.75, 8.5, 22.5);
+  });
 }
 
 // ブーツアイコン
 function generateBootsIcon(color, shine) {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const ctx = c.getContext('2d');
-  // 左ブーツ
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(3, 8, 10, 18, 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.roundRect(3, 23, 12, 6, 1); // つま先
-  ctx.fill();
-  // 右ブーツ
-  ctx.beginPath();
-  ctx.roundRect(19, 8, 10, 18, 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.roundRect(17, 23, 12, 6, 1);
-  ctx.fill();
-  // 光沢
-  ctx.fillStyle = shine;
-  ctx.fillRect(5, 10, 6, 8);
-  ctx.fillRect(21, 10, 6, 8);
-  // 縁取り
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(3.75, 8.75, 8.5, 16.5);
-  ctx.strokeRect(19.75, 8.75, 8.5, 16.5);
-  return c;
+  return makeIcon((ctx) => {
+    // 左ブーツ
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.roundRect(3, 8, 10, 18, 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(3, 23, 12, 6, 1); // つま先
+    ctx.fill();
+    // 右ブーツ
+    ctx.beginPath();
+    ctx.roundRect(19, 8, 10, 18, 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(17, 23, 12, 6, 1);
+    ctx.fill();
+    // 光沢
+    ctx.fillStyle = shine;
+    ctx.fillRect(5, 10, 6, 8);
+    ctx.fillRect(21, 10, 6, 8);
+    // 縁取り
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(3.75, 8.75, 8.5, 16.5);
+    ctx.strokeRect(19.75, 8.75, 8.5, 16.5);
+  });
 }
 
 // 素材色定義

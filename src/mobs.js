@@ -149,35 +149,34 @@ const MOB_HEIGHT = 1.8;
 const HIT_FLASH_COLOR = new THREE.Color(0xff2828);
 const HIT_FLASH_DURATION = 0.18; // 秒
 
-class Zombie {
-  constructor(scene, position) {
-    this.name = 'ゾンビ';
+// ---- BaseMob 基底クラス ----
+// 全モブ共通のメソッドと状態を提供する基底クラス
+
+class BaseMob {
+  constructor(scene, position, hp) {
     this.scene = scene;
     this.position = position.clone();
-    this.health = ZOMBIE_HP;
-    this.maxHealth = ZOMBIE_HP;
+    this.health = hp;
+    this.maxHealth = hp;
     this.isAlive = true;
     this.attackCooldown = 0;
     this._walkTime = 0;
-
-    // ノックバック速度
     this._knockbackVel = new THREE.Vector3();
-
-    // ヒットフラッシュ
     this._flashTimer = 0;
+    this.mesh = null;
+    this._mats = {};
+    this._origColors = {};
+  }
 
-    const { group, mats } = createZombieMesh();
-    this.mesh = group;
+  // メッシュとマテリアルを初期化する（コンストラクタ末尾で呼ぶ）
+  _initMesh(mesh, mats) {
+    this.mesh = mesh;
     this._mats = mats;
-    // 元の色を保持（フラッシュ復元用）
-    this._origColors = {
-      head: mats.head.color.clone(),
-      body: mats.body.color.clone(),
-      leg:  mats.leg.color.clone(),
-    };
-
+    this._origColors = Object.fromEntries(
+      Object.entries(mats).map(([k, m]) => [k, m.color.clone()])
+    );
     this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
+    this.scene.add(this.mesh);
   }
 
   /** ダメージを与える。戻り値は実際に与えたダメージ量。 */
@@ -189,13 +188,11 @@ class Zombie {
     return prev - this.health;
   }
 
-  /** 被弾時に赤くフラッシュする */
+  /** 被弾時に全マテリアルを赤くフラッシュする */
   flashHit() {
     if (!this.isAlive) return;
     this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.head.color.copy(HIT_FLASH_COLOR);
-    this._mats.body.color.copy(HIT_FLASH_COLOR);
-    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+    for (const mat of Object.values(this._mats)) mat.color.copy(HIT_FLASH_COLOR);
   }
 
   /** ノックバック速度を設定する */
@@ -211,6 +208,81 @@ class Zombie {
     }
   }
 
+  _die() {
+    if (!this.isAlive) return;
+    this.isAlive = false;
+    this.scene.remove(this.mesh);
+    for (const mat of Object.values(this._mats)) mat.dispose();
+    this.mesh.traverse((obj) => { if (obj.isMesh) obj.geometry.dispose(); });
+  }
+
+  _restoreColors() {
+    for (const [k, mat] of Object.entries(this._mats)) mat.color.copy(this._origColors[k]);
+  }
+
+  // ---------- updateループ用ヘルパー ----------
+
+  /** ヒットフラッシュタイマーを更新する */
+  _tickFlash(dt) {
+    if (this._flashTimer > 0) {
+      this._flashTimer -= dt;
+      if (this._flashTimer <= 0) this._restoreColors();
+    }
+  }
+
+  /** ノックバックを適用してブロック衝突チェックする */
+  _tickKnockback(dt, world, radius = 0.4) {
+    if (this._knockbackVel.lengthSq() <= 0.01) return;
+    const kbX = this._knockbackVel.x * dt;
+    const kbZ = this._knockbackVel.z * dt;
+    const bodyY = Math.floor(this.position.y);
+    const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + radius * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
+    const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + radius * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
+    if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
+    const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + radius * Math.sign(kbZ)));
+    const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + radius * Math.sign(kbZ)));
+    if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
+    this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
+    if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
+  }
+
+  /** 地形高度にスナップして mesh.position を更新する */
+  _snapToGround(world, yOffset = 1) {
+    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
+    this.position.y = groundY + yOffset;
+    this.mesh.position.copy(this.position);
+  }
+
+  /**
+   * ブロック衝突チェック付きで移動する
+   * @returns {{ movedX: boolean, movedZ: boolean }}
+   */
+  _moveWithCollision(dx, dz, world, radius = 0.4) {
+    const bodyY = Math.floor(this.position.y);
+    let movedX = false;
+    let movedZ = false;
+    if (dx !== 0) {
+      const bx  = world.getBlock(Math.floor(this.position.x + dx + radius * Math.sign(dx)), bodyY, Math.floor(this.position.z));
+      const bx2 = world.getBlock(Math.floor(this.position.x + dx + radius * Math.sign(dx)), bodyY + 1, Math.floor(this.position.z));
+      if (isPassable(bx) && isPassable(bx2)) { this.position.x += dx; movedX = true; }
+    }
+    if (dz !== 0) {
+      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + dz + radius * Math.sign(dz)));
+      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + dz + radius * Math.sign(dz)));
+      if (isPassable(bz) && isPassable(bz2)) { this.position.z += dz; movedZ = true; }
+    }
+    return { movedX, movedZ };
+  }
+}
+
+class Zombie extends BaseMob {
+  constructor(scene, position) {
+    super(scene, position, ZOMBIE_HP);
+    this.name = 'ゾンビ';
+    const { group, mats } = createZombieMesh();
+    this._initMesh(group, mats);
+  }
+
   /** 死亡時ドロップ */
   drops() {
     const items = [{ type: BlockType.BEEF, count: 1 }];
@@ -218,37 +290,9 @@ class Zombie {
     return items;
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.head.dispose();
-    this._mats.body.dispose();
-    this._mats.leg.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.head.color.copy(this._origColors.head);
-    this._mats.body.color.copy(this._origColors.body);
-    this._mats.leg.color.copy(this._origColors.leg);
-  }
-
-  /**
-   * @returns {{ type: 'attack', damage: number, mobX: number, mobZ: number } | null}
-   */
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    // ヒットフラッシュ更新
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) {
-        this._restoreColors();
-      }
-    }
+    this._tickFlash(dt);
 
     // 昼間は日光ダメージで消滅
     if (isDay) {
@@ -265,60 +309,16 @@ class Zombie {
     if (horizDist < ZOMBIE_VIEW_RANGE && horizDist > 0.05) {
       const nx = dx / horizDist;
       const nz = dz / horizDist;
-      const moveX = nx * ZOMBIE_SPEED * dt;
-      const moveZ = nz * ZOMBIE_SPEED * dt;
-
-      // X軸移動のブロック衝突チェック（胴体の高さ2ブロック分）
-      const nextX = this.position.x + moveX;
-      const bodyY = Math.floor(this.position.y);
-      const blockX = world.getBlock(Math.floor(nextX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const blockX2 = world.getBlock(Math.floor(nextX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(blockX) && isPassable(blockX2)) {
-        this.position.x = nextX;
-      }
-
-      // Z軸移動のブロック衝突チェック
-      const nextZ = this.position.z + moveZ;
-      const blockZ = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(nextZ + 0.4 * Math.sign(moveZ)));
-      const blockZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(nextZ + 0.4 * Math.sign(moveZ)));
-      if (isPassable(blockZ) && isPassable(blockZ2)) {
-        this.position.z = nextZ;
-      }
-
-      // プレイヤー方向を向く
+      this._moveWithCollision(nx * ZOMBIE_SPEED * dt, nz * ZOMBIE_SPEED * dt, world);
       this.mesh.rotation.y = Math.atan2(dx, dz);
-
-      // 歩行アニメーション（脚の前後揺れ）
       this._walkTime += dt * 6;
       const swing = Math.sin(this._walkTime) * 0.35;
       this.mesh.children[4].rotation.x =  swing;
       this.mesh.children[5].rotation.x = -swing;
     }
 
-    // ノックバック適用・減衰（衝突チェック付き）
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bodyY = Math.floor(this.position.y);
-
-      const kbBlockX = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
-      const kbBlockX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBlockX) && isPassable(kbBlockX2)) this.position.x += kbX;
-
-      const kbBlockZ = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      const kbBlockZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (isPassable(kbBlockZ) && isPassable(kbBlockZ2)) this.position.z += kbZ;
-
-      // 1秒でほぼ消える（~8%残る）
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    // 地形高度に追従
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 1;
-
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world);
+    this._snapToGround(world);
 
     // 攻撃判定（3D距離）
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
@@ -365,72 +365,30 @@ function createCowMesh() {
 
 // ---- Cow クラス ----
 
-class Cow {
+class Cow extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, COW_HP);
     this.name = '牛';
     this.isAnimal = true;
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = COW_HP;
-    this.maxHealth = COW_HP;
-    this.isAlive = true;
-
-    this._walkTime = 0;
     this._wanderDirX = 0;
     this._wanderDirZ = 0;
     this._wanderTimer = Math.random() * COW_WANDER_INTERVAL;
-
     this._fleeing = false;
     this._fleeTimer = 0;
     this._fleeDirX = 0;
     this._fleeDirZ = 0;
-
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
-
     const { group, mats } = createCowMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      body: mats.body.color.clone(),
-      head: mats.head.color.clone(),
-      leg:  mats.leg.color.clone(),
-    };
-
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
-  }
-
-  takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.body.color.copy(HIT_FLASH_COLOR);
-    this._mats.head.color.copy(HIT_FLASH_COLOR);
-    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+    this._initMesh(group, mats);
   }
 
   applyKnockback(fromX, fromZ, force) {
+    super.applyKnockback(fromX, fromZ, force);
     if (!this.isAlive) return;
     const dx = this.position.x - fromX;
     const dz = this.position.z - fromZ;
     const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-      this._fleeDirX = 1; this._fleeDirZ = 0;
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-      this._fleeDirX = dx / len;
-      this._fleeDirZ = dz / len;
-    }
-    // 逃走開始
+    this._fleeDirX = len < 0.01 ? 1 : dx / len;
+    this._fleeDirZ = len < 0.01 ? 0 : dz / len;
     this._fleeing = true;
     this._fleeTimer = COW_FLEE_DURATION;
   }
@@ -441,38 +399,14 @@ class Cow {
     return [{ type: BlockType.BEEF, count }];
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.body.dispose();
-    this._mats.head.dispose();
-    this._mats.leg.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.body.color.copy(this._origColors.body);
-    this._mats.head.color.copy(this._origColors.head);
-    this._mats.leg.color.copy(this._origColors.leg);
-  }
-
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    // ヒットフラッシュ更新
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) this._restoreColors();
-    }
+    this._tickFlash(dt);
 
     let moveX = 0;
     let moveZ = 0;
 
     if (this._fleeing) {
-      // 逃走中: プレイヤーから離れる方向へ走る
       this._fleeTimer -= dt;
       if (this._fleeTimer <= 0) {
         this._fleeing = false;
@@ -481,7 +415,6 @@ class Cow {
         moveZ = this._fleeDirZ * COW_FLEE_SPEED * dt;
       }
     } else {
-      // 徘徊: 一定間隔で方向転換
       this._wanderTimer -= dt;
       if (this._wanderTimer <= 0) {
         this._wanderTimer = COW_WANDER_INTERVAL * (0.5 + Math.random());
@@ -495,54 +428,25 @@ class Cow {
       moveZ = this._wanderDirZ * COW_SPEED * dt;
     }
 
-    // ブロック衝突チェック付き移動
-    const bodyY = Math.floor(this.position.y);
-    if (moveX !== 0) {
-      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
-    }
-    if (moveZ !== 0) {
-      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
-      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
-    }
+    const moved = this._moveWithCollision(moveX, moveZ, world);
+    if (!moved.movedX && moveX !== 0) { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    if (!moved.movedZ && moveZ !== 0) { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
 
-    // ノックバック適用
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bkY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    // 地形高度に追従
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 1;
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world);
+    this._snapToGround(world);
 
     // 移動時に進行方向を向く・脚アニメーション
     if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
       this.mesh.rotation.y = Math.atan2(moveX, moveZ);
       this._walkTime += dt * 5;
       const swing = Math.sin(this._walkTime) * 0.35;
-      // 前左・後右 / 前右・後左 で対角に動かす
       this.mesh.children[2].rotation.x =  swing;
       this.mesh.children[3].rotation.x = -swing;
       this.mesh.children[4].rotation.x = -swing;
       this.mesh.children[5].rotation.x =  swing;
     }
 
-    return null; // 友好モブ: 攻撃しない
+    return null;
   }
 }
 
@@ -597,55 +501,12 @@ function createSkeletonMesh() {
 
 // ---- Skeleton クラス ----
 
-class Skeleton {
+class Skeleton extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, SKELETON_HP);
     this.name = 'スケルトン';
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = SKELETON_HP;
-    this.maxHealth = SKELETON_HP;
-    this.isAlive = true;
-    this.attackCooldown = 0;
-    this._walkTime = 0;
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
-
     const { group, mats } = createSkeletonMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      bone: mats.bone.color.clone(),
-      joint: mats.joint.color.clone(),
-    };
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
-  }
-
-  takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.bone.color.copy(HIT_FLASH_COLOR);
-    this._mats.joint.color.copy(HIT_FLASH_COLOR);
-  }
-
-  applyKnockback(fromX, fromZ, force) {
-    if (!this.isAlive) return;
-    const dx = this.position.x - fromX;
-    const dz = this.position.z - fromZ;
-    const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-    }
+    this._initMesh(group, mats);
   }
 
   /** 死亡時ドロップ */
@@ -655,30 +516,9 @@ class Skeleton {
     return drops;
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.bone.dispose();
-    this._mats.joint.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.bone.color.copy(this._origColors.bone);
-    this._mats.joint.color.copy(this._origColors.joint);
-  }
-
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    // ヒットフラッシュ更新
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) this._restoreColors();
-    }
+    this._tickFlash(dt);
 
     // 昼間は日光ダメージ
     if (isDay) {
@@ -697,26 +537,15 @@ class Skeleton {
       // 近づきすぎたら後退（弓使いは距離を保つ）
       let speed = 0;
       if (horizDist < SKELETON_SAFE_RANGE) {
-        speed = -SKELETON_SPEED; // 後退
+        speed = -SKELETON_SPEED;
       } else if (horizDist > SKELETON_ATTACK_RANGE * 0.7) {
-        speed = SKELETON_SPEED; // 接近
+        speed = SKELETON_SPEED;
       }
 
       if (speed !== 0) {
-        const moveX = nx * speed * dt;
-        const moveZ = nz * speed * dt;
-        const bodyY = Math.floor(this.position.y);
-
-        const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-        const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-        if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-
-        const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-        const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-        if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
+        this._moveWithCollision(nx * speed * dt, nz * speed * dt, world);
       }
 
-      // プレイヤー方向を向く
       this.mesh.rotation.y = Math.atan2(dx, dz);
 
       // 歩行アニメーション
@@ -728,27 +557,10 @@ class Skeleton {
       }
     }
 
-    // ノックバック適用
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bodyY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
+    this._tickKnockback(dt, world);
+    this._snapToGround(world);
 
-    // 地形高度に追従
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 1;
-    this.mesh.position.copy(this.position);
-
-    // 弓攻撃判定（射程内ならダメージ）
+    // 弓攻撃判定
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
     const dy = playerPos.y - this.position.y;
     const fullDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -792,59 +604,19 @@ function createCreeperMesh() {
 
 // ---- Creeper クラス ----
 
-class Creeper {
+class Creeper extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, CREEPER_HP);
     this.name = 'クリーパー';
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = CREEPER_HP;
-    this.maxHealth = CREEPER_HP;
-    this.isAlive = true;
-    this._walkTime = 0;
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
-
-    // 起爆タイマー
     this._fuseActive = false;
     this._fuseTimer = 0;
     this._fuseFlashTimer = 0;
-
     const { group, mats } = createCreeperMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      body: mats.body.color.clone(),
-      face: mats.face.color.clone(),
-    };
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
-  }
-
-  takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.body.color.copy(HIT_FLASH_COLOR);
-    this._mats.face.color.copy(HIT_FLASH_COLOR);
+    this._initMesh(group, mats);
   }
 
   applyKnockback(fromX, fromZ, force) {
-    if (!this.isAlive) return;
-    const dx = this.position.x - fromX;
-    const dz = this.position.z - fromZ;
-    const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-    }
+    super.applyKnockback(fromX, fromZ, force);
     // 攻撃を受けたら起爆解除
     this._fuseActive = false;
     this._fuseTimer = 0;
@@ -854,26 +626,10 @@ class Creeper {
     return []; // クリーパーはドロップなし（爆発で消滅）
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.body.dispose();
-    this._mats.face.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.body.color.copy(this._origColors.body);
-    this._mats.face.color.copy(this._origColors.face);
-  }
-
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
 
-    // ヒットフラッシュ更新
+    // ヒットフラッシュ更新（起爆中は上書きしない）
     if (this._flashTimer > 0) {
       this._flashTimer -= dt;
       if (this._flashTimer <= 0 && !this._fuseActive) this._restoreColors();
@@ -899,14 +655,12 @@ class Creeper {
         }
       }
 
-      // 距離が離れたら起爆解除
       if (horizDist > CREEPER_FUSE_RANGE * 1.5) {
         this._fuseActive = false;
         this._fuseTimer = 0;
         this._restoreColors();
       }
 
-      // 起爆！
       if (this._fuseTimer <= 0) {
         this._die();
         return {
@@ -925,18 +679,7 @@ class Creeper {
     if (horizDist < CREEPER_VIEW_RANGE && horizDist > 0.05) {
       const nx = dx / horizDist;
       const nz = dz / horizDist;
-      const moveX = nx * CREEPER_SPEED * dt;
-      const moveZ = nz * CREEPER_SPEED * dt;
-      const bodyY = Math.floor(this.position.y);
-
-      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-
-      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
-
+      this._moveWithCollision(nx * CREEPER_SPEED * dt, nz * CREEPER_SPEED * dt, world);
       this.mesh.rotation.y = Math.atan2(dx, dz);
 
       // 歩行アニメーション
@@ -947,7 +690,6 @@ class Creeper {
       this.mesh.children[4].rotation.x = -swing;
       this.mesh.children[5].rotation.x =  swing;
 
-      // 起爆範囲に入ったら起爆開始
       if (horizDist < CREEPER_FUSE_RANGE) {
         this._fuseActive = true;
         this._fuseTimer = CREEPER_FUSE_TIME;
@@ -955,25 +697,8 @@ class Creeper {
       }
     }
 
-    // ノックバック適用
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bodyY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    // 地形高度に追従
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 1;
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world);
+    this._snapToGround(world);
 
     return null;
   }
@@ -1029,90 +754,29 @@ function createSpiderMesh() {
 
 // ---- Spider クラス ----
 
-class Spider {
+class Spider extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, SPIDER_HP);
     this.name = 'クモ';
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = SPIDER_HP;
-    this.maxHealth = SPIDER_HP;
-    this.isAlive = true;
-    this.attackCooldown = 0;
-    this._walkTime = 0;
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
     // 昼間に攻撃を受けると敵対状態になる
     this._aggroed = false;
-
     const { group, mats } = createSpiderMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      body: mats.body.color.clone(),
-      eye:  mats.eye.color.clone(),
-      leg:  mats.leg.color.clone(),
-    };
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
+    this._initMesh(group, mats);
   }
 
   takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
     // 攻撃されたら敵対状態に
     this._aggroed = true;
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.body.color.copy(HIT_FLASH_COLOR);
-    this._mats.leg.color.copy(HIT_FLASH_COLOR);
-  }
-
-  applyKnockback(fromX, fromZ, force) {
-    if (!this.isAlive) return;
-    const dx = this.position.x - fromX;
-    const dz = this.position.z - fromZ;
-    const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-    }
+    return super.takeDamage(amount);
   }
 
   drops() {
     return [{ type: BlockType.STRING, count: 1 + Math.floor(Math.random() * 2) }];
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.body.dispose();
-    this._mats.eye.dispose();
-    this._mats.leg.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.body.color.copy(this._origColors.body);
-    this._mats.leg.color.copy(this._origColors.leg);
-  }
-
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) this._restoreColors();
-    }
+    this._tickFlash(dt);
 
     const dx = playerPos.x - this.position.x;
     const dz = playerPos.z - this.position.z;
@@ -1124,18 +788,7 @@ class Spider {
     if (isHostile && horizDist < SPIDER_VIEW_RANGE && horizDist > 0.05) {
       const nx = dx / horizDist;
       const nz = dz / horizDist;
-      const moveX = nx * SPIDER_SPEED * dt;
-      const moveZ = nz * SPIDER_SPEED * dt;
-      const bodyY = Math.floor(this.position.y);
-
-      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.35 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.35 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-
-      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.35 * Math.sign(moveZ)));
-      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.35 * Math.sign(moveZ)));
-      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
-
+      this._moveWithCollision(nx * SPIDER_SPEED * dt, nz * SPIDER_SPEED * dt, world, 0.35);
       this.mesh.rotation.y = Math.atan2(dx, dz);
 
       // 脚のスクリット動き
@@ -1155,24 +808,8 @@ class Spider {
       }
     }
 
-    // ノックバック適用
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bodyY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.35 * Math.sign(kbX)), bodyY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.35 * Math.sign(kbX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + kbZ + 0.35 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + kbZ + 0.35 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 0.6; // クモは低め
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world, 0.35);
+    this._snapToGround(world, 0.6); // クモは低め
 
     // 攻撃判定
     this.attackCooldown = Math.max(0, this.attackCooldown - dt);
@@ -1230,106 +867,41 @@ function createSheepMesh() {
 
 // ---- Sheep クラス ----
 
-class Sheep {
+class Sheep extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, SHEEP_HP);
     this.name = '羊';
     this.isAnimal = true;
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = SHEEP_HP;
-    this.maxHealth = SHEEP_HP;
-    this.isAlive = true;
-
-    this._walkTime = 0;
     this._wanderDirX = 0;
     this._wanderDirZ = 0;
     this._wanderTimer = Math.random() * SHEEP_WANDER_INTERVAL;
-
     this._fleeing = false;
     this._fleeTimer = 0;
     this._fleeDirX = 0;
     this._fleeDirZ = 0;
-
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
-
     const { group, mats } = createSheepMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      wool: mats.wool.color.clone(),
-      face: mats.face.color.clone(),
-      leg:  mats.leg.color.clone(),
-    };
-
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
-  }
-
-  takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.wool.color.copy(HIT_FLASH_COLOR);
-    this._mats.face.color.copy(HIT_FLASH_COLOR);
-    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+    this._initMesh(group, mats);
   }
 
   applyKnockback(fromX, fromZ, force) {
+    super.applyKnockback(fromX, fromZ, force);
     if (!this.isAlive) return;
     const dx = this.position.x - fromX;
     const dz = this.position.z - fromZ;
     const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-      this._fleeDirX = 1; this._fleeDirZ = 0;
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-      this._fleeDirX = dx / len;
-      this._fleeDirZ = dz / len;
-    }
+    this._fleeDirX = len < 0.01 ? 1 : dx / len;
+    this._fleeDirZ = len < 0.01 ? 0 : dz / len;
     this._fleeing = true;
     this._fleeTimer = SHEEP_FLEE_DURATION;
   }
 
   drops() {
-    return [
-      { type: BlockType.WOOL, count: 1 + Math.floor(Math.random() * 2) },
-    ];
-  }
-
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.wool.dispose();
-    this._mats.face.dispose();
-    this._mats.leg.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.wool.color.copy(this._origColors.wool);
-    this._mats.face.color.copy(this._origColors.face);
-    this._mats.leg.color.copy(this._origColors.leg);
+    return [{ type: BlockType.WOOL, count: 1 + Math.floor(Math.random() * 2) }];
   }
 
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) this._restoreColors();
-    }
+    this._tickFlash(dt);
 
     let moveX = 0;
     let moveZ = 0;
@@ -1355,37 +927,12 @@ class Sheep {
       moveZ = this._wanderDirZ * SHEEP_SPEED * dt;
     }
 
-    const bodyY = Math.floor(this.position.y);
-    if (moveX !== 0) {
-      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
-    }
-    if (moveZ !== 0) {
-      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
-      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
-    }
+    const moved = this._moveWithCollision(moveX, moveZ, world);
+    if (!moved.movedX && moveX !== 0) { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    if (!moved.movedZ && moveZ !== 0) { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
 
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bkY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 1;
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world);
+    this._snapToGround(world);
 
     if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
       this.mesh.rotation.y = Math.atan2(moveX, moveZ);
@@ -1445,69 +992,30 @@ function createChickenMesh() {
 
 // ---- Chicken クラス ----
 
-class Chicken {
+class Chicken extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, CHICKEN_HP);
     this.name = 'ニワトリ';
     this.isAnimal = true;
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = CHICKEN_HP;
-    this.maxHealth = CHICKEN_HP;
-    this.isAlive = true;
-
-    this._walkTime = 0;
     this._wanderDirX = 0;
     this._wanderDirZ = 0;
     this._wanderTimer = Math.random() * CHICKEN_WANDER_INTERVAL;
-
     this._fleeing = false;
     this._fleeTimer = 0;
     this._fleeDirX = 0;
     this._fleeDirZ = 0;
-
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
-
     const { group, mats } = createChickenMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      body: mats.body.color.clone(),
-      head: mats.head.color.clone(),
-    };
-
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
-  }
-
-  takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.body.color.copy(HIT_FLASH_COLOR);
-    this._mats.head.color.copy(HIT_FLASH_COLOR);
+    this._initMesh(group, mats);
   }
 
   applyKnockback(fromX, fromZ, force) {
+    super.applyKnockback(fromX, fromZ, force);
     if (!this.isAlive) return;
     const dx = this.position.x - fromX;
     const dz = this.position.z - fromZ;
     const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-      this._fleeDirX = 1; this._fleeDirZ = 0;
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-      this._fleeDirX = dx / len;
-      this._fleeDirZ = dz / len;
-    }
+    this._fleeDirX = len < 0.01 ? 1 : dx / len;
+    this._fleeDirZ = len < 0.01 ? 0 : dz / len;
     this._fleeing = true;
     this._fleeTimer = CHICKEN_FLEE_DURATION;
   }
@@ -1519,32 +1027,9 @@ class Chicken {
     ];
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.body.dispose();
-    this._mats.head.dispose();
-    this._mats.comb.dispose();
-    this._mats.beak.dispose();
-    this._mats.leg.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.body.color.copy(this._origColors.body);
-    this._mats.head.color.copy(this._origColors.head);
-  }
-
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) this._restoreColors();
-    }
+    this._tickFlash(dt);
 
     let moveX = 0;
     let moveZ = 0;
@@ -1570,43 +1055,17 @@ class Chicken {
       moveZ = this._wanderDirZ * CHICKEN_SPEED * dt;
     }
 
-    const bodyY = Math.floor(this.position.y);
-    if (moveX !== 0) {
-      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.3 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.3 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
-    }
-    if (moveZ !== 0) {
-      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.3 * Math.sign(moveZ)));
-      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.3 * Math.sign(moveZ)));
-      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
-      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
-    }
+    const moved = this._moveWithCollision(moveX, moveZ, world, 0.3);
+    if (!moved.movedX && moveX !== 0) { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    if (!moved.movedZ && moveZ !== 0) { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
 
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bkY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.3 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.3 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.3 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.3 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 0.7;
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world, 0.3);
+    this._snapToGround(world, 0.7);
 
     if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
       this.mesh.rotation.y = Math.atan2(moveX, moveZ);
       this._walkTime += dt * 8;
       const swing = Math.sin(this._walkTime) * 0.4;
-      // 脚インデックス（5〜6）
       if (this.mesh.children[5]) this.mesh.children[5].rotation.x =  swing;
       if (this.mesh.children[6]) this.mesh.children[6].rotation.x = -swing;
     }
@@ -1661,71 +1120,30 @@ function createPigMesh() {
 
 // ---- Pig クラス ----
 
-class Pig {
+class Pig extends BaseMob {
   constructor(scene, position) {
+    super(scene, position, PIG_HP);
     this.name = '豚';
     this.isAnimal = true;
-    this.scene = scene;
-    this.position = position.clone();
-    this.health = PIG_HP;
-    this.maxHealth = PIG_HP;
-    this.isAlive = true;
-
-    this._walkTime = 0;
     this._wanderDirX = 0;
     this._wanderDirZ = 0;
     this._wanderTimer = Math.random() * PIG_WANDER_INTERVAL;
-
     this._fleeing = false;
     this._fleeTimer = 0;
     this._fleeDirX = 0;
     this._fleeDirZ = 0;
-
-    this._knockbackVel = new THREE.Vector3();
-    this._flashTimer = 0;
-
     const { group, mats } = createPigMesh();
-    this.mesh = group;
-    this._mats = mats;
-    this._origColors = {
-      body:  mats.body.color.clone(),
-      snout: mats.snout.color.clone(),
-      leg:   mats.leg.color.clone(),
-    };
-
-    this.mesh.position.copy(this.position);
-    scene.add(this.mesh);
-  }
-
-  takeDamage(amount) {
-    if (!this.isAlive) return 0;
-    const prev = this.health;
-    this.health = Math.max(0, this.health - amount);
-    if (this.health <= 0) this._die();
-    return prev - this.health;
-  }
-
-  flashHit() {
-    if (!this.isAlive) return;
-    this._flashTimer = HIT_FLASH_DURATION;
-    this._mats.body.color.copy(HIT_FLASH_COLOR);
-    this._mats.snout.color.copy(HIT_FLASH_COLOR);
-    this._mats.leg.color.copy(HIT_FLASH_COLOR);
+    this._initMesh(group, mats);
   }
 
   applyKnockback(fromX, fromZ, force) {
+    super.applyKnockback(fromX, fromZ, force);
     if (!this.isAlive) return;
     const dx = this.position.x - fromX;
     const dz = this.position.z - fromZ;
     const len = Math.sqrt(dx * dx + dz * dz);
-    if (len < 0.01) {
-      this._knockbackVel.set(force, 0, 0);
-      this._fleeDirX = 1; this._fleeDirZ = 0;
-    } else {
-      this._knockbackVel.set((dx / len) * force, 0, (dz / len) * force);
-      this._fleeDirX = dx / len;
-      this._fleeDirZ = dz / len;
-    }
+    this._fleeDirX = len < 0.01 ? 1 : dx / len;
+    this._fleeDirZ = len < 0.01 ? 0 : dz / len;
     this._fleeing = true;
     this._fleeTimer = PIG_FLEE_DURATION;
   }
@@ -1735,31 +1153,9 @@ class Pig {
     return [{ type: BlockType.PORK_CHOP, count }];
   }
 
-  _die() {
-    if (!this.isAlive) return;
-    this.isAlive = false;
-    this.scene.remove(this.mesh);
-    this._mats.body.dispose();
-    this._mats.snout.dispose();
-    this._mats.leg.dispose();
-    this.mesh.traverse((obj) => {
-      if (obj.isMesh) obj.geometry.dispose();
-    });
-  }
-
-  _restoreColors() {
-    this._mats.body.color.copy(this._origColors.body);
-    this._mats.snout.color.copy(this._origColors.snout);
-    this._mats.leg.color.copy(this._origColors.leg);
-  }
-
   update(dt, playerPos, world, isDay) {
     if (!this.isAlive) return null;
-
-    if (this._flashTimer > 0) {
-      this._flashTimer -= dt;
-      if (this._flashTimer <= 0) this._restoreColors();
-    }
+    this._tickFlash(dt);
 
     let moveX = 0;
     let moveZ = 0;
@@ -1785,37 +1181,12 @@ class Pig {
       moveZ = this._wanderDirZ * PIG_SPEED * dt;
     }
 
-    const bodyY = Math.floor(this.position.y);
-    if (moveX !== 0) {
-      const bx  = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY, Math.floor(this.position.z));
-      const bx2 = world.getBlock(Math.floor(this.position.x + moveX + 0.4 * Math.sign(moveX)), bodyY + 1, Math.floor(this.position.z));
-      if (isPassable(bx) && isPassable(bx2)) this.position.x += moveX;
-      else { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
-    }
-    if (moveZ !== 0) {
-      const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + moveZ + 0.4 * Math.sign(moveZ)));
-      if (isPassable(bz) && isPassable(bz2)) this.position.z += moveZ;
-      else { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
-    }
+    const moved = this._moveWithCollision(moveX, moveZ, world);
+    if (!moved.movedX && moveX !== 0) { this._wanderDirX = -this._wanderDirX; this._wanderTimer = 0; }
+    if (!moved.movedZ && moveZ !== 0) { this._wanderDirZ = -this._wanderDirZ; this._wanderTimer = 0; }
 
-    if (this._knockbackVel.lengthSq() > 0.01) {
-      const kbX = this._knockbackVel.x * dt;
-      const kbZ = this._knockbackVel.z * dt;
-      const bkY = Math.floor(this.position.y);
-      const kbBX  = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY, Math.floor(this.position.z));
-      const kbBX2 = world.getBlock(Math.floor(this.position.x + kbX + 0.4 * Math.sign(kbX)), bkY + 1, Math.floor(this.position.z));
-      if (isPassable(kbBX) && isPassable(kbBX2)) this.position.x += kbX;
-      const kbBZ  = world.getBlock(Math.floor(this.position.x), bkY, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      const kbBZ2 = world.getBlock(Math.floor(this.position.x), bkY + 1, Math.floor(this.position.z + kbZ + 0.4 * Math.sign(kbZ)));
-      if (isPassable(kbBZ) && isPassable(kbBZ2)) this.position.z += kbZ;
-      this._knockbackVel.multiplyScalar(Math.pow(0.08, dt));
-      if (this._knockbackVel.lengthSq() < 0.01) this._knockbackVel.set(0, 0, 0);
-    }
-
-    const groundY = world.getHeight(Math.floor(this.position.x), Math.floor(this.position.z));
-    this.position.y = groundY + 1;
-    this.mesh.position.copy(this.position);
+    this._tickKnockback(dt, world);
+    this._snapToGround(world);
 
     if (Math.abs(moveX) + Math.abs(moveZ) > 0.001) {
       this.mesh.rotation.y = Math.atan2(moveX, moveZ);

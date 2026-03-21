@@ -3,6 +3,19 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [5.1.0] - 2026-03-22
+
+### Changed
+
+- **mobs.js リファクタリング**: `BaseMob` 基底クラスを導入し、9クラスの重複コードを大幅削減（2032行→1403行、-629行）
+  - `takeDamage()`, `flashHit()`, `applyKnockback()`, `_die()`, `_restoreColors()` を共通化
+  - updateループ用ヘルパー `_tickFlash()`, `_tickKnockback()`, `_snapToGround()`, `_moveWithCollision()` を追加
+  - 逃走動物（Cow/Sheep/Chicken/Pig）は `applyKnockback()` のみオーバーライドして逃走ロジックを維持
+- **GameController.js リファクタリング**: サバイバルとセーブの責務を独立したシステムクラスに分離（1754行→1560行）
+  - `src/systems/SurvivalSystem.js` 新規作成: 溺れ・窒息・空腹・サボテン・溶岩ダメージを独立クラスへ抽出
+  - `src/systems/SaveSystem.js` 新規作成: セーブ・ロード・自動セーブを独立クラスへ抽出
+- **blocks.js リファクタリング**: `makeIcon()` ヘルパーを追加し、27個のアイコン生成関数のキャンバス初期化ボイラープレートを統一（1758行→1709行）
+
 ## [5.0.0] - 2026-03-22
 
 ### Added

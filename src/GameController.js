@@ -79,6 +79,8 @@ import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './DroppedItemManager.js';
 import { ParticleManager } from './particles.js';
 import { SkyDome } from './sky.js';
+import { SurvivalSystem } from './systems/SurvivalSystem.js';
+import { SaveSystem } from './systems/SaveSystem.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -266,15 +268,11 @@ export class GameController {
       toolType: null,
     };
 
-    // 溺れ・窒息・飢餓タイマー
-    this.underwaterTimer = 0;
-    this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
-    this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
-    this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
+    // サバイバルシステム
+    this.survivalSystem = new SurvivalSystem(this.player, this.sound);
 
-    // サボテン・溶岩ダメージタイマー
-    this.cactusContactTimer = 0;
-    this.lavaDamageTimer = 0.5;
+    // セーブシステム
+    this.saveSystem = new SaveSystem(this.player, this.world, () => this.worldSeed);
 
     // Game loop state
     this.gameStarted = false;
@@ -285,7 +283,6 @@ export class GameController {
     this.frameCount = 0;
     this.fpsTime = 0;
     this.fps = 0;
-    this.autoSaveIntervalId = null;
   }
 
   init() {
@@ -321,7 +318,7 @@ export class GameController {
 
     // Auto-save before unload
     window.addEventListener('beforeunload', () => {
-      this._saveGame({ showFeedback: false });
+      this.saveSystem.save({ showFeedback: false });
     });
 
     // タブ非表示時に自動一時停止（意図しない挙動防止）
@@ -492,7 +489,7 @@ export class GameController {
         }
 
         useGameStore.getState().startGame();
-        this._startAutoSave();
+        this.saveSystem.startAutoSave();
         this.player.lock();
       } catch (error) {
         console.error('Failed to start game:', error);
@@ -516,7 +513,7 @@ export class GameController {
     });
 
     this.eventBus.on('save-clicked', () => {
-      this._saveGame();
+      this.saveSystem.save();
     });
 
     this.eventBus.on('delete-save-clicked', () => {
@@ -531,12 +528,7 @@ export class GameController {
     this.eventBus.on('respawn-clicked', () => {
       useGameStore.getState().setDead(false);
       useHungerStore.getState().reset();
-      this.underwaterTimer = 0;
-      this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
-      this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
-      this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
-      this.cactusContactTimer = 0;
-      this.lavaDamageTimer = 0.5;
+      this.survivalSystem.reset();
       this.mobManager.removeAll();
       this.droppedItemManager.removeAll();
       this.player.spawn();
@@ -705,75 +697,9 @@ export class GameController {
     }
   }
 
-  _saveGame({ showFeedback = true } = {}) {
-    try {
-      const { slots, selectedSlot } = useInventoryStore.getState();
-      const { selectedTool } = useToolStore.getState();
-      const chestState = useChestStore.getState().exportForSave();
-      const settings = useSettingsStore.getState();
-      const { hunger } = useHungerStore.getState();
-      const { durability } = useDurabilityStore.getState();
-      const { equipped: armorEquipped } = useArmorStore.getState();
-      const { xp } = useXpStore.getState();
-      const { unlocked: achievements } = useAchievementStore.getState();
-
-      const data = {
-        schemaVersion: SAVE_SCHEMA_VERSION,
-        savedAt: new Date().toISOString(),
-        worldSeed: this.worldSeed,
-        player: {
-          position: {
-            x: this.player.position.x,
-            y: this.player.position.y,
-            z: this.player.position.z,
-          },
-          yaw: this.player.yaw,
-          pitch: this.player.pitch,
-          inventory: slots.map((s) => ({ type: s.type, count: s.count })),
-          selectedSlot,
-          selectedTool,
-          hunger,
-          toolDurability: { ...durability },
-          armorEquipped: { ...armorEquipped },
-          xp,
-        },
-        achievements: [...achievements],
-        settings: {
-          sensitivity: settings.sensitivity,
-          bgmVolume: settings.bgmVolume,
-          seVolume: settings.seVolume,
-          renderDistance: settings.renderDistance,
-          uiScale: settings.uiScale,
-          fov: settings.fov,
-          targetFps: settings.targetFps,
-          highContrast: settings.highContrast,
-          showDebugInfo: settings.showDebugInfo,
-        },
-        chunkDiffs: this.world.exportChunkEdits(),
-        chestStorage: chestState,
-      };
-
-      localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(data));
-      if (showFeedback) useUIStore.getState().showFeedback('ゲームをセーブしました', 800);
-    } catch (e) {
-      console.warn('Failed to save game:', e);
-      if (showFeedback) useUIStore.getState().showFeedback('セーブに失敗しました', 1000);
-    }
-  }
-
-  _startAutoSave() {
-    if (this.autoSaveIntervalId) return;
-    this.autoSaveIntervalId = setInterval(() => {
-      this._saveGame({ showFeedback: false });
-    }, AUTO_SAVE_INTERVAL_MS);
-  }
-
   _returnToTitle() {
     // 自動セーブを停止
-    if (this.autoSaveIntervalId) {
-      clearInterval(this.autoSaveIntervalId);
-      this.autoSaveIntervalId = null;
-    }
+    this.saveSystem.stopAutoSave();
     // ポインターロック解除
     document.exitPointerLock();
     // 内部状態をリセット
@@ -1280,126 +1206,6 @@ export class GameController {
     }
   }
 
-  // ---- サバイバルシステム（溺れ・窒息・空腹） ----
-
-  _updateSurvivalSystems(dt) {
-    if (useGameStore.getState().isDead) return;
-
-    // --- 空腹 ---
-    const difficulty = useGameStore.getState().difficulty;
-    const diffSettings = DIFFICULTY_SETTINGS[difficulty] ?? DIFFICULTY_SETTINGS.normal;
-    const isMoving = Math.abs(this.player.velocity.x) > 0.3 || Math.abs(this.player.velocity.z) > 0.3;
-    let hungerDrain = HUNGER_DRAIN_IDLE;
-    if (this.player.isSprinting) hungerDrain = HUNGER_DRAIN_SPRINT;
-    else if (isMoving) hungerDrain = HUNGER_DRAIN_MOVE;
-    useHungerStore.getState().consumeHunger(hungerDrain * diffSettings.hungerDrainMult * dt);
-
-    // 最新の空腹値を取得
-    const currentHunger = useHungerStore.getState().hunger;
-
-    // HP回復: 空腹度が低いと無効化
-    this.player.regenEnabled = currentHunger > HUNGER_LOW_THRESHOLD;
-
-    // 飢餓ダメージ
-    if (currentHunger <= 0) {
-      this.starvationDamageTimer -= dt;
-      if (this.starvationDamageTimer <= 0) {
-        this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
-        const dmg = this.player.applyDamage(HUNGER_STARVE_DAMAGE);
-        if (dmg > 0) {
-          useUIStore.getState().showFeedback('空腹でダメージ！ -1 HP', 900);
-          this.sound.playError();
-        }
-      }
-    } else {
-      this.starvationDamageTimer = HUNGER_STARVE_DAMAGE_INTERVAL;
-    }
-
-    // --- 溺れダメージ ---
-    if (this.player.isHeadInWater()) {
-      this.underwaterTimer += dt;
-      if (this.underwaterTimer >= DROWNING_GRACE_PERIOD) {
-        this.drowningDamageTimer -= dt;
-        if (this.drowningDamageTimer <= 0) {
-          this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
-          const dmg = this.player.applyDamage(DROWNING_DAMAGE);
-          if (dmg > 0) {
-            useUIStore.getState().showFeedback('溺れている！ -2 HP', 900);
-            this.sound.playError();
-          }
-        }
-      }
-    } else {
-      this.underwaterTimer = 0;
-      this.drowningDamageTimer = DROWNING_DAMAGE_INTERVAL;
-    }
-
-    // --- 窒息ダメージ ---
-    if (this.player.isHeadInSolid()) {
-      this.suffocationDamageTimer -= dt;
-      if (this.suffocationDamageTimer <= 0) {
-        this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
-        const dmg = this.player.applyDamage(SUFFOCATION_DAMAGE);
-        if (dmg > 0) {
-          useUIStore.getState().showFeedback('窒息している！ -1 HP', 900);
-          this.sound.playError();
-        }
-      }
-    } else {
-      this.suffocationDamageTimer = SUFFOCATION_DAMAGE_INTERVAL;
-    }
-
-    // --- サボテンダメージ（隣接ブロックにサボテンがあると0.5秒毎に -1 HP）---
-    const pfx = Math.floor(this.player.position.x);
-    const pfy = Math.floor(this.player.position.y);
-    const pfz = Math.floor(this.player.position.z);
-    const touchesCactus = [
-      this.world.getBlock(pfx + 1, pfy,     pfz),
-      this.world.getBlock(pfx - 1, pfy,     pfz),
-      this.world.getBlock(pfx,     pfy,     pfz + 1),
-      this.world.getBlock(pfx,     pfy,     pfz - 1),
-      this.world.getBlock(pfx + 1, pfy + 1, pfz),
-      this.world.getBlock(pfx - 1, pfy + 1, pfz),
-      this.world.getBlock(pfx,     pfy + 1, pfz + 1),
-      this.world.getBlock(pfx,     pfy + 1, pfz - 1),
-    ].some(b => b === BlockType.CACTUS);
-
-    if (touchesCactus) {
-      this.cactusContactTimer -= dt;
-      if (this.cactusContactTimer <= 0) {
-        this.cactusContactTimer = 0.5;
-        const dmg = this.player.applyDamage(1);
-        if (dmg > 0) {
-          useUIStore.getState().showFeedback('サボテンに刺さった！ -1 HP', 900);
-          this.sound.playError();
-        }
-      }
-    } else {
-      this.cactusContactTimer = 0;
-    }
-
-    // --- 溶岩ダメージ（溶岩中にいると0.5秒毎に -2 HP）---
-    if (this.player.isInLava) {
-      this.lavaDamageTimer -= dt;
-      if (this.lavaDamageTimer <= 0) {
-        this.lavaDamageTimer = 0.5;
-        const dmg = this.player.applyDamage(2);
-        if (dmg > 0) {
-          useUIStore.getState().showFeedback('溶岩で燃えている！ -2 HP', 900);
-          this.sound.playError();
-        }
-      }
-    } else {
-      this.lavaDamageTimer = 0.5;
-    }
-
-    // 死亡判定
-    if (this.player.health <= 0 && !useGameStore.getState().isDead) {
-      useGameStore.getState().setDead(true);
-      document.exitPointerLock();
-    }
-  }
-
   // ---- モブシステム ----
 
   _updateMobs(dt, isDay) {
@@ -1733,7 +1539,7 @@ export class GameController {
       );
       useUIStore.getState().setWaterOverlay(eyeBlock === BlockType.WATER);
 
-      this._updateSurvivalSystems(dt);
+      this.survivalSystem.update(dt, this.world);
       this._updateMobs(dt, dayNight.isDay);
       this._updateDroppedItems(dt);
       this.particleManager.update(dt);
