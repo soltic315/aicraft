@@ -51,6 +51,7 @@ export class InputManager {
       if (e.code === 'Tab') { e.preventDefault(); this.eventBus.emit('toggle-inventory'); }
       if (e.code === 'KeyC') this.eventBus.emit('toggle-craft');
       if (e.code === 'KeyQ') this.eventBus.emit('drop-held-item');
+      if (e.code === 'KeyX') this.eventBus.emit('toggle-enchant');
     });
 
     document.addEventListener('wheel', (e) => {

@@ -1,12 +1,84 @@
 import { h } from 'preact';
-import { useState } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { useGameStore } from '../../stores/gameStore.js';
 import { GAME_VERSION, DIFFICULTY, DIFFICULTY_SETTINGS } from '../../config.js';
+
+// パーティクル（浮かぶブロック）のアニメーション用
+function useParticles(canvasRef) {
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const resize = () => {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
+    const COLORS = [
+      '#5aad42', '#8b5e3c', '#888', '#a0733a', '#3d8a3d',
+      '#e0d278', '#3355cc', '#c4a07a', '#ff9933', '#aad4ee',
+      '#e87090', '#ffb8d0', '#c84020',
+    ];
+
+    const particles = Array.from({ length: 28 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight + window.innerHeight,
+      size: 12 + Math.random() * 20,
+      speed: 0.3 + Math.random() * 0.6,
+      drift: (Math.random() - 0.5) * 0.4,
+      rotation: Math.random() * Math.PI * 2,
+      rotSpeed: (Math.random() - 0.5) * 0.02,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      alpha: 0.12 + Math.random() * 0.18,
+    }));
+
+    let raf;
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      particles.forEach(p => {
+        p.y -= p.speed;
+        p.x += p.drift;
+        p.rotation += p.rotSpeed;
+        if (p.y < -50) {
+          p.y = canvas.height + 50;
+          p.x = Math.random() * canvas.width;
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        // ブロックの上面ハイライト
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.3);
+        ctx.restore();
+      });
+
+      raf = requestAnimationFrame(animate);
+    }
+    animate();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
+  }, []);
+}
 
 export function StartScreen() {
   const gameStarted = useGameStore((s) => s.gameStarted);
   const [selectedDifficulty, setSelectedDifficulty] = useState(DIFFICULTY.NORMAL);
   const [showControls, setShowControls] = useState(false);
+  const [startAnim, setStartAnim] = useState(false);
+  const canvasRef = useRef(null);
+
+  useParticles(canvasRef);
 
   if (gameStarted) return null;
 
@@ -24,30 +96,38 @@ export function StartScreen() {
   };
 
   const _doStart = () => {
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-    const { eventBus } = window.__aicraft;
-    useGameStore.getState().setDifficulty(selectedDifficulty);
-    eventBus.emit('start-clicked');
+    setStartAnim(true);
+    setTimeout(() => {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+      const { eventBus } = window.__aicraft;
+      useGameStore.getState().setDifficulty(selectedDifficulty);
+      eventBus.emit('start-clicked');
+    }, 400);
   };
 
   const diffColors = {
-    [DIFFICULTY.EASY]:   { border: '#4caf50', bg: 'rgba(30, 80, 30, 0.5)', active: 'rgba(40, 110, 40, 0.7)' },
-    [DIFFICULTY.NORMAL]: { border: '#2196f3', bg: 'rgba(20, 40, 80, 0.5)', active: 'rgba(25, 60, 110, 0.7)' },
-    [DIFFICULTY.HARD]:   { border: '#f44336', bg: 'rgba(80, 20, 20, 0.5)', active: 'rgba(110, 25, 25, 0.7)' },
+    [DIFFICULTY.EASY]:   { border: '#4caf50', bg: 'rgba(30, 80, 30, 0.55)', active: 'rgba(40, 110, 40, 0.75)', glow: '#4caf5055' },
+    [DIFFICULTY.NORMAL]: { border: '#2196f3', bg: 'rgba(20, 40, 80, 0.55)', active: 'rgba(25, 60, 110, 0.75)', glow: '#2196f355' },
+    [DIFFICULTY.HARD]:   { border: '#f44336', bg: 'rgba(80, 20, 20, 0.55)', active: 'rgba(110, 25, 25, 0.75)', glow: '#f4433655' },
   };
 
   return (
-    <div id="start-screen">
+    <div id="start-screen" class={startAnim ? 'fade-out' : ''}>
+      {/* パーティクルキャンバス */}
+      <canvas ref={canvasRef} id="start-particles" />
+
       <div id="start-screen-inner">
-        {/* タイトル */}
-        <h1 id="game-title">
-          <span style={{ color: '#7cc8ff' }}>Ai</span>
-          <span style={{ color: '#fff' }}>Craft</span>
-          <span id="game-version">v{GAME_VERSION}</span>
-        </h1>
-        <p id="game-subtitle">マインクラフト風ブラウザサンドボックスゲーム</p>
+        {/* タイトルロゴ */}
+        <div id="title-container">
+          <h1 id="game-title">
+            <span class="title-ai">Ai</span>
+            <span class="title-craft">Craft</span>
+          </h1>
+          <div id="game-version-badge">v{GAME_VERSION}</div>
+          <p id="game-subtitle">マインクラフト風 ブラウザサンドボックス</p>
+        </div>
 
         {/* 難易度選択 */}
         <div id="difficulty-section">
@@ -62,11 +142,13 @@ export function StartScreen() {
                   key={diff}
                   class={`difficulty-btn${isActive ? ' active' : ''}`}
                   style={{
-                    borderColor: isActive ? col.border : 'rgba(255,255,255,0.2)',
+                    borderColor: isActive ? col.border : 'rgba(255,255,255,0.18)',
                     background: isActive ? col.active : col.bg,
+                    boxShadow: isActive ? `0 0 16px ${col.glow}, inset 0 1px 0 rgba(255,255,255,0.1)` : 'none',
                   }}
                   onClick={() => setSelectedDifficulty(diff)}
                 >
+                  <span class="diff-icon">{diff === DIFFICULTY.EASY ? '🌿' : diff === DIFFICULTY.NORMAL ? '⚔️' : '💀'}</span>
                   <span class="diff-label">{cfg.label}</span>
                   <span class="diff-desc">{cfg.description}</span>
                 </button>
@@ -80,15 +162,15 @@ export function StartScreen() {
           {hasSave ? (
             <>
               <button class="start-btn primary-btn" onClick={() => handleStart(false)}>
-                続きからプレイ
+                <span class="btn-icon">▶</span> 続きからプレイ
               </button>
               <button class="start-btn secondary-btn" onClick={() => handleStart(true)}>
-                新しいゲームを開始
+                <span class="btn-icon">✦</span> 新しいゲームを開始
               </button>
             </>
           ) : (
             <button class="start-btn primary-btn" onClick={() => handleStart(false)}>
-              ゲーム開始
+              <span class="btn-icon">▶</span> ゲーム開始
             </button>
           )}
         </div>
@@ -105,7 +187,7 @@ export function StartScreen() {
           <div id="controls-guide">
             <div class="controls-grid">
               <div class="controls-col">
-                <div class="controls-section-title">基本操作</div>
+                <div class="controls-section-title">🚶 移動</div>
                 <div class="ctrl-row"><span class="ctrl-key">WASD</span><span class="ctrl-desc">移動</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">Space</span><span class="ctrl-desc">ジャンプ</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">Ctrl</span><span class="ctrl-desc">ダッシュ</span></div>
@@ -114,12 +196,13 @@ export function StartScreen() {
                 <div class="ctrl-row"><span class="ctrl-key">ホイール</span><span class="ctrl-desc">スロット切替</span></div>
               </div>
               <div class="controls-col">
-                <div class="controls-section-title">アクション</div>
+                <div class="controls-section-title">⚔️ アクション</div>
                 <div class="ctrl-row"><span class="ctrl-key">左クリック</span><span class="ctrl-desc">破壊 / 攻撃</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">右クリック</span><span class="ctrl-desc">設置 / 使用</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">F</span><span class="ctrl-desc">食事</span></div>
-                <div class="ctrl-row"><span class="ctrl-key">E</span><span class="ctrl-desc">インベントリ</span></div>
+                <div class="ctrl-row"><span class="ctrl-key">E / I</span><span class="ctrl-desc">インベントリ</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">C</span><span class="ctrl-desc">クラフト</span></div>
+                <div class="ctrl-row"><span class="ctrl-key">M</span><span class="ctrl-desc">ミニマップ切替</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">P / ESC</span><span class="ctrl-desc">設定</span></div>
               </div>
             </div>
@@ -128,9 +211,16 @@ export function StartScreen() {
 
         {isMobile && (
           <div id="mobile-warning">
-            このバージョンはモバイル操作に最適化されていません（PC 推奨）
+            ⚠ このバージョンはモバイル操作に最適化されていません（PC 推奨）
           </div>
         )}
+
+        {/* フッター */}
+        <div id="start-footer">
+          <span>100% AI生成ゲーム</span>
+          <span>•</span>
+          <span>Three.js + Preact</span>
+        </div>
       </div>
     </div>
   );

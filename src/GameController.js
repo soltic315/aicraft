@@ -73,6 +73,7 @@ import { useDurabilityStore } from './stores/durabilityStore.js';
 import { useArmorStore, ARMOR_TYPE_TO_SLOT, BLOCK_TO_ARMOR_KEY, ARMOR_KEY_TO_BLOCK } from './stores/armorStore.js';
 import { useXpStore } from './stores/xpStore.js';
 import { useAchievementStore } from './stores/achievementStore.js';
+import { useEnchantmentStore } from './stores/enchantmentStore.js';
 import { TOOL_NAMES, getToolBreakMultiplier, isToolType, ITEM_TO_TOOL_TYPE, TOOL_TYPE_TO_ITEM } from './tools.js';
 import { MobManager } from './mobs.js';
 import { DroppedItemManager } from './DroppedItemManager.js';
@@ -91,6 +92,8 @@ export class GameController {
       useSettingsStore.getState().load(this.savedGame.settings);
     }
     this.settings = useSettingsStore.getState();
+    // エンチャントストアの参照
+    this._enchantmentStore = useEnchantmentStore;
     this.worldSeed = Number.isFinite(this.savedGame?.worldSeed)
       ? this.savedGame.worldSeed
       : Math.floor(Math.random() * 100000);
@@ -410,6 +413,16 @@ export class GameController {
       if (opened) document.exitPointerLock();
     });
 
+    this.eventBus.on('toggle-enchant', () => {
+      const es = this._enchantmentStore.getState();
+      if (es.enchantPanelOpen) {
+        es.closeEnchantPanel();
+      } else {
+        es.openEnchantPanel();
+        document.exitPointerLock();
+      }
+    });
+
     this.eventBus.on('close-chest', () => {
       this._closeChestPanel('チェストを閉じました', false);
     });
@@ -508,6 +521,10 @@ export class GameController {
 
     this.eventBus.on('delete-save-clicked', () => {
       localStorage.removeItem(SAVE_STORAGE_KEY);
+      this._returnToTitle();
+    });
+
+    this.eventBus.on('title-clicked', () => {
       this._returnToTitle();
     });
 
@@ -1182,7 +1199,15 @@ export class GameController {
     const key = `${getPosKey(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)}|${selectedTool}|${hasTool}`;
     const baseDuration = BLOCK_BREAK_DURATIONS[hit.blockType] ?? 0.5;
     const multiplier = hasTool ? getToolBreakMultiplier(selectedTool, hit.blockType) : 1;
-    const duration = Math.max(0.08, baseDuration / multiplier);
+    // エンチャント: 効率強化の補正
+    const _enchStore = this._enchantmentStore;
+    let enchantMult = 1;
+    if (_enchStore) {
+      const slotKey = `slot_${useInventoryStore.getState().selectedSlot}`;
+      const effLv = _enchStore.getState().getEnchantLevel(slotKey, 'efficiency');
+      if (effLv > 0) enchantMult = 1 + effLv * 0.35;
+    }
+    const duration = Math.max(0.08, baseDuration / (multiplier * enchantMult));
 
     if (this.breakState.key !== key) {
       this.breakState.key = key;
@@ -1483,7 +1508,13 @@ export class GameController {
     if (this._attackCooldown > 0) return;
 
     const { selectedTool } = useToolStore.getState();
-    const damage = selectedTool != null ? PLAYER_ATTACK_DAMAGE_TOOL : PLAYER_ATTACK_DAMAGE_BASE;
+    let damage = selectedTool != null ? PLAYER_ATTACK_DAMAGE_TOOL : PLAYER_ATTACK_DAMAGE_BASE;
+    // エンチャント: 鋭さの補正
+    if (this._enchantmentStore) {
+      const slotKey = `slot_${useInventoryStore.getState().selectedSlot}`;
+      const sharpLv = this._enchantmentStore.getState().getEnchantLevel(slotKey, 'sharpness');
+      if (sharpLv > 0) damage += sharpLv * 1.5;
+    }
 
     mob.takeDamage(damage);
     mob.flashHit();
