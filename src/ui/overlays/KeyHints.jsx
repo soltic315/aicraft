@@ -4,7 +4,6 @@ import { useGameStore } from '../../stores/gameStore.js';
 const HINTS = [
   { key: 'TAB', label: 'インベントリ',   event: 'toggle-inventory' },
   { key: 'C',   label: 'クラフト',       event: 'toggle-craft' },
-  { key: 'X',   label: 'エンチャント',   event: 'toggle-enchant' },
   { key: 'M',   label: 'ミニマップ',     event: null },
   { key: 'P',   label: 'オプション',     event: 'toggle-settings' },
 ];

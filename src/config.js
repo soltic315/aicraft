@@ -40,6 +40,7 @@ export const ALL_ITEM_TYPES = [
   BlockType.LEATHER_HELMET, BlockType.LEATHER_CHESTPLATE, BlockType.LEATHER_LEGGINGS, BlockType.LEATHER_BOOTS,
   BlockType.IRON_HELMET,    BlockType.IRON_CHESTPLATE,    BlockType.IRON_LEGGINGS,    BlockType.IRON_BOOTS,
   BlockType.DIAMOND_HELMET, BlockType.DIAMOND_CHESTPLATE, BlockType.DIAMOND_LEGGINGS, BlockType.DIAMOND_BOOTS,
+  BlockType.ENCHANTING_TABLE,
 ];
 export const AUTO_SAVE_INTERVAL_MS = 30 * 1000;
 export const CHEST_AUTO_CLOSE_DISTANCE = 6; // この距離（ブロック数）を超えたらチェストを自動で閉じる
@@ -338,6 +339,7 @@ export const STARTER_INVENTORY = {
   [BlockType.BEEF]: 0,
   [BlockType.COOKED_BEEF]: 0,
   [BlockType.FURNACE]: 0,
+  [BlockType.ENCHANTING_TABLE]: 0,
   [BlockType.PICKAXE]: 0,
   [BlockType.AXE]: 0,
   [BlockType.SHOVEL]: 0,
@@ -415,6 +417,12 @@ export const CRAFT_RECIPES = [
     label: '板材 x4 -> 修理台 x1',
     consumes: { [BlockType.PLANK]: 4 },
     produces: { [BlockType.REPAIR_TABLE]: 1 },
+  },
+  {
+    id: 'enchanting_table_from_materials',
+    label: 'ダイヤ x2 + 石板 x4 -> エンチャント台 x1',
+    consumes: { [BlockType.DIAMOND]: 2, [BlockType.COBBLESTONE]: 4 },
+    produces: { [BlockType.ENCHANTING_TABLE]: 1 },
   },
   {
     id: 'chest_from_plank',

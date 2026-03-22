@@ -105,6 +105,8 @@ export const BlockType = {
   DIAMOND_CHESTPLATE: 78,
   DIAMOND_LEGGINGS:   79,
   DIAMOND_BOOTS:      80,
+  // 設備ブロック
+  ENCHANTING_TABLE:   81,
 };
 
 export const BLOCK_NAMES = {
@@ -119,6 +121,7 @@ export const BLOCK_NAMES = {
   [BlockType.GLASS]: 'ガラス',
   [BlockType.CRAFTING_TABLE]: '作業台',
   [BlockType.REPAIR_TABLE]: '修理台',
+  [BlockType.ENCHANTING_TABLE]: 'エンチャント台',
   [BlockType.CHEST]: 'チェスト',
   [BlockType.APPLE]: 'リンゴ',
   [BlockType.BEEF]: '生肉',
@@ -202,6 +205,7 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.GLASS]: 0.35,
   [BlockType.CRAFTING_TABLE]: 1.0,
   [BlockType.REPAIR_TABLE]: 1.0,
+  [BlockType.ENCHANTING_TABLE]: 1.5,
   [BlockType.CHEST]: 1.1,
   [BlockType.COBBLESTONE]: 1.8,
   [BlockType.IRON_ORE]: 2.0,
@@ -323,6 +327,13 @@ const BLOCK_COLORS = {
     bottom: '#a67949',
     topDetail: '#d7b26e',
     sideDetail: '#5f3a1f',
+  },
+  [BlockType.ENCHANTING_TABLE]: {
+    top: '#8030a0',
+    side: '#600880',
+    bottom: '#3a0060',
+    topDetail: '#d060ff',
+    sideDetail: '#200040',
   },
   [BlockType.COBBLESTONE]: {
     top: '#686868',
@@ -668,6 +679,32 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
     ctx.moveTo(pixelSize * 3, pixelSize * 4);
     ctx.lineTo(pixelSize * 7, pixelSize * 2);
     ctx.stroke();
+  } else if (pattern === 'enchant_top') {
+    // エンチャント台上面: 紫の本のシンボル
+    ctx.fillStyle = '#8030a0';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#200040';
+    ctx.fillRect(pixelSize * 3, pixelSize * 2, pixelSize * 10, pixelSize * 12);
+    ctx.fillStyle = '#d060ff';
+    ctx.fillRect(pixelSize * 4, pixelSize * 3, pixelSize * 8, pixelSize * 10);
+    ctx.fillStyle = '#ff80ff';
+    ctx.fillRect(pixelSize * 7, pixelSize * 3, pixelSize * 2, pixelSize * 10);
+    ctx.fillStyle = '#600880';
+    for (let y = 4; y < 13; y += 2) {
+      ctx.fillRect(pixelSize * 5, y * pixelSize, pixelSize * 6, Math.max(1, pixelSize * 0.6));
+    }
+  } else if (pattern === 'enchant_side') {
+    // エンチャント台側面: 暗紫にルーン文字風の模様
+    ctx.fillStyle = '#600880';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#d060ff';
+    for (let y = 2; y < 14; y += 3) {
+      ctx.fillRect(pixelSize * 2, y * pixelSize, pixelSize * 2, pixelSize);
+      ctx.fillRect(pixelSize * 7, (y + 1) * pixelSize, pixelSize * 2, pixelSize);
+      ctx.fillRect(pixelSize * 12, y * pixelSize, pixelSize * 2, pixelSize);
+    }
+    ctx.fillStyle = '#200040';
+    ctx.fillRect(pixelSize * 0, pixelSize * 13, size, pixelSize * 3);
   } else if (pattern === 'crafting_top') {
     for (let x = 0; x < 16; x += 4) {
       for (let y = 0; y < 16; y += 4) {
@@ -1004,6 +1041,11 @@ export function generateTextures() {
       top: 'crafting_top',
       side: 'crafting_side',
       bottom: 'plank',
+    },
+    [BlockType.ENCHANTING_TABLE]: {
+      top: 'enchant_top',
+      side: 'enchant_side',
+      bottom: 'cobblestone',
     },
     [BlockType.CHEST]: {
       top: 'chest_top',

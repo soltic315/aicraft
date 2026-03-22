@@ -135,7 +135,7 @@ export class GameController {
     // Lighting
     this.ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(this.ambientLight);
-    this.dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    this.dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
     this.dirLight.position.set(50, 100, 30);
     // ソフトシャドウ設定（プレイヤー周辺の影を動的に描画）
     this.dirLight.castShadow = true;
@@ -258,6 +258,7 @@ export class GameController {
     this.openedCraftingTablePos = null;
     this.openedRepairTablePos = null;
     this.openedFurnacePos = null;
+    this.openedEnchantTablePos = null;
 
     // Highlight wireframe
     const highlightGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
@@ -383,6 +384,7 @@ export class GameController {
       sound: this.sound,
       hasSavedGame: !!this.savedGame,
       applySettings: () => this._applySettings(),
+      gameController: this,
     };
 
     // Apply initial settings
@@ -456,9 +458,9 @@ export class GameController {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.45,
+      0.3,
       0.5,
-      0.72
+      0.82
     );
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
@@ -517,16 +519,6 @@ export class GameController {
     this.eventBus.on('toggle-craft', () => {
       const opened = useUIStore.getState().toggleCraft();
       if (opened) document.exitPointerLock();
-    });
-
-    this.eventBus.on('toggle-enchant', () => {
-      const es = this._enchantmentStore.getState();
-      if (es.enchantPanelOpen) {
-        es.closeEnchantPanel();
-      } else {
-        es.openEnchantPanel();
-        document.exitPointerLock();
-      }
     });
 
     this.eventBus.on('close-chest', () => {
@@ -830,10 +822,11 @@ export class GameController {
     useXpStore.getState().reset();
     useAchievementStore.getState().reset();
     this.player.armorDefense = 0;
-    // 作業台・修理台・かまどの開放状態をリセット
+    // 作業台・修理台・かまど・エンチャント台の開放状態をリセット
     this.openedCraftingTablePos = null;
     this.openedRepairTablePos = null;
     this.openedFurnacePos = null;
+    this.openedEnchantTablePos = null;
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
     this.particleManager.dispose();
@@ -1008,6 +1001,28 @@ export class GameController {
     }
   }
 
+  _validateOpenedEnchantTable() {
+    const es = this._enchantmentStore.getState();
+    if (!es.enchantPanelOpen || !this.openedEnchantTablePos) return;
+
+    const pos = this.openedEnchantTablePos;
+    if (this.world.getBlock(pos.x, pos.y, pos.z) !== BlockType.ENCHANTING_TABLE) {
+      es.closeEnchantPanel();
+      this.openedEnchantTablePos = null;
+      useUIStore.getState().showFeedback('エンチャント台が破壊されました');
+      return;
+    }
+
+    const dx = this.player.position.x - (pos.x + 0.5);
+    const dy = this.player.position.y - (pos.y + 0.5);
+    const dz = this.player.position.z - (pos.z + 0.5);
+    if (dx * dx + dy * dy + dz * dz > CHEST_AUTO_CLOSE_DISTANCE * CHEST_AUTO_CLOSE_DISTANCE) {
+      es.closeEnchantPanel();
+      this.openedEnchantTablePos = null;
+      useUIStore.getState().showFeedback('エンチャント台から離れました');
+    }
+  }
+
   // ---- スロット変更時の処理（ツール自動装備） ----
 
   _onSlotChanged() {
@@ -1178,6 +1193,16 @@ export class GameController {
       useUIStore.getState().openFurnacePanel();
       this.openedFurnacePos = hit.blockPos;
       useAchievementStore.getState().unlock('first_furnace');
+      if (document.pointerLockElement === document.body) {
+        document.exitPointerLock();
+      }
+      return;
+    }
+
+    // 右クリックでエンチャント台を開く（手が空でも可）
+    if (hit && hit.blockType === BlockType.ENCHANTING_TABLE) {
+      this._enchantmentStore.getState().openEnchantPanel();
+      this.openedEnchantTablePos = hit.blockPos;
       if (document.pointerLockElement === document.body) {
         document.exitPointerLock();
       }
@@ -1498,7 +1523,7 @@ export class GameController {
     this.ambientLight.intensity = 0.2 + (daylight * 0.45);
 
     this.dirLight.color.copy(this._tempSunColor);
-    this.dirLight.intensity = 0.1 + (daylight * 0.95);
+    this.dirLight.intensity = 0.1 + (daylight * 0.65);
     this.dirLight.position.set(
       Math.cos(sunAngle) * 90,
       18 + (sunHeight * 110),
@@ -1594,6 +1619,7 @@ export class GameController {
       this._validateOpenedChest();
       this._validateOpenedTable();
       this._validateOpenedFurnace();
+      this._validateOpenedEnchantTable();
 
       // 攻撃クールダウン更新
       this._attackCooldown = Math.max(0, this._attackCooldown - dt);
@@ -1680,6 +1706,7 @@ export class GameController {
       usePlayerStore.getState().syncFromPlayer(this.player);
       this._validateOpenedChest();
       this._validateOpenedFurnace();
+      this._validateOpenedEnchantTable();
     }
 
     // 水・溶岩テクスチャアニメーション（UVスクロール）
