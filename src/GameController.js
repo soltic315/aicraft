@@ -161,6 +161,9 @@ export class GameController {
     this._waterAnimTime = 0;
     this._lavaAnimTime = 0;
 
+    // たいまつPointLight管理: posKey -> PointLight
+    this._torchLights = new Map();
+
     // Reusable temp colors for day/night interpolation
     this._tempSkyColor = new THREE.Color();
     this._tempFogColor = new THREE.Color();
@@ -232,6 +235,12 @@ export class GameController {
         }
         // 雪: 白く輝く
         if (type === BlockType.SNOW) { matOptions.roughness = 0.65; }
+        // たいまつ: 強い橙色発光でブルームを誘発
+        if (type === BlockType.TORCH) {
+          matOptions.emissive = new THREE.Color(0xff8810);
+          matOptions.emissiveIntensity = 1.2;
+          matOptions.roughness = 0.9;
+        }
 
         const mat = new THREE.MeshStandardMaterial(matOptions);
         this.blockMaterials[type][face] = mat;
@@ -251,6 +260,12 @@ export class GameController {
     });
     if (this.savedGame?.chunkDiffs) {
       this.world.applyChunkEdits(this.savedGame.chunkDiffs);
+      // セーブデータからたいまつのPointLightを復元
+      for (const edit of this.savedGame.chunkDiffs) {
+        if (edit.type === BlockType.TORCH) {
+          this._addTorchLight(edit.x, edit.y, edit.z);
+        }
+      }
     }
     this.player = new Player(this.camera, this.world, { mouseSensitivity: this.settings.sensitivity });
 
@@ -1140,6 +1155,26 @@ export class GameController {
     }
   }
 
+  // たいまつのPointLightをシーンに追加
+  _addTorchLight(x, y, z) {
+    const key = getPosKey(x, y, z);
+    if (this._torchLights.has(key)) return;
+    const light = new THREE.PointLight(0xffaa33, 1.8, 14);
+    light.position.set(x + 0.5, y + 0.5, z + 0.5);
+    this.scene.add(light);
+    this._torchLights.set(key, light);
+  }
+
+  // たいまつのPointLightをシーンから削除
+  _removeTorchLight(x, y, z) {
+    const key = getPosKey(x, y, z);
+    const light = this._torchLights.get(key);
+    if (light) {
+      this.scene.remove(light);
+      this._torchLights.delete(key);
+    }
+  }
+
   _tryPlaceBlock(now) {
     if (now - this.lastPlaceTime < PLACE_COOLDOWN) return;
 
@@ -1246,6 +1281,10 @@ export class GameController {
     if (placeType === BlockType.CHEST) {
       useChestStore.getState().getChestData(pp, true);
     }
+    // たいまつ設置時にPointLightを追加
+    if (placeType === BlockType.TORCH) {
+      this._addTorchLight(pp.x, pp.y, pp.z);
+    }
 
     // 設置パーティクル
     const placeMat = this.blockMaterials[placeType]?.top ?? this.blockMaterials[1]?.top;
@@ -1329,6 +1368,10 @@ export class GameController {
         }
       }
 
+      // たいまつ破壊時にPointLightを削除
+      if (hit.blockType === BlockType.TORCH) {
+        this._removeTorchLight(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+      }
       this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.sound.playBreak();
 
@@ -1386,6 +1429,7 @@ export class GameController {
               const bx = ex + dx, by = ey + dy, bz = ez + dz;
               const bt = this.world.getBlock(bx, by, bz);
               if (bt !== BlockType.AIR && bt !== BlockType.BEDROCK) {
+                if (bt === BlockType.TORCH) this._removeTorchLight(bx, by, bz);
                 this.world.setBlockWithDiff(bx, by, bz, BlockType.AIR);
               }
             }

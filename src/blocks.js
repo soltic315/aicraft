@@ -107,6 +107,10 @@ export const BlockType = {
   DIAMOND_BOOTS:      80,
   // 設備ブロック
   ENCHANTING_TABLE:   81,
+  // 光源ブロック
+  TORCH:              82,
+  // 燃料素材
+  CHARCOAL:           83,
 };
 
 export const BLOCK_NAMES = {
@@ -192,6 +196,8 @@ export const BLOCK_NAMES = {
   [BlockType.DIAMOND_CHESTPLATE]: 'ダイヤのチェストプレート',
   [BlockType.DIAMOND_LEGGINGS]:   'ダイヤのレギンス',
   [BlockType.DIAMOND_BOOTS]:      'ダイヤのブーツ',
+  [BlockType.TORCH]:              'たいまつ',
+  [BlockType.CHARCOAL]:           '木炭',
 };
 
 export const BLOCK_BREAK_DURATIONS = {
@@ -229,6 +235,7 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.CHERRY_LEAVES]: 0.2,
   [BlockType.DEEPSLATE]: 2.5,
   [BlockType.AMETHYST_ORE]: 3.5,
+  [BlockType.TORCH]: 0.1,
 };
 
 // ブロック破壊時のドロップアイテム上書き（デフォルトは自分自身をドロップ）
@@ -502,6 +509,14 @@ const BLOCK_COLORS = {
     bottom: '#2a2a40',
     topDetail: '#a060d8',
     sideDetail: '#8040c0',
+  },
+  // たいまつ: 炎オレンジと木の棒
+  [BlockType.TORCH]: {
+    top: '#ff9020',
+    side: '#7a5520',
+    bottom: '#7a5520',
+    topDetail: '#ffcc40',
+    sideDetail: '#5a3d10',
   },
 };
 
@@ -944,9 +959,62 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
     ctx.fillRect(pixelSize * 1.5, pixelSize * 6, pixelSize * 13, pixelSize * 1.6);
     ctx.fillStyle = '#c9a15c';
     ctx.fillRect(pixelSize * 7.2, pixelSize * 5.3, pixelSize * 1.6, pixelSize * 2.2);
+  } else if (pattern === 'torch_top') {
+    // たいまつ上面: 中央に燃える炎
+    const cx = size / 2;
+    const cy = size / 2;
+    // 炎の輝き（放射状グラデーション）
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.45);
+    grad.addColorStop(0,   '#ffffff');
+    grad.addColorStop(0.2, '#ffee80');
+    grad.addColorStop(0.5, '#ff9020');
+    grad.addColorStop(1,   'rgba(80,30,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    // 中心に明るい点
+    ctx.fillStyle = '#ffffc0';
+    ctx.fillRect(cx - pixelSize, cy - pixelSize, pixelSize * 2, pixelSize * 2);
+  } else if (pattern === 'torch_side') {
+    // たいまつ側面: 上部に炎、下部に茶色の棒
+    // 上部（炎エリア）をオレンジに塗る
+    const flameH = Math.floor(size * 0.35);
+    const grad = ctx.createLinearGradient(0, 0, 0, flameH);
+    grad.addColorStop(0,   '#ffee60');
+    grad.addColorStop(0.5, '#ff8010');
+    grad.addColorStop(1,   '#7a5520');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, flameH);
+    // 棒の中央を少し明るくして立体感を出す
+    ctx.fillStyle = 'rgba(255,200,80,0.18)';
+    ctx.fillRect(size * 0.3, flameH, size * 0.4, size - flameH);
   }
 
   return canvas;
+}
+
+// たいまつアイコン
+function generateTorchIcon() {
+  return makeIcon((ctx) => {
+    // 棒（茶色）
+    ctx.fillStyle = '#7a5520';
+    ctx.fillRect(13, 14, 6, 16);
+    // 棒のハイライト
+    ctx.fillStyle = '#a07830';
+    ctx.fillRect(14, 14, 3, 16);
+    // 炎（オレンジ）
+    ctx.fillStyle = '#ff8010';
+    ctx.beginPath();
+    ctx.ellipse(16, 10, 5, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 炎の中心（黄色）
+    ctx.fillStyle = '#ffee60';
+    ctx.beginPath();
+    ctx.ellipse(16, 9, 3, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // 炎の先端（白）
+    ctx.fillStyle = '#ffffc0';
+    ctx.fillRect(15, 5, 2, 2);
+  });
 }
 
 function adjustBrightness(hex, amount) {
@@ -1076,6 +1144,7 @@ export function generateTextures() {
     [BlockType.CHERRY_LEAVES]: { top: 'cherry_leaves', side: 'cherry_leaves', bottom: 'cherry_leaves' },
     [BlockType.DEEPSLATE]: { top: 'deepslate', side: 'deepslate', bottom: 'deepslate' },
     [BlockType.AMETHYST_ORE]: { top: 'amethyst_ore', side: 'amethyst_ore', bottom: 'amethyst_ore' },
+    [BlockType.TORCH]: { top: 'torch_top', side: 'torch_side', bottom: 'torch_side' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -1238,6 +1307,26 @@ function generateCoalIcon() {
     ctx.fillRect(10, 10, 6, 6);
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(16, 16, 6, 6);
+  });
+}
+
+// 木炭アイコン（石炭より茶色がかった炭）
+function generateCharcoalIcon() {
+  return makeIcon((ctx) => {
+    // 炭本体（暗い茶黒）
+    ctx.fillStyle = '#2a1a0a';
+    ctx.beginPath();
+    ctx.roundRect(8, 8, 16, 16, 3);
+    ctx.fill();
+    // 木目の焦げ跡（茶色）
+    ctx.fillStyle = '#3d2010';
+    ctx.fillRect(10, 10, 5, 3);
+    ctx.fillRect(14, 17, 6, 3);
+    // 炭の光沢（白みがかった点）
+    ctx.fillStyle = '#4a2c15';
+    ctx.fillRect(16, 11, 4, 4);
+    ctx.fillStyle = '#1a0d05';
+    ctx.fillRect(10, 18, 4, 4);
   });
 }
 
@@ -1753,6 +1842,8 @@ export function generateBlockIcon(type) {
   if (type === BlockType.CHICKEN)       return generateChickenIcon();
   if (type === BlockType.COOKED_CHICKEN) return generateCookedChickenIcon();
   if (type === BlockType.MUSHROOM_STEW) return generateMushroomStewIcon();
+  if (type === BlockType.TORCH)         return generateTorchIcon();
+  if (type === BlockType.CHARCOAL)      return generateCharcoalIcon();
   // 防具アイコン
   if (type === BlockType.LEATHER_HELMET)     return generateHelmetIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);
   if (type === BlockType.LEATHER_CHESTPLATE) return generateChestplateIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);

@@ -401,6 +401,18 @@ export const CRAFT_RECIPES = [
     produces: { [BlockType.PLANK]: 4 },
   },
   {
+    id: 'torch_from_coal_and_plank',
+    label: '石炭 x1 + 板材 x1 -> たいまつ x4',
+    consumes: { [BlockType.COAL]: 1, [BlockType.PLANK]: 1 },
+    produces: { [BlockType.TORCH]: 4 },
+  },
+  {
+    id: 'torch_from_charcoal_and_plank',
+    label: '木炭 x1 + 板材 x1 -> たいまつ x4',
+    consumes: { [BlockType.CHARCOAL]: 1, [BlockType.PLANK]: 1 },
+    produces: { [BlockType.TORCH]: 4 },
+  },
+  {
     id: 'glass_from_sand',
     label: '砂 x2 -> ガラス x1',
     consumes: { [BlockType.SAND]: 2 },
@@ -767,6 +779,7 @@ export const CRAFT_RECIPES = [
 // 精錬の燃料として使えるアイテム（いずれか1つを消費）
 export const SMELT_FUELS = [
   { type: BlockType.COAL,         count: 1 }, // 石炭: 効率的な燃料
+  { type: BlockType.CHARCOAL,     count: 1 }, // 木炭: 石炭と同等
   { type: BlockType.WOOD,         count: 2 }, // 木材: 2本で1回分
   { type: BlockType.PLANK,        count: 2 }, // 板材: 2枚で1回分
   { type: BlockType.ACACIA_WOOD,  count: 2 }, // アカシア木材: 2本で1回分
@@ -813,6 +826,38 @@ export const SMELT_RECIPES = [
     inputType: BlockType.CHICKEN,
     inputCount: 1,
     outputType: BlockType.COOKED_CHICKEN,
+    outputCount: 1,
+  },
+  {
+    id: 'smelt_wood_to_charcoal',
+    label: '木材 -> 木炭',
+    inputType: BlockType.WOOD,
+    inputCount: 1,
+    outputType: BlockType.CHARCOAL,
+    outputCount: 1,
+  },
+  {
+    id: 'smelt_jungle_wood_to_charcoal',
+    label: 'ジャングル木材 -> 木炭',
+    inputType: BlockType.JUNGLE_WOOD,
+    inputCount: 1,
+    outputType: BlockType.CHARCOAL,
+    outputCount: 1,
+  },
+  {
+    id: 'smelt_acacia_wood_to_charcoal',
+    label: 'アカシア木材 -> 木炭',
+    inputType: BlockType.ACACIA_WOOD,
+    inputCount: 1,
+    outputType: BlockType.CHARCOAL,
+    outputCount: 1,
+  },
+  {
+    id: 'smelt_cherry_wood_to_charcoal',
+    label: '桜木材 -> 木炭',
+    inputType: BlockType.CHERRY_WOOD,
+    inputCount: 1,
+    outputType: BlockType.CHARCOAL,
     outputCount: 1,
   },
 ];
