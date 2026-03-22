@@ -200,6 +200,14 @@ export const BLOCK_NAMES = {
   [BlockType.CHARCOAL]:           '木炭',
 };
 
+// クロス（X字スプライト）形状で描画するブロックの一覧
+export const CROSS_BLOCK_TYPES = new Set([
+  BlockType.TALL_GRASS,
+  BlockType.FLOWER,
+  BlockType.MUSHROOM,
+  BlockType.TORCH,
+]);
+
 export const BLOCK_BREAK_DURATIONS = {
   [BlockType.GRASS]: 0.45,
   [BlockType.DIRT]: 0.55,
@@ -992,6 +1000,115 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
   return canvas;
 }
 
+// クロス（X字スプライト）ブロック用のスプライトテクスチャを生成する（透明背景）
+function generateCrossSprite(blockType, size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size); // 透明背景
+
+  const p = size / 16; // 1ピクセル分のサイズ
+
+  if (blockType === BlockType.TALL_GRASS) {
+    // 草：波打つ草の葉を複数本描画
+    const stems = [
+      { x: 2, color: '#4a9a30', lean: -1 },
+      { x: 5, color: '#3a7a20', lean:  1 },
+      { x: 8, color: '#5ab040', lean: -1 },
+      { x: 11, color: '#4a9a30', lean:  1 },
+      { x: 13, color: '#3a7a20', lean: -1 },
+    ];
+    for (const { x, color, lean } of stems) {
+      // 根元（下部）
+      ctx.fillStyle = '#2e6018';
+      ctx.fillRect(x * p, 13 * p, p * 2, p * 3);
+      // 茎（中部）
+      ctx.fillStyle = color;
+      ctx.fillRect(x * p, 9 * p, p * 2, p * 4);
+      // 先端（上部、少し傾く）
+      ctx.fillStyle = '#6bbb4c';
+      ctx.fillRect((x + lean) * p, 6 * p, p * 2, p * 3);
+      ctx.fillRect((x + lean * 2) * p, 3 * p, p, p * 3);
+    }
+  } else if (blockType === BlockType.FLOWER) {
+    // 花：茎 + 花びら + 中心
+    // 茎（緑）
+    ctx.fillStyle = '#2e6018';
+    ctx.fillRect(7 * p, 11 * p, 2 * p, p * 5);
+    // 葉（茎の途中に小さな葉）
+    ctx.fillStyle = '#4a9a30';
+    ctx.fillRect(5 * p, 12 * p, 2 * p, p);
+    ctx.fillRect(9 * p, 11 * p, 2 * p, p);
+    // 花びら（赤）
+    ctx.fillStyle = '#e84040';
+    ctx.fillRect(6 * p, 4 * p, 4 * p, 2 * p); // 上
+    ctx.fillRect(6 * p, 8 * p, 4 * p, 2 * p); // 下
+    ctx.fillRect(4 * p, 6 * p, 2 * p, 4 * p); // 左
+    ctx.fillRect(10 * p, 6 * p, 2 * p, 4 * p); // 右
+    // 花びらの先端（明るいピンク）
+    ctx.fillStyle = '#ff7070';
+    ctx.fillRect(7 * p, 3 * p, 2 * p, p);
+    ctx.fillRect(7 * p, 10 * p, 2 * p, p);
+    ctx.fillRect(3 * p, 7 * p, p, 2 * p);
+    ctx.fillRect(12 * p, 7 * p, p, 2 * p);
+    // 中心（黄色）
+    ctx.fillStyle = '#ffd020';
+    ctx.fillRect(6 * p, 6 * p, 4 * p, 4 * p);
+    ctx.fillStyle = '#ffee60';
+    ctx.fillRect(7 * p, 7 * p, 2 * p, 2 * p);
+  } else if (blockType === BlockType.MUSHROOM) {
+    // きのこ：白い茎 + 赤茶色のかさ + 白い斑点
+    // 茎（白/ベージュ）
+    ctx.fillStyle = '#f0e8e0';
+    ctx.fillRect(5 * p, 9 * p, 6 * p, p * 7);
+    // 茎の影（右側）
+    ctx.fillStyle = '#c8bcb0';
+    ctx.fillRect(9 * p, 9 * p, 2 * p, p * 7);
+    // かさ（赤茶色、茎より広い）
+    ctx.fillStyle = '#c04818';
+    ctx.fillRect(2 * p, 4 * p, 12 * p, p);   // 頂部
+    ctx.fillRect(1 * p, 5 * p, 14 * p, p);
+    ctx.fillRect(1 * p, 6 * p, 14 * p, p);
+    ctx.fillRect(1 * p, 7 * p, 14 * p, p);
+    ctx.fillRect(2 * p, 8 * p, 12 * p, p);
+    ctx.fillRect(3 * p, 9 * p, 10 * p, p);   // かさの底辺
+    // かさの下部（暗い影）
+    ctx.fillStyle = '#7a3010';
+    ctx.fillRect(2 * p, 8 * p, 12 * p, p);
+    ctx.fillRect(3 * p, 9 * p, 10 * p, p);
+    // 白い斑点
+    ctx.fillStyle = '#f5e8dc';
+    ctx.fillRect(3 * p, 5 * p, 2 * p, 2 * p);
+    ctx.fillRect(7 * p, 4 * p, 2 * p, 2 * p);
+    ctx.fillRect(11 * p, 5 * p, 2 * p, 2 * p);
+    ctx.fillRect(5 * p, 7 * p, 2 * p, 2 * p);
+  } else if (blockType === BlockType.TORCH) {
+    // たいまつ：茶色の棒 + 先端に炎
+    // 棒（茶色）
+    ctx.fillStyle = '#7a5520';
+    ctx.fillRect(7 * p, 6 * p, 2 * p, p * 10);
+    // 棒のハイライト（左側）
+    ctx.fillStyle = '#a07838';
+    ctx.fillRect(7 * p, 6 * p, p, p * 10);
+    // 炎の光暈（半透明オレンジ）
+    ctx.fillStyle = 'rgba(255,140,20,0.35)';
+    ctx.fillRect(5 * p, 1 * p, 6 * p, 4 * p);
+    // 炎（オレンジ）
+    ctx.fillStyle = '#ff8010';
+    ctx.fillRect(6 * p, 2 * p, 4 * p, p * 5);
+    ctx.fillRect(7 * p, p, 2 * p, p);
+    // 炎の内側（黄色）
+    ctx.fillStyle = '#ffee60';
+    ctx.fillRect(7 * p, 2 * p, 2 * p, p * 3);
+    // 炎の中心（白）
+    ctx.fillStyle = '#ffffc0';
+    ctx.fillRect(7 * p, 2 * p, p, p);
+  }
+
+  return canvas;
+}
+
 // たいまつアイコン
 function generateTorchIcon() {
   return makeIcon((ctx) => {
@@ -1157,6 +1274,12 @@ export function generateTextures() {
       side: generateFaceTexture(colors.side, colors.sideDetail, TEX_SIZE, type * 100 + 2, patterns.side),
       bottom: generateFaceTexture(colors.bottom, colors.topDetail, TEX_SIZE, type * 100 + 3, patterns.bottom),
     };
+  }
+
+  // クロスブロック用のスプライトテクスチャを追加生成
+  for (const type of CROSS_BLOCK_TYPES) {
+    if (!textures[type]) textures[type] = {};
+    textures[type].cross = generateCrossSprite(type, TEX_SIZE);
   }
 
   return textures;

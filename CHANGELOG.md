@@ -3,6 +3,17 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [5.5.0] - 2026-03-22
+
+### Changed
+
+- **草・花・きのこ・たいまつをX字スプライト描画に変更**
+  - 4種の設置物（TALL_GRASS, FLOWER, MUSHROOM, TORCH）を通常の直方体キューブからX字（クロス）スプライトに変更
+  - 各ブロック専用のピクセルアートスプライトテクスチャを新規生成（草の茎・花びら・きのこのかさ・たいまつの炎）
+  - `DoubleSide` + `alphaTest: 0.1` マテリアルにより透明背景を正しくカットアウト
+  - 隣接ブロックのAO計算からクロスブロックを除外し、隣接面を正しく表示
+  - `CROSS_BLOCK_TYPES` セットを `blocks.js` からエクスポートし、`meshWorker.js` / `world.js` で共有
+
 ## [5.4.0] - 2026-03-22
 
 ### Added

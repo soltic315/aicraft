@@ -9,6 +9,7 @@ import {
   BLOCK_NAMES,
   BLOCK_BREAK_DURATIONS,
   BLOCK_DROP_OVERRIDES,
+  CROSS_BLOCK_TYPES,
   generateTextures,
   generateBreakOverlayTextures,
 } from './blocks.js';
@@ -251,6 +252,29 @@ export class GameController {
         if (type === BlockType.LAVA && !this._lavaMaterials) this._lavaMaterials = [];
         if (type === BlockType.LAVA) this._lavaMaterials.push(mat);
       }
+    }
+
+    // クロス（X字スプライト）ブロック専用のDoubleSideマテリアルを生成
+    for (const type of CROSS_BLOCK_TYPES) {
+      const crossCanvas = textures[type]?.cross;
+      if (!crossCanvas) continue;
+      const crossTex = new THREE.CanvasTexture(crossCanvas);
+      crossTex.magFilter = THREE.NearestFilter;
+      crossTex.minFilter = THREE.NearestFilter;
+      const crossMatOptions = {
+        map: crossTex,
+        vertexColors: true,
+        side: THREE.DoubleSide,
+        alphaTest: 0.1,
+        transparent: true,
+        roughness: 0.9,
+        metalness: 0.0,
+      };
+      if (type === BlockType.TORCH) {
+        crossMatOptions.emissive = new THREE.Color(0xff8810);
+        crossMatOptions.emissiveIntensity = 1.2;
+      }
+      this.blockMaterials[type].cross = new THREE.MeshStandardMaterial(crossMatOptions);
     }
 
     // World & Player

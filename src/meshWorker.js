@@ -1,6 +1,6 @@
 // Web Worker: チャンクのメッシュジオメトリ計算をメインスレッドをブロックせずに実行する
 // Three.js は使用しない。純粋な配列演算のみ。
-import { BlockType } from './blocks.js';
+import { BlockType, CROSS_BLOCK_TYPES } from './blocks.js';
 
 const CHUNK_SIZE = 16;
 const WORLD_HEIGHT = 128;
@@ -40,13 +40,14 @@ function getBlock(wx, wy, wz) {
 
 const isSolid = (wx, wy, wz) => {
   const b = getBlock(wx, wy, wz);
-  return b !== BlockType.AIR && b !== BlockType.WATER && b != null;
+  return b !== BlockType.AIR && b !== BlockType.WATER && b != null && !CROSS_BLOCK_TYPES.has(b);
 };
 
 const isTransparentNeighbor = (b) =>
   b === BlockType.AIR || b === BlockType.WATER ||
   b === BlockType.ICE || b === BlockType.GLASS ||
-  b === BlockType.LEAVES || b === BlockType.JUNGLE_LEAVES;
+  b === BlockType.LEAVES || b === BlockType.JUNGLE_LEAVES ||
+  CROSS_BLOCK_TYPES.has(b);
 
 // ブロックがその隣接ブロックに向けて面を描画すべきか判定
 // ICE・GLASS は同種ブロックと隣接するとき内部面を生成しない（透過の積み重ねを防止）
@@ -181,6 +182,7 @@ function buildMesh(cx, cz, maxY) {
       for (let lz = 0; lz < CHUNK_SIZE; lz++) {
         const block = selfBlocks[B(lx, y, lz)];
         if (block === BlockType.AIR || block === BlockType.WATER) continue;
+        if (CROSS_BLOCK_TYPES.has(block)) continue; // クロスブロックは別パスで処理
         const wx = cx * CHUNK_SIZE + lx;
         const wz = cz * CHUNK_SIZE + lz;
         if (shouldShowFace(block, getBlock(wx, y + 1, wz))) addQuad(block, 'top',    wx, y, wz);
@@ -197,6 +199,7 @@ function buildMesh(cx, cz, maxY) {
       for (let y = 0; y < yCount; y++) {
         const block = selfBlocks[B(lx, y, lz)];
         if (block === BlockType.AIR || block === BlockType.WATER) continue;
+        if (CROSS_BLOCK_TYPES.has(block)) continue; // クロスブロックは別パスで処理
         if (shouldShowFace(block, getBlock(wx, y, wz + 1))) addQuad(block, 'front', wx, y, wz);
         if (shouldShowFace(block, getBlock(wx, y, wz - 1))) addQuad(block, 'back',  wx, y, wz);
       }
@@ -211,6 +214,7 @@ function buildMesh(cx, cz, maxY) {
       for (let y = 0; y < yCount; y++) {
         const block = selfBlocks[B(lx, y, lz)];
         if (block === BlockType.AIR || block === BlockType.WATER) continue;
+        if (CROSS_BLOCK_TYPES.has(block)) continue; // クロスブロックは別パスで処理
         if (shouldShowFace(block, getBlock(wx + 1, y, wz))) addQuad(block, 'right', wx, y, wz);
         if (shouldShowFace(block, getBlock(wx - 1, y, wz))) addQuad(block, 'left',  wx, y, wz);
       }
@@ -244,6 +248,36 @@ function buildMesh(cx, cz, maxY) {
         if (getBlock(wx + 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'right',  wx, y, wz);
         if (getBlock(wx - 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'left',   wx, y, wz);
         if (getBlock(wx, y - 1, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'bottom', wx, y, wz);
+      }
+    }
+  }
+
+  // クロス（X字スプライト）ブロックの描画（草・花・きのこ・たいまつ）
+  for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+    for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+      const wx = cx * CHUNK_SIZE + lx;
+      const wz = cz * CHUNK_SIZE + lz;
+      for (let y = 0; y <= meshMaxY; y++) {
+        const block = selfBlocks[B(lx, y, lz)];
+        if (!CROSS_BLOCK_TYPES.has(block)) continue;
+
+        const g = getGroup(block, 'cross');
+
+        // 対角線1: (wx, y, wz) → (wx+1, y, wz+1)
+        let vi = g.p.length / 3;
+        g.p.push(wx,   y,   wz,   wx+1, y,   wz+1, wx+1, y+1, wz+1, wx,   y+1, wz);
+        g.n.push(0.707,0,0.707, 0.707,0,0.707, 0.707,0,0.707, 0.707,0,0.707);
+        g.u.push(0,0, 1,0, 1,1, 0,1);
+        g.i.push(vi, vi+1, vi+2, vi, vi+2, vi+3);
+        g.c.push(1,1,1, 1,1,1, 1,1,1, 1,1,1);
+
+        // 対角線2: (wx+1, y, wz) → (wx, y, wz+1)
+        vi = g.p.length / 3;
+        g.p.push(wx+1, y,   wz,   wx,   y,   wz+1, wx,   y+1, wz+1, wx+1, y+1, wz);
+        g.n.push(-0.707,0,0.707, -0.707,0,0.707, -0.707,0,0.707, -0.707,0,0.707);
+        g.u.push(0,0, 1,0, 1,1, 0,1);
+        g.i.push(vi, vi+1, vi+2, vi, vi+2, vi+3);
+        g.c.push(1,1,1, 1,1,1, 1,1,1, 1,1,1);
       }
     }
   }

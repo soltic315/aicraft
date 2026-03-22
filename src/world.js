@@ -1,6 +1,6 @@
 // World generation and chunk management
 import * as THREE from 'three';
-import { BlockType } from './blocks.js';
+import { BlockType, CROSS_BLOCK_TYPES } from './blocks.js';
 import { Noise } from './noise.js';
 
 const CHUNK_SIZE = 16;
@@ -368,13 +368,13 @@ export class World {
     }
 
     const FACE_BRIGHTNESS = {
-      top: 1.0, front: 0.85, back: 0.85, right: 0.75, left: 0.75, bottom: 0.60,
+      top: 1.0, front: 0.85, back: 0.85, right: 0.75, left: 0.75, bottom: 0.60, cross: 1.0,
     };
 
     const materials = geoData.materialKeys.map(mkey => {
       const [typeStr, face] = mkey.split('_');
       const type = Number(typeStr);
-      const faceKey = (face === 'top' || face === 'bottom') ? face : 'side';
+      const faceKey = (face === 'top' || face === 'bottom' || face === 'cross') ? face : 'side';
       const baseMat = this.blockMaterials[type]?.[faceKey] || this.blockMaterials[BlockType.STONE].side;
       const brightness = FACE_BRIGHTNESS[face] ?? 1.0;
       if (brightness === 1.0) return baseMat;
@@ -994,12 +994,13 @@ export class World {
     // AO計算ヘルパー
     const isSolid = (wx, wy, wz) => {
       const b = getBlock(wx, wy, wz);
-      return b !== BlockType.AIR && b !== BlockType.WATER && b != null;
+      return b !== BlockType.AIR && b !== BlockType.WATER && b != null && !CROSS_BLOCK_TYPES.has(b);
     };
-    // 隣接ブロックがこれらの場合は面を描画する（透明・半透明ブロック）
+    // 隣接ブロックがこれらの場合は面を描画する（透明・半透明・クロスブロック）
     const isTransparentNeighbor = (b) =>
       b === BlockType.AIR || b === BlockType.WATER ||
-      b === BlockType.ICE || b === BlockType.GLASS;
+      b === BlockType.ICE || b === BlockType.GLASS ||
+      CROSS_BLOCK_TYPES.has(b);
     const aoVal = (s1, s2, c) => {
       if (s1 && s2) return 0;
       return 3 - (s1 ? 1 : 0) - (s2 ? 1 : 0) - (c ? 1 : 0);
@@ -1087,6 +1088,7 @@ export class World {
           const wz = cz * CHUNK_SIZE + lz;
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
+          if (CROSS_BLOCK_TYPES.has(block)) continue; // クロスブロックは別パスで処理
 
           if (isTransparentNeighbor(getBlock(wx, y + 1, wz))) topMask[lx][lz] = block;
           if (isTransparentNeighbor(getBlock(wx, y - 1, wz))) bottomMask[lx][lz] = block;
@@ -1113,6 +1115,7 @@ export class World {
           const wx = cx * CHUNK_SIZE + lx;
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
+          if (CROSS_BLOCK_TYPES.has(block)) continue; // クロスブロックは別パスで処理
 
           if (isTransparentNeighbor(getBlock(wx, y, wz + 1))) frontMask[lx][y] = block;
           if (isTransparentNeighbor(getBlock(wx, y, wz - 1))) backMask[lx][y]  = block;
@@ -1138,6 +1141,7 @@ export class World {
           const wz = cz * CHUNK_SIZE + lz;
           const block = chunk.blocks[lx][y][lz];
           if (block === BlockType.AIR || block === BlockType.WATER) continue;
+          if (CROSS_BLOCK_TYPES.has(block)) continue; // クロスブロックは別パスで処理
 
           if (isTransparentNeighbor(getBlock(wx + 1, y, wz))) rightMask[lz][y] = block;
           if (isTransparentNeighbor(getBlock(wx - 1, y, wz))) leftMask[lz][y]  = block;
@@ -1180,6 +1184,40 @@ export class World {
           if (getBlock(wx + 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'right', wx, y, wz, 1, 1);
           if (getBlock(wx - 1, y, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'left',  wx, y, wz, 1, 1);
           if (getBlock(wx, y - 1, wz) === BlockType.AIR) addQuad(BlockType.WATER, 'bottom',wx, y, wz, 1, 1);
+        }
+      }
+    }
+
+    // クロス（X字スプライト）ブロックの描画（草・花・きのこ・たいまつ）
+    for (let lx = 0; lx < CHUNK_SIZE; lx++) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz++) {
+        const wx = cx * CHUNK_SIZE + lx;
+        const wz = cz * CHUNK_SIZE + lz;
+        for (let y = 0; y <= meshMaxY; y++) {
+          const block = chunk.blocks[lx][y][lz];
+          if (!CROSS_BLOCK_TYPES.has(block)) continue;
+
+          const groupKey = `${block}_cross`;
+          if (!groups[groupKey]) {
+            groups[groupKey] = { positions: [], normals: [], uvs: [], colors: [], indices: [], blockType: block, face: 'cross' };
+          }
+          const g = groups[groupKey];
+
+          // 対角線1: (wx, y, wz) → (wx+1, y, wz+1)
+          let vi = g.positions.length / 3;
+          g.positions.push(wx,   y,   wz,   wx+1, y,   wz+1, wx+1, y+1, wz+1, wx,   y+1, wz);
+          g.normals.push(0.707,0,0.707, 0.707,0,0.707, 0.707,0,0.707, 0.707,0,0.707);
+          g.uvs.push(0,0, 1,0, 1,1, 0,1);
+          g.indices.push(vi, vi+1, vi+2, vi, vi+2, vi+3);
+          g.colors.push(1,1,1, 1,1,1, 1,1,1, 1,1,1);
+
+          // 対角線2: (wx+1, y, wz) → (wx, y, wz+1)
+          vi = g.positions.length / 3;
+          g.positions.push(wx+1, y,   wz,   wx,   y,   wz+1, wx,   y+1, wz+1, wx+1, y+1, wz);
+          g.normals.push(-0.707,0,0.707, -0.707,0,0.707, -0.707,0,0.707, -0.707,0,0.707);
+          g.uvs.push(0,0, 1,0, 1,1, 0,1);
+          g.indices.push(vi, vi+1, vi+2, vi, vi+2, vi+3);
+          g.colors.push(1,1,1, 1,1,1, 1,1,1, 1,1,1);
         }
       }
     }
@@ -1242,13 +1280,14 @@ export class World {
       right:  0.75,
       left:   0.75,
       bottom: 0.60,
+      cross:  1.0,
     };
 
     // Build materials array
     const materials = materialList.map(key => {
       const [typeStr, face] = key.split('_');
       const type = Number(typeStr);
-      const faceKey = (face === 'top' || face === 'bottom') ? face : 'side';
+      const faceKey = (face === 'top' || face === 'bottom' || face === 'cross') ? face : 'side';
       const baseMat = this.blockMaterials[type]?.[faceKey] || this.blockMaterials[BlockType.STONE].side;
       const brightness = FACE_BRIGHTNESS[face] ?? 1.0;
       if (brightness === 1.0) return baseMat;
