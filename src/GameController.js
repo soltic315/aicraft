@@ -152,17 +152,10 @@ export class GameController {
     this.scene.add(this.dirLight);
     this.scene.add(this.dirLight.target); // シャドウカメラターゲットをシーンに追加
 
-    // ポストプロセッシング: EffectComposer + ブルーム
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.45,  // 強度（subtle bloom）
-      0.5,   // 半径
-      0.72   // 閾値（明るい部分のみ）
-    );
-    this.composer.addPass(this.bloomPass);
-    this.composer.addPass(new OutputPass());
+    // ポストプロセッシング: EffectComposer + ブルーム（ゲーム開始時に遅延初期化）
+    // コンストラクタで作成するとGPUメモリ確保で起動時フリーズするため
+    this.composer = null;
+    this.bloomPass = null;
 
     // 水・溶岩アニメーション用タイムトラッカー
     this._waterAnimTime = 0;
@@ -408,7 +401,9 @@ export class GameController {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.composer.setSize(window.innerWidth, window.innerHeight);
+      if (this.composer) {
+        this.composer.setSize(window.innerWidth, window.innerHeight);
+      }
       if (this.bloomPass) {
         this.bloomPass.resolution.set(window.innerWidth, window.innerHeight);
       }
@@ -451,6 +446,22 @@ export class GameController {
 
     // Start game loop
     requestAnimationFrame((t) => this._gameLoop(t));
+  }
+
+  // ---- Lazy Initialization ----
+
+  _initComposer() {
+    if (this.composer) return;
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.45,
+      0.5,
+      0.72
+    );
+    this.composer.addPass(this.bloomPass);
+    this.composer.addPass(new OutputPass());
   }
 
   // ---- Event Subscriptions ----
@@ -546,6 +557,9 @@ export class GameController {
 
       // 1フレーム待機してローディング画面を確実に描画させてから重い処理を開始
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      // EffectComposer + UnrealBloomPassをここで初期化（GPU確保は起動時ではなくゲーム開始時に行う）
+      this._initComposer();
 
       try {
         this.player.spawn();
@@ -1698,6 +1712,10 @@ export class GameController {
       }
     }
 
-    this.composer.render();
+    // タイトル画面ではThree.jsレンダリングをスキップ（シェーダーコンパイルによるフリーズを防ぐ）
+    // スタート画面がcanvasを覆っているため描画は不要
+    if (this.gameStarted) {
+      this.composer.render();
+    }
   }
 }

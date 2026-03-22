@@ -3,6 +3,13 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [5.2.1] - 2026-03-22
+
+### Fixed
+
+- **起動時フリーズを修正**: `EnchantPanel` の Zustand セレクターが `|| []` でフォールバックしており、毎レンダーごとに新しい配列参照を生成していた。これにより `useSyncExternalStore` の等価チェックが毎回失敗し、無限マイクロタスクループが発生してブラウザが完全にフリーズしていた。モジュールレベルの定数 `EMPTY_ENCHANTS = []` を導入して安定した参照を使用するよう修正
+- **タイトル画面が表示されないバグを修正**: タイトル画面中も `EffectComposer`（UnrealBloomPass）が毎フレーム実行されており、メインスレッドを占有してPreactのDOM更新が画面反映されなくなっていた。ゲーム未開始時は軽量な `renderer.render()` を使用するよう変更
+
 ## [5.2.0] - 2026-03-22
 
 ### Added

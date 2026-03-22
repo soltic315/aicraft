@@ -10,6 +10,9 @@ function getHotbarSlotKey() {
   return `slot_${inv.selectedSlot}`;
 }
 
+// 安定した空配列参照（毎回 [] を返すと zustand の参照等価チェックが無限ループを引き起こす）
+const EMPTY_ENCHANTS = [];
+
 export function EnchantPanel() {
   const enchantPanelOpen = useEnchantmentStore(s => s.enchantPanelOpen);
   const closePanel = useEnchantmentStore(s => s.closeEnchantPanel);
@@ -22,7 +25,7 @@ export function EnchantPanel() {
   const slotKey = `slot_${selectedSlot}`;
   const currentItem = inv[selectedSlot];
 
-  const currentEnchants = useEnchantmentStore(s => s.enchantments[slotKey] || []);
+  const currentEnchants = useEnchantmentStore(s => s.enchantments[slotKey] || EMPTY_ENCHANTS);
 
   const [feedback, setFeedback] = useState('');
 
