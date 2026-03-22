@@ -8,6 +8,7 @@ import { useInventoryStore } from '../stores/inventoryStore.js';
 import { useToolStore } from '../stores/toolStore.js';
 import { useChestStore } from '../stores/chestStore.js';
 import { useSettingsStore } from '../stores/settingsStore.js';
+import { useGameStore } from '../stores/gameStore.js';
 import { useHungerStore } from '../stores/hungerStore.js';
 import { useDurabilityStore } from '../stores/durabilityStore.js';
 import { useArmorStore } from '../stores/armorStore.js';
@@ -57,10 +58,13 @@ export class SaveSystem {
       const { xp } = useXpStore.getState();
       const { unlocked: achievements } = useAchievementStore.getState();
 
+      const { difficulty } = useGameStore.getState();
+
       const data = {
         schemaVersion: SAVE_SCHEMA_VERSION,
         savedAt: new Date().toISOString(),
         worldSeed: this.getWorldSeed(),
+        difficulty,
         player: {
           position: {
             x: this.player.position.x,

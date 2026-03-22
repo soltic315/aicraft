@@ -69,11 +69,16 @@ export const useSettingsStore = create((set, get) => ({
     get().persist();
   },
 
+  setShowMinimap(value) {
+    set({ showMinimap: Boolean(value) });
+    get().persist();
+  },
+
   persist() {
-    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, targetFps, highContrast, showDebugInfo } = get();
+    const { sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, targetFps, highContrast, showDebugInfo, showMinimap } = get();
     localStorage.setItem(
       SETTINGS_STORAGE_KEY,
-      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, targetFps, highContrast, showDebugInfo }),
+      JSON.stringify({ sensitivity, bgmVolume, seVolume, renderDistance, uiScale, fov, targetFps, highContrast, showDebugInfo, showMinimap }),
     );
   },
 }));

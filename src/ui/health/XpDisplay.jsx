@@ -4,25 +4,26 @@ import { useXpStore } from '../../stores/xpStore.js';
 
 export function XpDisplay() {
   const fillRef  = useRef(null);
-  const labelRef = useRef(null);
+  const levelRef = useRef(null);
+  const xpRef    = useRef(null);
 
   useEffect(() => {
     return useXpStore.subscribe((state) => {
       const { level, progress, xp } = state;
-      if (fillRef.current) {
-        fillRef.current.style.width = `${Math.round(progress * 100)}%`;
-      }
-      if (labelRef.current) {
-        labelRef.current.textContent = `Lv.${level}  ${xp} XP`;
-      }
+      if (fillRef.current)  fillRef.current.style.width = `${Math.round(progress * 100)}%`;
+      if (levelRef.current) levelRef.current.textContent = `Lv.${level}`;
+      if (xpRef.current)    xpRef.current.textContent = `${xp} XP`;
     });
   }, []);
 
   return (
-    <div id="xp-hud" aria-live="polite">
-      <span id="xp-label" ref={labelRef}>Lv.1  0 XP</span>
-      <div id="xp-bar">
-        <div id="xp-fill" ref={fillRef} />
+    <div class="stat-bar-row" aria-live="polite">
+      <div class="stat-bar-header">
+        <span class="stat-label stat-label-xp" ref={levelRef}>Lv.1</span>
+        <span class="stat-value" ref={xpRef}>0 XP</span>
+      </div>
+      <div class="stat-bar">
+        <div class="stat-fill stat-fill-xp" ref={fillRef} />
       </div>
     </div>
   );

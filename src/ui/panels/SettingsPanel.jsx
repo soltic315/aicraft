@@ -2,7 +2,9 @@ import { h } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { useSettingsStore } from '../../stores/settingsStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
+import { useGameStore } from '../../stores/gameStore.js';
 import { useDraggable } from '../hooks/useDraggable.js';
+import { DIFFICULTY, DIFFICULTY_SETTINGS } from '../../config.js';
 
 export function SettingsPanel() {
   const { panelRef, dragStyle, onHeaderMouseDown } = useDraggable();
@@ -16,6 +18,9 @@ export function SettingsPanel() {
   const targetFps = useSettingsStore((s) => s.targetFps);
   const highContrast = useSettingsStore((s) => s.highContrast);
   const showDebugInfo = useSettingsStore((s) => s.showDebugInfo);
+  const showMinimap = useSettingsStore((s) => s.showMinimap);
+  const difficulty = useGameStore((s) => s.difficulty);
+  const gameStarted = useGameStore((s) => s.gameStarted);
 
   useEffect(() => {
     if (!open) return;
@@ -200,6 +205,43 @@ export function SettingsPanel() {
               useSettingsStore.getState().setShowDebugInfo(e.currentTarget.checked);
             }}
           />
+        </div>
+      </div>
+
+      <div class="setting">
+        <label for="setting-minimap">ミニマップ表示</label>
+        <div>
+          <input
+            id="setting-minimap"
+            type="checkbox"
+            checked={showMinimap}
+            onInput={(e) => {
+              useSettingsStore.getState().setShowMinimap(e.currentTarget.checked);
+            }}
+          />
+        </div>
+      </div>
+
+      <div class="setting setting-difficulty">
+        <label>難易度</label>
+        <div class="difficulty-setting-buttons">
+          {Object.values(DIFFICULTY).map((diff) => {
+            const cfg = DIFFICULTY_SETTINGS[diff];
+            const isActive = difficulty === diff;
+            return (
+              <button
+                key={diff}
+                class={`diff-setting-btn${isActive ? ' active' : ''}`}
+                title={cfg.description}
+                onClick={() => {
+                  useGameStore.getState().setDifficulty(diff);
+                  window.__aicraft?.applyDifficulty?.();
+                }}
+              >
+                {diff === DIFFICULTY.EASY ? '🌿' : diff === DIFFICULTY.NORMAL ? '⚔️' : '💀'} {cfg.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

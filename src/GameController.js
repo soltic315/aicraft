@@ -423,6 +423,7 @@ export class GameController {
       sound: this.sound,
       hasSavedGame: !!this.savedGame,
       applySettings: () => this._applySettings(),
+      applyDifficulty: () => this._applyDifficulty(),
       gameController: this,
     };
 
@@ -436,6 +437,12 @@ export class GameController {
     useSettingsStore.subscribe((state) => {
       this.settings = state;
     });
+
+    // 難易度変更をmobManagerにリアルタイム反映
+    useGameStore.subscribe(
+      (state) => state.difficulty,
+      () => this._applyDifficulty(),
+    );
 
     // Resize handler
     window.addEventListener('resize', () => {
@@ -618,6 +625,11 @@ export class GameController {
           }
         );
 
+        // セーブデータから難易度を復元
+        if (this.savedGame?.difficulty) {
+          useGameStore.getState().setDifficulty(this.savedGame.difficulty);
+        }
+
         this.gameStarted = true;
         this._onSlotChanged(); // 初期スロットのツールを装備
 
@@ -625,11 +637,7 @@ export class GameController {
         this.player.armorDefense = useArmorStore.getState().totalDefense;
 
         // 難易度設定をMobManagerに適用
-        const difficulty = useGameStore.getState().difficulty;
-        const diffSettings = DIFFICULTY_SETTINGS[difficulty];
-        if (diffSettings) {
-          this.mobManager.setDifficulty(diffSettings);
-        }
+        this._applyDifficulty();
 
         useGameStore.getState().startGame();
         this.saveSystem.startAutoSave();
@@ -790,6 +798,13 @@ export class GameController {
     warning.innerHTML = `<div><h2>WebGL が利用できません</h2><p>お使いのブラウザやグラフィックドライバが WebGL2 に対応していない可能性があります。最新のブラウザに更新するか、別の環境で再度お試しください。</p><p>${String(error)}</p></div>`;
     document.body.appendChild(warning);
     useUIStore.getState().showFeedback('WebGLが利用できません。最新ブラウザをお試しください。', 5000);
+  }
+
+  _applyDifficulty() {
+    if (!this.mobManager) return;
+    const difficulty = useGameStore.getState().difficulty;
+    const diffSettings = DIFFICULTY_SETTINGS[difficulty];
+    if (diffSettings) this.mobManager.setDifficulty(diffSettings);
   }
 
   _applySettings(persist = true) {
@@ -1183,7 +1198,7 @@ export class GameController {
   _addTorchLight(x, y, z) {
     const key = getPosKey(x, y, z);
     if (this._torchLights.has(key)) return;
-    const light = new THREE.PointLight(0xffaa33, 1.8, 14);
+    const light = new THREE.PointLight(0xffaa33, 2.0, 22);
     light.position.set(x + 0.5, y + 0.5, z + 0.5);
     this.scene.add(light);
     this._torchLights.set(key, light);
@@ -1588,7 +1603,7 @@ export class GameController {
     this.scene.fog.far = 85 + (daylight * 40);
 
     this.ambientLight.color.copy(this._tempAmbientColor);
-    this.ambientLight.intensity = 0.2 + (daylight * 0.45);
+    this.ambientLight.intensity = 0.3 + (daylight * 0.35);
 
     this.dirLight.color.copy(this._tempSunColor);
     this.dirLight.intensity = 0.1 + (daylight * 0.65);

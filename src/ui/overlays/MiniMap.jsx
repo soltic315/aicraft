@@ -1,7 +1,8 @@
 import { h } from 'preact';
-import { useRef, useEffect, useState, useCallback } from 'preact/hooks';
+import { useRef, useEffect } from 'preact/hooks';
 import { usePlayerStore } from '../../stores/playerStore.js';
 import { useGameStore } from '../../stores/gameStore.js';
+import { useSettingsStore } from '../../stores/settingsStore.js';
 
 const MAP_SIZE = 128;
 const HALF = MAP_SIZE / 2;
@@ -77,20 +78,9 @@ export function MiniMap() {
   const canvasRef = useRef(null);
   const animRef   = useRef(null);
   const lastPosRef = useRef({ x: -9999, z: -9999 });
-  const [visible, setVisible] = useState(true);
   const gameStarted = useGameStore(s => s.gameStarted);
   const isDead = useGameStore(s => s.isDead);
-
-  const toggle = useCallback(() => setVisible(v => !v), []);
-
-  // Mキーでトグル
-  useEffect(() => {
-    const onKey = (e) => {
-      if (e.code === 'KeyM' && !e.repeat) setVisible(v => !v);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  const visible = useSettingsStore(s => s.showMinimap);
 
   useEffect(() => {
     if (!gameStarted || isDead) return;
@@ -194,9 +184,6 @@ export function MiniMap() {
         id="minimap-canvas"
         style={{ display: visible ? 'block' : 'none' }}
       />
-      <button id="minimap-toggle" onClick={toggle} title="ミニマップ切替 [M]">
-        {visible ? '🗺' : '🗺'}
-      </button>
     </div>
   );
 }

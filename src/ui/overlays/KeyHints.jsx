@@ -1,28 +1,28 @@
 import { h } from 'preact';
 import { useGameStore } from '../../stores/gameStore.js';
 
-const HINTS = [
-  { key: 'TAB', label: 'インベントリ',   event: 'toggle-inventory' },
-  { key: 'C',   label: 'クラフト',       event: 'toggle-craft' },
-  { key: 'M',   label: 'ミニマップ',     event: null },
-  { key: 'P',   label: 'オプション',     event: 'toggle-settings' },
+const BUTTONS = [
+  { icon: '🎒', label: 'インベントリ', key: 'TAB', event: 'toggle-inventory' },
+  { icon: '🔨', label: 'クラフト',     key: 'C',   event: 'toggle-craft' },
+  { icon: '⚙',  label: 'オプション',  key: 'P',   event: 'toggle-settings' },
 ];
 
 export function KeyHints() {
   const gameStarted = useGameStore((s) => s.gameStarted);
   if (!gameStarted) return null;
 
-  const handleClick = (event) => {
-    window.__aicraft?.eventBus?.emit(event);
-  };
-
   return (
     <div id="key-hints">
-      {HINTS.map(({ key, label, event }) => (
-        <div class="key-hint-row key-hint-clickable" key={key} onClick={() => handleClick(event)}>
-          <span class="key-hint-key">{key}</span>
+      {BUTTONS.map(({ icon, label, key, event }) => (
+        <button
+          class="key-hint-btn"
+          key={key}
+          onClick={() => window.__aicraft?.eventBus?.emit(event)}
+        >
+          <span class="key-hint-icon">{icon}</span>
           <span class="key-hint-label">{label}</span>
-        </div>
+          <span class="key-hint-key">{key}</span>
+        </button>
       ))}
     </div>
   );

@@ -10,7 +10,6 @@ import { HungerDisplay } from './health/HungerDisplay.jsx';
 import { ArmorDisplay } from './health/ArmorDisplay.jsx';
 import { XpDisplay } from './health/XpDisplay.jsx';
 import { InfoOverlay } from './info/InfoOverlay.jsx';
-import { TimeDisplay } from './info/TimeDisplay.jsx';
 import { SettingsPanel } from './panels/SettingsPanel.jsx';
 import { CraftPanel } from './panels/CraftPanel.jsx';
 import { ChestPanel } from './panels/ChestPanel.jsx';
@@ -50,13 +49,14 @@ export function App() {
       <BreakProgress />
       <ActionFeedback />
       <InfoOverlay />
-      <TimeDisplay />
       <KeyHints />
       <MiniMap />
-      <HealthDisplay />
-      <HungerDisplay />
+      <div id="stats-hud">
+        <HealthDisplay />
+        <HungerDisplay />
+        <XpDisplay />
+      </div>
       <ArmorDisplay />
-      <XpDisplay />
       <SettingsPanel />
       <InventoryPanel />
       <CraftPanel />
