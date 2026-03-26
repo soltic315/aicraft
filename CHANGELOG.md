@@ -3,6 +3,26 @@
 このファイルは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、
 [Semantic Versioning](https://semver.org/lang/ja/) を採用しています。
 
+## [5.7.0] - 2026-03-27
+
+### Changed
+
+- **コードベースをAI開発向けにリファクタリング**: 大きなファイルを責務単位に分割し、全ファイルをコンテキストウィンドウに収まるサイズに削減
+  - `config.js`（911行）→ バレルファイル（21行）に縮小。定数・関数を用途別に分離:
+    - `src/constants/gameConstants.js` — コアゲーム定数
+    - `src/constants/survivalConstants.js` — サバイバル・戦闘定数
+    - `src/constants/mobConstants.js` — モブ定数
+    - `src/constants/renderConstants.js` — レンダリング定数
+    - `src/data/craftRecipes.js` — クラフト・精錬レシピ
+    - `src/utils/math.js` / `physics.js` / `settings.js` / `positioning.js` — ユーティリティ関数
+  - `blocks.js`（2029行）→ 262行に縮小。テクスチャ生成を `BlockTextureGenerator.js` に分離
+  - `world.js`（1616行）→ 1114行に縮小。地形生成を `TerrainGenerator.js` に分離
+  - `GameController.js`（1831行）→ 1439行に縮小。3システムを分離:
+    - `src/systems/BlockInteractionSystem.js` — ブロック破壊・設置・トーチ
+    - `src/systems/CombatSystem.js` — 戦闘・弓・食料消費
+    - `src/systems/DayNightSystem.js` — 昼夜サイクル・照明更新
+  - 既存の import はすべて後方互換を維持（変更不要）
+
 ## [5.6.0] - 2026-03-23
 
 ### Added

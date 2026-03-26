@@ -86,6 +86,9 @@ import { ParticleManager } from './particles.js';
 import { SkyDome } from './sky.js';
 import { SurvivalSystem } from './systems/SurvivalSystem.js';
 import { SaveSystem } from './systems/SaveSystem.js';
+import { BlockInteractionSystem } from './systems/BlockInteractionSystem.js';
+import { CombatSystem } from './systems/CombatSystem.js';
+import { DayNightSystem } from './systems/DayNightSystem.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -399,6 +402,11 @@ export class GameController {
 
     // セーブシステム
     this.saveSystem = new SaveSystem(this.player, this.world, () => this.worldSeed);
+
+    // ブロック操作・戦闘・昼夜サイクルシステム
+    this.blockInteraction = new BlockInteractionSystem(this);
+    this.combat = new CombatSystem(this);
+    this.dayNight = new DayNightSystem(this);
 
     // Game loop state
     this.gameStarted = false;
@@ -1091,347 +1099,19 @@ export class GameController {
     }
   }
 
-  // ---- 弓射撃 ----
+  // ---- 弓射撃・食料消費 ---- (CombatSystem に委譲)
 
-  _tryFireBow(now) {
-    if (now - this.lastPlaceTime < 600) return; // 弓は0.6秒のクールダウン
+  _tryFireBow(now)        { return this.combat.tryFireBow(now); }
+  _tryEatFood(foodType)   { return this.combat.tryEatFood(foodType); }
 
-    // 矢が必要
-    const arrowCount = useInventoryStore.getState().getCount(BlockType.ARROW);
-    if (arrowCount <= 0) {
-      useUIStore.getState().showFeedback('矢がありません！', 800);
-      this.sound.playError();
-      return;
-    }
+  // ---- Block Interaction ---- (BlockInteractionSystem に委譲)
 
-    const eyePos = this.player.getEyePosition();
-    const dir = this.player.getDirection();
-    const BOW_RANGE = 24;
-
-    // 射程内のモブへレイキャスト
-    const mobHit = this.mobManager.raycastMobs(eyePos, dir, BOW_RANGE);
-
-    this.lastPlaceTime = now;
-    this._consumeFromInventory(BlockType.ARROW);
-
-    if (mobHit) {
-      const { mob, distance } = mobHit;
-      // 距離に応じてダメージ減衰（近距離ほど強い）
-      const dmg = Math.max(2, Math.round(5 * (1 - distance / BOW_RANGE)));
-      mob.takeDamage(dmg);
-      mob.flashHit();
-      if (!mob.isAlive && typeof mob.drops === 'function') {
-        for (const { type, count } of mob.drops()) {
-          this.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
-        }
-        const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
-        useUIStore.getState().showFeedback(`弓で${name}を倒した！`, 1200);
-      } else {
-        useUIStore.getState().showFeedback(`弓攻撃命中！ -${dmg} HP`, 700);
-      }
-    } else {
-      useUIStore.getState().showFeedback('弓を放った（空振り）', 700);
-    }
-    this.sound.playBreak();
-  }
-
-  // ---- 食料消費 ----
-
-  _tryEatFood(foodType) {
-    // foodType 未指定の場合は選択スロットから取得
-    if (!foodType) {
-      const { selectedSlot, slots } = useInventoryStore.getState();
-      foodType = slots[selectedSlot]?.type ?? null;
-    }
-
-    if (!FOOD_ITEMS.has(foodType)) {
-      useUIStore.getState().showFeedback('食べられるものが選択されていません');
-      this.sound.playError();
-      return;
-    }
-
-    const selectedType = foodType;
-
-    const hungerStore = useHungerStore.getState();
-    if (hungerStore.hunger >= hungerStore.maxHunger) {
-      useUIStore.getState().showFeedback('お腹がいっぱいです', 800);
-      return;
-    }
-
-    const stats = FOOD_STATS[selectedType] ?? { restore: APPLE_HUNGER_RESTORE, name: '食料' };
-
-    if (this.getInventoryCount(selectedType) <= 0) {
-      useUIStore.getState().showFeedback(`${stats.name}がありません`, 800);
-      this.sound.playError();
-      return;
-    }
-
-    this._consumeFromInventory(selectedType);
-    hungerStore.feedHunger(stats.restore);
-    useUIStore.getState().showFeedback(`${stats.name}を食べた！ 空腹 +${stats.restore}`, 1000);
-    this.sound.playEat();
-  }
-
-  // ---- Block Interaction ----
-
-  _resetBreaking() {
-    this.breakState.key = null;
-    this.breakState.duration = 0;
-    this.breakState.startedAt = 0;
-    this.breakState.blockType = BlockType.AIR;
-    this.breakState.toolType = null;
-    this.breakOverlayMesh.visible = false;
-    useBreakStore.getState().reset();
-  }
-
-  _setBreakOverlayStage(stageIndex) {
-    const textureSource = this.breakOverlayTextures[stageIndex];
-    if (!textureSource) return;
-
-    for (const material of this.breakOverlayMaterials) {
-      material.map.image = textureSource;
-      material.map.needsUpdate = true;
-    }
-  }
-
-  // たいまつのPointLightをシーンに追加
-  _addTorchLight(x, y, z) {
-    const key = getPosKey(x, y, z);
-    if (this._torchLights.has(key)) return;
-    const light = new THREE.PointLight(0xffaa33, 2.0, 22);
-    light.position.set(x + 0.5, y + 0.5, z + 0.5);
-    this.scene.add(light);
-    this._torchLights.set(key, light);
-  }
-
-  // たいまつのPointLightをシーンから削除
-  _removeTorchLight(x, y, z) {
-    const key = getPosKey(x, y, z);
-    const light = this._torchLights.get(key);
-    if (light) {
-      this.scene.remove(light);
-      this._torchLights.delete(key);
-    }
-  }
-
-  _tryPlaceBlock(now) {
-    if (now - this.lastPlaceTime < PLACE_COOLDOWN) return;
-
-    const { selectedSlot, slots } = useInventoryStore.getState();
-    const placeType = slots[selectedSlot]?.type ?? null;
-
-    // 食料アイテムはブロックを見ていなくても右クリックで食べる
-    if (placeType != null && FOOD_ITEMS.has(placeType)) {
-      this._tryEatFood(placeType);
-      return;
-    }
-
-    // 弓: 矢を消費して遠距離攻撃
-    if (placeType === BlockType.BOW) {
-      this._tryFireBow(now);
-      return;
-    }
-
-    const hit = this.world.raycast(this.player.getEyePosition(), this.player.getDirection());
-
-    // 右クリックで作業台クラフトパネルを開く（手が空でも可）
-    if (hit && hit.blockType === BlockType.CRAFTING_TABLE) {
-      useUIStore.getState().openCraftPanel('crafting_table');
-      this.openedCraftingTablePos = hit.blockPos;
-      this.openedRepairTablePos = null;
-      if (document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
-      return;
-    }
-
-    // 右クリックで修理台クラフトパネルを開く（手が空でも可）
-    if (hit && hit.blockType === BlockType.REPAIR_TABLE) {
-      useUIStore.getState().openCraftPanel('repair_table');
-      this.openedRepairTablePos = hit.blockPos;
-      this.openedCraftingTablePos = null;
-      if (document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
-      return;
-    }
-
-    // 右クリックでチェストを開く（手が空でも可）
-    if (hit && hit.blockType === BlockType.CHEST) {
-      this._openChestAt(hit.blockPos);
-      return;
-    }
-
-    // 右クリックでかまどを開く（手が空でも可）
-    if (hit && hit.blockType === BlockType.FURNACE) {
-      useUIStore.getState().openFurnacePanel();
-      this.openedFurnacePos = hit.blockPos;
-      useAchievementStore.getState().unlock('first_furnace');
-      if (document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
-      return;
-    }
-
-    // 右クリックでエンチャント台を開く（手が空でも可）
-    if (hit && hit.blockType === BlockType.ENCHANTING_TABLE) {
-      this._enchantmentStore.getState().openEnchantPanel();
-      this.openedEnchantTablePos = hit.blockPos;
-      if (document.pointerLockElement === document.body) {
-        document.exitPointerLock();
-      }
-      return;
-    }
-
-    if (placeType == null) {
-      return;
-    }
-
-    if (!hit) {
-      useUIStore.getState().showFeedback('設置失敗: 射程外です');
-      this.sound.playError();
-      return;
-    }
-
-    // ツールアイテムは設置不可
-    if (TOOL_ITEMS.has(placeType)) {
-      useUIStore.getState().showFeedback('ツールは設置できません', 800);
-      this.sound.playError();
-      return;
-    }
-
-    if (this.getInventoryCount(placeType) <= 0) {
-      useUIStore.getState().showFeedback('設置失敗: 所持数が不足しています');
-      this.sound.playError();
-      return;
-    }
-
-    const pp = hit.placePos;
-    if (this.player.intersectsBlock(pp.x, pp.y, pp.z)) {
-      useUIStore.getState().showFeedback('設置失敗: プレイヤーと衝突します');
-      this.sound.playError();
-      return;
-    }
-
-    this.lastPlaceTime = now;
-
-    if (!this._consumeFromInventory(placeType)) return;
-    this.world.setBlockWithDiff(pp.x, pp.y, pp.z, placeType);
-    if (placeType === BlockType.CHEST) {
-      useChestStore.getState().getChestData(pp, true);
-    }
-    // たいまつ設置時にPointLightを追加
-    if (placeType === BlockType.TORCH) {
-      this._addTorchLight(pp.x, pp.y, pp.z);
-    }
-
-    // 設置パーティクル
-    const placeMat = this.blockMaterials[placeType]?.top ?? this.blockMaterials[1]?.top;
-    if (placeMat) {
-      this.particleManager.spawnPlace(pp.x, pp.y, pp.z, placeMat.clone());
-    }
-
-    this.sound.playPlace();
-  }
-
-  _updateBreaking(hit, now) {
-    // 岩盤は破壊不可
-    if (hit.blockType === BlockType.BEDROCK) {
-      this._resetBreaking();
-      return;
-    }
-
-    const selectedTool = useToolStore.getState().selectedTool;
-    // ツールを持っていない場合は補正なし（素手扱い）
-    const toolItemType = TOOL_TYPE_TO_ITEM[selectedTool];
-    const hasTool = toolItemType != null && useInventoryStore.getState().getCount(toolItemType) > 0;
-    const key = `${getPosKey(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z)}|${selectedTool}|${hasTool}`;
-    const baseDuration = BLOCK_BREAK_DURATIONS[hit.blockType] ?? 0.5;
-    const multiplier = hasTool ? getToolBreakMultiplier(selectedTool, hit.blockType) : 1;
-    // エンチャント: 効率強化の補正
-    const _enchStore = this._enchantmentStore;
-    let enchantMult = 1;
-    if (_enchStore) {
-      const slotKey = `slot_${useInventoryStore.getState().selectedSlot}`;
-      const effLv = _enchStore.getState().getEnchantLevel(slotKey, 'efficiency');
-      if (effLv > 0) enchantMult = 1 + effLv * 0.35;
-    }
-    const duration = Math.max(0.08, baseDuration / (multiplier * enchantMult));
-
-    if (this.breakState.key !== key) {
-      this.breakState.key = key;
-      this.breakState.duration = duration;
-      this.breakState.startedAt = now;
-      this.breakState.blockType = hit.blockType;
-      this.breakState.toolType = selectedTool;
-    }
-
-    const elapsed = (now - this.breakState.startedAt) / 1000;
-    const progress = Math.min(elapsed / this.breakState.duration, 1);
-    const stageIndex = Math.min(
-      this.breakOverlayTextures.length - 1,
-      Math.floor(progress * this.breakOverlayTextures.length)
-    );
-
-    this.breakOverlayMesh.visible = true;
-    this.breakOverlayMesh.position.set(
-      hit.blockPos.x + 0.5,
-      hit.blockPos.y + 0.5,
-      hit.blockPos.z + 0.5
-    );
-    this._setBreakOverlayStage(stageIndex);
-    useBreakStore.getState().setProgress(progress);
-
-    if (progress >= 1) {
-      if (hit.blockType === BlockType.CHEST) {
-        const recovered = this._recoverChestItems(hit.blockPos);
-        if (recovered > 0) {
-          useUIStore.getState().showFeedback(`チェスト回収: 中身 ${recovered} 個を取得`, 1200);
-        }
-      }
-
-      // ブロックを床にドロップ（石→丸石など上書き対応）
-      const dropType = BLOCK_DROP_OVERRIDES[hit.blockType] ?? hit.blockType;
-      this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, dropType, 1);
-      // 葉ブロック破壊時に30%の確率でリンゴをドロップ
-      if ((hit.blockType === BlockType.LEAVES || hit.blockType === BlockType.JUNGLE_LEAVES) && Math.random() < 0.3) {
-        this.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.APPLE, 1);
-      }
-      // 破壊パーティクルを生成（ブロックの上面マテリアルを使用）
-      const breakMat = this.blockMaterials[hit.blockType]?.top ?? this.blockMaterials[1]?.top;
-      if (breakMat) {
-        this.particleManager.spawnBreak(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
-        // 葉ブロックはゆっくり落下する葉パーティクルを追加
-        if (hit.blockType === BlockType.LEAVES) {
-          this.particleManager.spawnLeafFall(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
-        }
-      }
-
-      // たいまつ破壊時にPointLightを削除
-      if (hit.blockType === BlockType.TORCH) {
-        this._removeTorchLight(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
-      }
-      this.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
-      this.sound.playBreak();
-
-      // ブロック採掘実績チェック
-      this._checkMiningAchievement(hit.blockType, dropType);
-
-      // ツール耐久値を消耗
-      if (hasTool && selectedTool) {
-        const durStore = useDurabilityStore.getState();
-        const broke = durStore.damage(selectedTool);
-        if (broke) {
-          useInventoryStore.getState().consumeItem(toolItemType, 1);
-          durStore.resetTool(selectedTool);
-          useUIStore.getState().showFeedback(`${TOOL_NAMES[selectedTool]}が壊れました！`, 1500);
-          this.sound.playError();
-        }
-      }
-
-      this._resetBreaking();
-    }
-  }
+  _resetBreaking()                    { return this.blockInteraction.resetBreaking(); }
+  _setBreakOverlayStage(stageIndex)   { return this.blockInteraction.setBreakOverlayStage(stageIndex); }
+  _addTorchLight(x, y, z)            { return this.blockInteraction.addTorchLight(x, y, z); }
+  _removeTorchLight(x, y, z)         { return this.blockInteraction.removeTorchLight(x, y, z); }
+  _tryPlaceBlock(now)                 { return this.blockInteraction.tryPlaceBlock(now); }
+  _updateBreaking(hit, now)           { return this.blockInteraction.updateBreaking(hit, now); }
 
   // ---- モブシステム ----
 
@@ -1537,84 +1217,12 @@ export class GameController {
     }
   }
 
-  /** プレイヤーがモブを攻撃する */
-  _attackMob(mob) {
-    if (this._attackCooldown > 0) return;
+  /** プレイヤーがモブを攻撃する (CombatSystem に委譲) */
+  _attackMob(mob)                         { return this.combat.attackMob(mob); }
 
-    const { selectedTool } = useToolStore.getState();
-    let damage = selectedTool != null ? PLAYER_ATTACK_DAMAGE_TOOL : PLAYER_ATTACK_DAMAGE_BASE;
-    // エンチャント: 鋭さの補正
-    if (this._enchantmentStore) {
-      const slotKey = `slot_${useInventoryStore.getState().selectedSlot}`;
-      const sharpLv = this._enchantmentStore.getState().getEnchantLevel(slotKey, 'sharpness');
-      if (sharpLv > 0) damage += sharpLv * 1.5;
-    }
+  // ---- Day/Night ---- (DayNightSystem に委譲)
 
-    mob.takeDamage(damage);
-    mob.flashHit();
-    mob.applyKnockback(this.player.position.x, this.player.position.z, KNOCKBACK_MOB_FORCE);
-
-    this._attackCooldown = PLAYER_ATTACK_COOLDOWN;
-    this.sound.playMeleeHit();
-    this.sound.notifyCombat(); // 戦闘BGMに切り替え
-
-    if (!mob.isAlive) {
-      this.sound.playMobDeath();
-      // ドロップアイテムをスポーン
-      if (typeof mob.drops === 'function') {
-        for (const { type, count } of mob.drops()) {
-          this.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
-        }
-      }
-      const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
-      // XP付与
-      const xpReward = MOB_XP_REWARDS[name] ?? 3;
-      const { levelUp, newLevel } = useXpStore.getState().addXp(xpReward);
-      if (levelUp) {
-        useUIStore.getState().showFeedback(`レベルアップ！ Lv.${newLevel} ✨ (+${xpReward} XP)`, 2000);
-        this.sound.playPlace(); // レベルアップ音
-        // レベル実績チェック
-        if (newLevel >= 5)  useAchievementStore.getState().unlock('reach_level5');
-        if (newLevel >= 10) useAchievementStore.getState().unlock('reach_level10');
-      } else {
-        useUIStore.getState().showFeedback(`${name}を倒した！ +${xpReward} XP`, 1200);
-      }
-      // 初討伐実績
-      useAchievementStore.getState().unlock('first_kill');
-    }
-  }
-
-  // ---- Day/Night ----
-
-  _updateDayNightCycle(elapsedSeconds) {
-    const cycleRatio = (elapsedSeconds % DAY_NIGHT_CYCLE_SECONDS) / DAY_NIGHT_CYCLE_SECONDS;
-    const sunAngle = cycleRatio * Math.PI * 2;
-    const sunHeight = Math.sin(sunAngle);
-    const daylight = smoothstep(-0.22, 0.28, sunHeight);
-
-    this._tempSkyColor.copy(NIGHT_SKY_COLOR).lerp(DAY_SKY_COLOR, daylight);
-    this._tempFogColor.copy(NIGHT_FOG_COLOR).lerp(DAY_FOG_COLOR, daylight);
-    this._tempAmbientColor.copy(NIGHT_AMBIENT_COLOR).lerp(DAY_AMBIENT_COLOR, daylight);
-    this._tempSunColor.copy(NIGHT_MOON_COLOR).lerp(DAY_SUN_COLOR, daylight);
-
-    this.renderer.setClearColor(this._tempSkyColor);
-    this.scene.fog.color.copy(this._tempFogColor);
-    this.scene.fog.near = 35 + (daylight * 25);
-    this.scene.fog.far = 85 + (daylight * 40);
-
-    this.ambientLight.color.copy(this._tempAmbientColor);
-    this.ambientLight.intensity = 0.3 + (daylight * 0.35);
-
-    this.dirLight.color.copy(this._tempSunColor);
-    this.dirLight.intensity = 0.1 + (daylight * 0.65);
-    this.dirLight.position.set(
-      Math.cos(sunAngle) * 90,
-      18 + (sunHeight * 110),
-      Math.sin(sunAngle) * 65,
-    );
-
-    return { cycleRatio, sunAngle, daylight, isDay: daylight >= 0.5 };
-  }
+  _updateDayNightCycle(elapsedSeconds)    { return this.dayNight.update(elapsedSeconds); }
 
   // ---- Game Loop ----
 
