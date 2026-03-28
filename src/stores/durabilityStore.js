@@ -3,15 +3,24 @@ import { TOOL_ORDER } from '../tools.js';
 
 // ティア別最大耐久値
 export const TOOL_DURABILITY_MAX = {
-  pickaxe:       60,
-  axe:           60,
-  shovel:        60,
-  stone_pickaxe: 132,
-  stone_axe:     132,
-  stone_shovel:  132,
-  iron_pickaxe:  250,
-  iron_axe:      250,
-  iron_shovel:   250,
+  pickaxe:          60,
+  axe:              60,
+  shovel:           60,
+  stone_pickaxe:   132,
+  stone_axe:       132,
+  stone_shovel:    132,
+  iron_pickaxe:    250,
+  iron_axe:        250,
+  iron_shovel:     250,
+  diamond_pickaxe: 400,
+  diamond_axe:     400,
+  diamond_shovel:  400,
+  bow:             150,
+  // 剣（攻撃回数ベース）
+  sword:            60,
+  stone_sword:     132,
+  iron_sword:      250,
+  diamond_sword:   400,
 };
 
 const fullDurability = () =>

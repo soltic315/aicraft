@@ -168,6 +168,14 @@ export class GameController {
     // たいまつPointLight管理: posKey -> PointLight
     this._torchLights = new Map();
 
+    // TNT点火管理: 点火済みTNTエンティティのリスト
+    // 各エントリ: { x, y, z, timer, mesh, blinkTimer }
+    this._litTNT = [];
+
+    // 落下ブロック管理: 重力ブロック（砂・砂利）の物理エンティティ
+    // 各エントリ: { worldX, worldY, worldZ, type, velY, mesh }
+    this._fallingBlocks = [];
+
     // Reusable temp colors for day/night interpolation
     this._tempSkyColor = new THREE.Color();
     this._tempFogColor = new THREE.Color();
@@ -467,6 +475,10 @@ export class GameController {
       if (this.bloomPass) {
         this.bloomPass.resolution.set(window.innerWidth, window.innerHeight);
       }
+      if (this._handCamera) {
+        this._handCamera.aspect = window.innerWidth / window.innerHeight;
+        this._handCamera.updateProjectionMatrix();
+      }
     });
 
     // Auto-save before unload
@@ -534,6 +546,127 @@ export class GameController {
     );
     this.composer.addPass(this.bloomPass);
     this.composer.addPass(new OutputPass());
+    this._initHandModel();
+  }
+
+  // ---- 一人称の手モデル ----
+
+  _initHandModel() {
+    this._handScene = new THREE.Scene();
+    this._handCamera = new THREE.PerspectiveCamera(
+      70, window.innerWidth / window.innerHeight, 0.05, 8
+    );
+
+    // 手シーン用ライティング
+    this._handScene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const handDirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+    handDirLight.position.set(1, 2, 0.5);
+    this._handScene.add(handDirLight);
+
+    // スイング・ボブのピボット
+    this._handPivot = new THREE.Group();
+    // 手のメッシュグループ
+    this._handGroup = new THREE.Group();
+    this._handPivot.add(this._handGroup);
+    this._handPivot.position.set(0.38, -0.36, -0.62);
+    this._handScene.add(this._handPivot);
+
+    // 袖（青）
+    const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x3a5a8c });
+    const sleeveMesh = new THREE.Mesh(new THREE.BoxGeometry(0.175, 0.175, 0.5), sleeveMat);
+    sleeveMesh.position.set(0, 0, -0.15);
+    this._handGroup.add(sleeveMesh);
+
+    // 手首・拳（肌色）
+    const skinMat = new THREE.MeshLambertMaterial({ color: 0xc68642 });
+    const fistMesh = new THREE.Mesh(new THREE.BoxGeometry(0.185, 0.19, 0.22), skinMat);
+    fistMesh.position.set(0, 0.01, 0.13);
+    this._handGroup.add(fistMesh);
+
+    // アニメーション状態
+    this._handSwingPhase = 0;
+    this._handWalkPhase  = 0;
+    this._handItemMesh   = null;
+  }
+
+  /** 持ちアイテムに応じた手前の小キューブを更新 */
+  _updateHandItem() {
+    if (!this._handGroup) return;
+    if (this._handItemMesh) {
+      this._handGroup.remove(this._handItemMesh);
+      this._handItemMesh.geometry.dispose();
+      if (!this._handItemMesh._sharedTex) this._handItemMesh.material.dispose();
+      this._handItemMesh = null;
+    }
+
+    const { selectedSlot, slots } = useInventoryStore.getState();
+    const held = slots[selectedSlot];
+    if (!held || held.type == null) return;
+
+    const type = held.type;
+    const geo = new THREE.BoxGeometry(0.21, 0.21, 0.21);
+    let mat;
+
+    const blockFaces = this.blockMaterials?.[type];
+    const faceMat = blockFaces?.top || blockFaces?.side || (blockFaces && Object.values(blockFaces)[0]);
+    if (faceMat?.map) {
+      // ブロックのテクスチャを流用（vertexColorsなし）
+      mat = new THREE.MeshLambertMaterial({ map: faceMat.map });
+      this._handItemMesh = new THREE.Mesh(geo, mat);
+      this._handItemMesh._sharedTex = true;
+    } else {
+      mat = new THREE.MeshLambertMaterial({ color: this._getItemHandColor(type) });
+      this._handItemMesh = new THREE.Mesh(geo, mat);
+    }
+
+    this._handItemMesh.position.set(-0.01, 0.02, 0.26);
+    this._handItemMesh.rotation.y = 0.35;
+    this._handItemMesh.rotation.x = 0.15;
+    this._handGroup.add(this._handItemMesh);
+  }
+
+  /** ツール/素材の手表示色 */
+  _getItemHandColor(type) {
+    const BT = BlockType;
+    if (type === BT.PICKAXE || type === BT.AXE || type === BT.SHOVEL)                        return 0xb08040;
+    if (type === BT.STONE_PICKAXE || type === BT.STONE_AXE || type === BT.STONE_SHOVEL)      return 0x909090;
+    if (type === BT.IRON_PICKAXE  || type === BT.IRON_AXE  || type === BT.IRON_SHOVEL)       return 0xd0d8e0;
+    if (type === BT.DIAMOND_PICKAXE || type === BT.DIAMOND_AXE || type === BT.DIAMOND_SHOVEL) return 0x44c8e0;
+    if (type === BT.BOW)  return 0x7a5020;
+    return 0xaaaaaa;
+  }
+
+  /** 毎フレームの手アニメーション更新 */
+  _updateHandModel(dt) {
+    if (!this._handPivot) return;
+    const safeDt = Math.min(dt, 0.08);
+    const player  = this.player;
+    const velXZ   = Math.sqrt(player.velocity.x ** 2 + player.velocity.z ** 2);
+    const walking = player.onGround && velXZ > 0.5;
+
+    // 歩行ボブ
+    if (walking) {
+      const speed = player.isSprinting ? 11 : 7.5;
+      this._handWalkPhase += safeDt * speed;
+      this._handPivot.position.y = -0.36 + Math.sin(this._handWalkPhase) * 0.025;
+      this._handPivot.position.x =  0.38 + Math.cos(this._handWalkPhase * 0.5) * 0.012;
+    } else {
+      this._handWalkPhase *= 0.88;
+      this._handPivot.position.y += (-0.36 - this._handPivot.position.y) * Math.min(1, safeDt * 12);
+      this._handPivot.position.x += ( 0.38 - this._handPivot.position.x) * Math.min(1, safeDt * 12);
+    }
+
+    // スイングアニメーション（採掘・攻撃）
+    const swinging = this.player.locked && this.input.isBreaking;
+    if (swinging) {
+      this._handSwingPhase += safeDt * 11;
+    } else {
+      this._handSwingPhase *= 0.75;
+      if (this._handSwingPhase < 0.01) this._handSwingPhase = 0;
+    }
+    const swing = Math.sin(this._handSwingPhase) * 0.55;
+    this._handPivot.rotation.x = -swing * 0.65;
+    this._handGroup.rotation.z  =  swing * 0.12;
   }
 
   // ---- Event Subscriptions ----
@@ -669,6 +802,14 @@ export class GameController {
         this.gameStarted = true;
         this._onSlotChanged(); // 初期スロットのツールを装備
 
+        // セーブデータのスキーマが変更されていた場合にプレイヤーへ通知
+        if (this._schemaChangedNotice) {
+          this._schemaChangedNotice = false;
+          setTimeout(() => {
+            useUIStore.getState().showFeedback('古いセーブデータは新バージョンと互換性がないため新規ゲームを開始しました', 3000);
+          }, 1500);
+        }
+
         // 防具の防御値をプレイヤーに反映
         this.player.armorDefense = useArmorStore.getState().totalDefense;
 
@@ -729,6 +870,15 @@ export class GameController {
         ? 'クリエイティブモード ON　[Space×2]で飛行'
         : 'サバイバルモードに戻りました';
       useUIStore.getState().showFeedback(msg, 1800);
+    });
+
+    // Hキー: ヘルプオーバーレイ開閉
+    this.eventBus.on('toggle-help', () => {
+      useUIStore.getState().toggleHelp();
+      // ヘルプ表示中はポインターロック解除
+      if (useUIStore.getState().helpOpen && this.player.locked) {
+        document.exitPointerLock();
+      }
     });
 
     this.eventBus.on('respawn-clicked', () => {
@@ -901,6 +1051,7 @@ export class GameController {
       if (!parsed || typeof parsed !== 'object') return null;
       if (parsed.schemaVersion !== SAVE_SCHEMA_VERSION) {
         console.info('保存データのスキーマが一致しません（', parsed.schemaVersion, '!=', SAVE_SCHEMA_VERSION, '）。新規ワールドを生成します。');
+        this._schemaChangedNotice = true;
         return null;
       }
       return parsed;
@@ -939,6 +1090,18 @@ export class GameController {
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
     this.particleManager.dispose();
+    // TNT・落下ブロックのメッシュをシーンから除去
+    for (const tnt of this._litTNT) {
+      this.scene.remove(tnt.mesh);
+      tnt.mesh.geometry.dispose();
+      tnt.mat.dispose();
+    }
+    this._litTNT = [];
+    for (const fb of this._fallingBlocks) {
+      this.scene.remove(fb.mesh);
+      fb.mesh.geometry.dispose();
+    }
+    this._fallingBlocks = [];
     // 天候をリセット
     this.weatherSystem.forceWeather('clear');
     useGameStore.getState().setWeather('clear');
@@ -1151,6 +1314,7 @@ export class GameController {
       // ツールでないスロット（空・素材・食料等）を選択した場合はツールをクリア
       useToolStore.getState().clearTool();
     }
+    this._updateHandItem();
   }
 
   // ---- 弓射撃・食料消費 ---- (CombatSystem に委譲)
@@ -1191,43 +1355,9 @@ export class GameController {
           }
         }
       },
-      // 爆発コールバック
+      // 爆発コールバック（_explodeAt に委譲）
       (ex, ey, ez, radius, damage) => {
-        // 爆発範囲のブロックを除去
-        const r = Math.ceil(radius);
-        for (let dx = -r; dx <= r; dx++) {
-          for (let dy = -r; dy <= r; dy++) {
-            for (let dz = -r; dz <= r; dz++) {
-              if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
-              const bx = ex + dx, by = ey + dy, bz = ez + dz;
-              const bt = this.world.getBlock(bx, by, bz);
-              if (bt !== BlockType.AIR && bt !== BlockType.BEDROCK) {
-                if (bt === BlockType.TORCH) this._removeTorchLight(bx, by, bz);
-                this.world.setBlockWithDiff(bx, by, bz, BlockType.AIR);
-              }
-            }
-          }
-        }
-        // プレイヤーへのダメージ
-        const pdx = this.player.position.x - ex;
-        const pdy = this.player.position.y - ey;
-        const pdz = this.player.position.z - ez;
-        const pdist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
-        if (pdist < radius + 2) {
-          const scaledDamage = Math.round(damage * Math.max(0, 1 - pdist / (radius + 2)));
-          if (scaledDamage > 0) {
-            const actualDamage = this.player.applyDamage(scaledDamage);
-            if (actualDamage > 0) {
-              useUIStore.getState().showHitFlash();
-              useUIStore.getState().showFeedback(`クリーパーが爆発した！ -${actualDamage} HP`, 1200);
-              this.sound.playCreeperExplode();
-              if (this.player.health <= 0 && !useGameStore.getState().isDead) {
-                useGameStore.getState().setDead(true);
-                document.exitPointerLock();
-              }
-            }
-          }
-        }
+        this._explodeAt(ex, ey, ez, radius, damage, 'クリーパーが爆発した！');
       }
     );
   }
@@ -1274,6 +1404,174 @@ export class GameController {
   /** プレイヤーがモブを攻撃する (CombatSystem に委譲) */
   _attackMob(mob)                         { return this.combat.attackMob(mob); }
 
+  // ---- 爆発処理（クリーパー・TNT共通） ----
+
+  /**
+   * 指定座標を中心に爆発を発生させる
+   * @param {number} ex - 爆発X座標
+   * @param {number} ey - 爆発Y座標
+   * @param {number} ez - 爆発Z座標
+   * @param {number} radius - 爆発半径
+   * @param {number} damage - 最大ダメージ
+   * @param {string} message - ダメージメッセージ
+   */
+  _explodeAt(ex, ey, ez, radius, damage, message = '爆発！') {
+    const r = Math.ceil(radius);
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dz = -r; dz <= r; dz++) {
+          if (dx * dx + dy * dy + dz * dz > radius * radius) continue;
+          const bx = ex + dx, by = ey + dy, bz = ez + dz;
+          const bt = this.world.getBlock(bx, by, bz);
+          if (bt !== BlockType.AIR && bt !== BlockType.BEDROCK) {
+            if (bt === BlockType.TORCH) this._removeTorchLight(bx, by, bz);
+            this.world.setBlockWithDiff(bx, by, bz, BlockType.AIR);
+            // 爆発で砂利・砂の落下をトリガー
+            this._checkGravityBlocks(bx, by + 1, bz);
+          }
+        }
+      }
+    }
+    // 爆発パーティクル
+    const mat = this.blockMaterials[BlockType.STONE]?.top;
+    if (mat) this.particleManager.spawnBreak(ex, ey, ez, mat.clone());
+    // プレイヤーへのダメージ
+    const pdx = this.player.position.x - ex;
+    const pdy = this.player.position.y - ey;
+    const pdz = this.player.position.z - ez;
+    const pdist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
+    if (pdist < radius + 2) {
+      const scaledDamage = Math.round(damage * Math.max(0, 1 - pdist / (radius + 2)));
+      if (scaledDamage > 0) {
+        const actualDamage = this.player.applyDamage(scaledDamage);
+        if (actualDamage > 0) {
+          useUIStore.getState().showHitFlash();
+          useUIStore.getState().showFeedback(`${message} -${actualDamage} HP`, 1200);
+          this.sound.playCreeperExplode();
+          if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+            useGameStore.getState().setDead(true);
+            document.exitPointerLock();
+          }
+        }
+      }
+    }
+  }
+
+  // ---- TNT システム ----
+
+  /**
+   * 指定座標のTNTブロックを点火する（右クリック時に呼ぶ）
+   */
+  _igniteTNT(x, y, z) {
+    // ブロックを除去
+    this.world.setBlockWithDiff(x, y, z, BlockType.AIR);
+    // 点滅するTNTメッシュを作成
+    const geo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+    const mat = new THREE.MeshLambertMaterial({ color: 0xc82020 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    this.scene.add(mesh);
+    this._litTNT.push({ x, y, z, timer: 3.0, blinkTimer: 0, mesh, mat });
+    useUIStore.getState().showFeedback('TNT点火！3秒後に爆発します', 2000);
+    this.sound.playBreak();
+  }
+
+  /**
+   * 点火済みTNTのカウントダウンと爆発処理
+   */
+  _updateLitTNT(dt) {
+    for (let i = this._litTNT.length - 1; i >= 0; i--) {
+      const tnt = this._litTNT[i];
+      tnt.timer -= dt;
+      tnt.blinkTimer += dt;
+      // 点滅速度：残り時間が少ないほど速く点滅
+      const blinkRate = tnt.timer < 1.0 ? 6 : tnt.timer < 2.0 ? 3 : 1.5;
+      tnt.mat.color.setHex(Math.floor(tnt.blinkTimer * blinkRate) % 2 === 0 ? 0xc82020 : 0xffffff);
+      // 爆発
+      if (tnt.timer <= 0) {
+        this.scene.remove(tnt.mesh);
+        tnt.mesh.geometry.dispose();
+        tnt.mat.dispose();
+        this._litTNT.splice(i, 1);
+        this._explodeAt(tnt.x, tnt.y, tnt.z, 4, 18, 'TNTが爆発した！');
+      }
+    }
+  }
+
+  // ---- 落下ブロック物理システム ----
+
+  /** 落下する可能性があるブロック種別 */
+  static get GRAVITY_BLOCKS() {
+    return new Set([BlockType.SAND, BlockType.GRAVEL]);
+  }
+
+  /**
+   * 指定座標のブロックが空気になったとき、上のブロックが重力落下するか確認する
+   */
+  _checkGravityBlocks(x, y, z) {
+    if (y >= 128) return;
+    const above = this.world.getBlock(x, y, z);
+    if (GameController.GRAVITY_BLOCKS.has(above)) {
+      this._startFallingBlock(x, y, z, above);
+    }
+  }
+
+  /**
+   * 指定座標のブロックを落下エンティティとして開始する
+   */
+  _startFallingBlock(x, y, z, type) {
+    // ワールドから除去
+    this.world.setBlockWithDiff(x, y, z, BlockType.AIR);
+    // 上のブロックも連鎖チェック
+    this._checkGravityBlocks(x, y + 1, z);
+    // 落下メッシュを作成（ブロックマテリアルを流用）
+    const geo = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+    const baseMat = this.blockMaterials[type]?.side || this.blockMaterials[BlockType.STONE]?.side;
+    const mat = baseMat ? baseMat.clone() : new THREE.MeshLambertMaterial({ color: 0xe8d68a });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
+    this.scene.add(mesh);
+    this._fallingBlocks.push({ worldX: x, worldY: y, worldZ: z, type, velY: 0, mesh });
+  }
+
+  /**
+   * 落下ブロックの物理更新（毎フレーム呼ぶ）
+   */
+  _updateFallingBlocks(dt) {
+    if (this._fallingBlocks.length === 0) return;
+    const GRAVITY = -18;
+    for (let i = this._fallingBlocks.length - 1; i >= 0; i--) {
+      const fb = this._fallingBlocks[i];
+      fb.velY += GRAVITY * dt;
+      fb.mesh.position.y += fb.velY * dt;
+      const landY = Math.floor(fb.mesh.position.y - 0.5);
+      const bx = Math.round(fb.mesh.position.x - 0.5);
+      const bz = Math.round(fb.mesh.position.z - 0.5);
+      const blockBelow = this.world.getBlock(bx, landY, bz);
+      const blockAt    = this.world.getBlock(bx, landY + 1, bz);
+      // 着地判定: 下のブロックが固体で現在位置が空気
+      if (fb.velY < 0 && blockBelow !== BlockType.AIR && blockAt === BlockType.AIR) {
+        fb.mesh.position.y = landY + 1.5;
+        // ブロックとして設置
+        this.world.setBlockWithDiff(bx, landY + 1, bz, fb.type);
+        // 設置位置の上もチェック（連鎖落下）
+        this._checkGravityBlocks(bx, landY + 2, bz);
+        // メッシュ除去
+        this.scene.remove(fb.mesh);
+        fb.mesh.geometry.dispose();
+        this._fallingBlocks.splice(i, 1);
+        // 着地パーティクル
+        const mat = this.blockMaterials[fb.type]?.side;
+        if (mat) this.particleManager.spawnBreak(bx, landY + 1, bz, mat.clone());
+      } else if (fb.mesh.position.y < -10) {
+        // ボイドに落ちた場合は削除
+        this.scene.remove(fb.mesh);
+        fb.mesh.geometry.dispose();
+        this._fallingBlocks.splice(i, 1);
+      }
+    }
+  }
+
   // ---- Day/Night ---- (DayNightSystem に委譲)
 
   _updateDayNightCycle(elapsedSeconds) {
@@ -1311,7 +1609,16 @@ export class GameController {
     // スカイドーム更新（常時）
     if (this.gameStarted) {
       this.skyDome.update(dayNight.sunAngle, dayNight.daylight, this.player.position, dt);
-      // シャドウカメラをプレイヤーに追従させる
+      // シャドウカメラとライト位置をプレイヤーに追従させる（影が常にプレイヤー周辺に表示）
+      const sunAngleRad = dayNight.sunAngle;
+      const shadowOffsetX = Math.cos(sunAngleRad) * 60;
+      const shadowOffsetY = Math.abs(Math.sin(sunAngleRad)) * 80 + 20;
+      const shadowOffsetZ = Math.sin(sunAngleRad) * 30;
+      this.dirLight.position.set(
+        this.player.position.x + shadowOffsetX,
+        this.player.position.y + shadowOffsetY,
+        this.player.position.z + shadowOffsetZ
+      );
       this.dirLight.target.position.set(
         this.player.position.x,
         this.player.position.y,
@@ -1486,6 +1793,8 @@ export class GameController {
       this._updateMobs(dt, dayNight.isDay);
       this._updateDroppedItems(dt);
       this.particleManager.update(dt);
+      this._updateLitTNT(dt);
+      this._updateFallingBlocks(dt);
       // 天候更新
       this.weatherSystem.update(dt, this.player.position);
       const newWeather = this.weatherSystem.getState().weather;
@@ -1503,6 +1812,11 @@ export class GameController {
       this._validateOpenedChest();
       this._validateOpenedFurnace();
       this._validateOpenedEnchantTable();
+    }
+
+    // 一人称の手アニメーション更新
+    if (this.gameStarted && this._handPivot) {
+      this._updateHandModel(dt);
     }
 
     // 水・溶岩テクスチャアニメーション（UVスクロール）
@@ -1539,6 +1853,14 @@ export class GameController {
     // スタート画面がcanvasを覆っているため描画は不要
     if (this.gameStarted) {
       this.composer.render();
+      // 一人称の手をデプスバッファクリア後に最前面へ描画
+      if (this._handScene && this._handCamera && this.player.locked
+          && !useGameStore.getState().isDead && !useGameStore.getState().paused) {
+        this.renderer.autoClear = false;
+        this.renderer.clearDepth();
+        this.renderer.render(this._handScene, this._handCamera);
+        this.renderer.autoClear = true;
+      }
     }
   }
 

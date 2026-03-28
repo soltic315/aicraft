@@ -502,6 +502,99 @@ export class TerrainGenerator {
       }
     }
 
+    // ---- 村の生成: 平原・森林バイオームに家と井戸を配置 ----
+    const centerWX = cx * CHUNK_SIZE + 7;
+    const centerWZ = cz * CHUNK_SIZE + 7;
+    const villageBiome = this.getBiome(centerWX, centerWZ);
+    const isVillageBiome = villageBiome === 'plains' || villageBiome === 'forest';
+    const villageNoise = this.oreNoise.noise2D(cx * 11.7 + 5.3, cz * 11.7 + 8.9);
+
+    if (isVillageBiome && villageNoise > 0.78) {
+      const placeV = (lx, ly, lz, type) => {
+        if (lx >= 0 && lx < CHUNK_SIZE && lz >= 0 && lz < CHUNK_SIZE && ly >= 0 && ly < WORLD_HEIGHT) {
+          blocks[lx][ly][lz] = type;
+        }
+      };
+
+      // 家の左上角を決定（チャンク内に収まる範囲）
+      const houseLX = 2 + Math.floor(Math.abs(villageNoise * 100) % 3);
+      const houseLZ = 2 + Math.floor(Math.abs(villageNoise * 137) % 3);
+      const houseFloorY = this.getHeight(cx * CHUNK_SIZE + houseLX + 2, cz * CHUNK_SIZE + houseLZ + 2);
+      const HOUSE_W = 6; // X方向
+      const HOUSE_D = 6; // Z方向
+      const HOUSE_H = 3; // 壁の高さ
+
+      // 床（プランク）と床下を埋める
+      for (let rx = 0; rx < HOUSE_W; rx++) {
+        for (let rz = 0; rz < HOUSE_D; rz++) {
+          placeV(houseLX + rx, houseFloorY, houseLZ + rz, BlockType.PLANK);
+          // 床より上の内部空間をクリア（草・木を除去）
+          for (let ry = 1; ry <= HOUSE_H + 2; ry++) {
+            const inside = rx > 0 && rx < HOUSE_W - 1 && rz > 0 && rz < HOUSE_D - 1;
+            if (inside) placeV(houseLX + rx, houseFloorY + ry, houseLZ + rz, BlockType.AIR);
+          }
+        }
+      }
+
+      // 壁（プランク・ガラス窓・入口）
+      for (let ry = 1; ry <= HOUSE_H; ry++) {
+        for (let rx = 0; rx < HOUSE_W; rx++) {
+          for (let rz = 0; rz < HOUSE_D; rz++) {
+            const isWall = rx === 0 || rx === HOUSE_W - 1 || rz === 0 || rz === HOUSE_D - 1;
+            if (!isWall) continue;
+            // 入口（手前中央の1・2段目）
+            if (rz === 0 && rx === 2 && (ry === 1 || ry === 2)) continue;
+            // 窓（側面の2段目）
+            if (ry === 2 && (rx === 0 || rx === HOUSE_W - 1) && (rz === 2)) {
+              placeV(houseLX + rx, houseFloorY + ry, houseLZ + rz, BlockType.GLASS);
+              continue;
+            }
+            placeV(houseLX + rx, houseFloorY + ry, houseLZ + rz, BlockType.PLANK);
+          }
+        }
+      }
+
+      // 屋根（プランク1層・壁より1マス広い）
+      for (let rx = -1; rx <= HOUSE_W; rx++) {
+        for (let rz = -1; rz <= HOUSE_D; rz++) {
+          placeV(houseLX + rx, houseFloorY + HOUSE_H + 1, houseLZ + rz, BlockType.PLANK);
+        }
+      }
+
+      // 室内: チェスト＋たいまつ
+      placeV(houseLX + 1, houseFloorY + 1, houseLZ + 1, BlockType.CHEST);
+      placeV(houseLX + 1, houseFloorY + HOUSE_H, houseLZ + HOUSE_D - 2, BlockType.TORCH);
+      placeV(houseLX + HOUSE_W - 2, houseFloorY + HOUSE_H, houseLZ + HOUSE_D - 2, BlockType.TORCH);
+
+      // --- 井戸（家の横） ---
+      const wellLX = houseLX + HOUSE_W + 2;
+      const wellLZ = houseLZ + 1;
+      const wellFloorY = this.getHeight(cx * CHUNK_SIZE + wellLX + 1, cz * CHUNK_SIZE + wellLZ + 1);
+      if (wellLX + 2 < CHUNK_SIZE) {
+        // 外周（3×3丸石）
+        for (let rx = 0; rx < 3; rx++) {
+          for (let rz = 0; rz < 3; rz++) {
+            if (rx === 1 && rz === 1) {
+              // 中央: 水
+              placeV(wellLX + rx, wellFloorY,     wellLZ + rz, BlockType.WATER);
+              placeV(wellLX + rx, wellFloorY - 1, wellLZ + rz, BlockType.WATER);
+              placeV(wellLX + rx, wellFloorY - 2, wellLZ + rz, BlockType.COBBLESTONE);
+            } else {
+              placeV(wellLX + rx, wellFloorY, wellLZ + rz, BlockType.COBBLESTONE);
+            }
+            // 角柱（2段）
+            if ((rx === 0 || rx === 2) && (rz === 0 || rz === 2)) {
+              placeV(wellLX + rx, wellFloorY + 1, wellLZ + rz, BlockType.COBBLESTONE);
+              placeV(wellLX + rx, wellFloorY + 2, wellLZ + rz, BlockType.COBBLESTONE);
+            }
+          }
+        }
+        // 井戸の屋根（十字プランク）
+        for (let rx = 0; rx < 3; rx++) placeV(wellLX + rx, wellFloorY + 3, wellLZ + 1, BlockType.PLANK);
+        for (let rz = 0; rz < 3; rz++) placeV(wellLX + 1, wellFloorY + 3, wellLZ + rz, BlockType.PLANK);
+      }
+    }
+
     // Apply saved chunk edits (diffs) to override generated terrain.
     const chunkKey = `${cx},${cz}`;
     const editsMap = chunkEdits.get(chunkKey);

@@ -85,6 +85,12 @@ export class BlockInteractionSystem {
 
     const hit = this.gc.world.raycast(this.gc.player.getEyePosition(), this.gc.player.getDirection());
 
+    // 右クリックでTNTブロックを点火する
+    if (hit && hit.blockType === BlockType.TNT) {
+      this.gc._igniteTNT(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+      return;
+    }
+
     // 右クリックで作業台クラフトパネルを開く（手が空でも可）
     if (hit && hit.blockType === BlockType.CRAFTING_TABLE) {
       useUIStore.getState().openCraftPanel('crafting_table');
@@ -250,7 +256,21 @@ export class BlockInteractionSystem {
 
       // ブロックを床にドロップ（石→丸石など上書き対応）
       const dropType = BLOCK_DROP_OVERRIDES[hit.blockType] ?? hit.blockType;
-      this.gc.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, dropType, 1);
+
+      // エンチャント: 幸運（鉱石ドロップ増加）
+      const ORE_TYPES = new Set([
+        BlockType.COAL_ORE, BlockType.IRON_ORE, BlockType.GOLD_ORE,
+        BlockType.DIAMOND_ORE, BlockType.AMETHYST_ORE,
+      ]);
+      let dropCount = 1;
+      if (ORE_TYPES.has(hit.blockType) && this.gc._enchantmentStore) {
+        const slotKeyF = `slot_${useInventoryStore.getState().selectedSlot}`;
+        const fortuneLv = this.gc._enchantmentStore.getState().getEnchantLevel(slotKeyF, 'fortune');
+        if (fortuneLv > 0) {
+          dropCount += Math.floor(Math.random() * (fortuneLv + 1));
+        }
+      }
+      this.gc.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, dropType, dropCount);
       // 葉ブロック破壊時に30%の確率でリンゴをドロップ
       if ((hit.blockType === BlockType.LEAVES || hit.blockType === BlockType.JUNGLE_LEAVES) && Math.random() < 0.3) {
         this.gc.droppedItemManager.spawn(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.APPLE, 1);
@@ -272,13 +292,25 @@ export class BlockInteractionSystem {
       this.gc.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
       this.gc.sound.playBreak();
 
+      // 重力ブロック（砂・砂利）の落下チェック
+      this.gc._checkGravityBlocks(hit.blockPos.x, hit.blockPos.y + 1, hit.blockPos.z);
+
       // ブロック採掘実績チェック
       this.gc._checkMiningAchievement(hit.blockType, dropType);
 
-      // ツール耐久値を消耗
+      // ツール耐久値を消耗（耐久強化エンチャントで確率スキップ）
       if (hasTool && selectedTool) {
+        let skipDurability = false;
+        if (this.gc._enchantmentStore) {
+          const slotKeyU = `slot_${useInventoryStore.getState().selectedSlot}`;
+          const unbreakLv = this.gc._enchantmentStore.getState().getEnchantLevel(slotKeyU, 'unbreaking');
+          if (unbreakLv > 0) {
+            // 耐久強化Lv: スキップ確率 = Lv / (Lv + 1)
+            skipDurability = Math.random() < unbreakLv / (unbreakLv + 1);
+          }
+        }
         const durStore = useDurabilityStore.getState();
-        const broke = durStore.damage(selectedTool);
+        const broke = skipDurability ? false : durStore.damage(selectedTool);
         if (broke) {
           useInventoryStore.getState().consumeItem(toolItemType, 1);
           durStore.resetTool(selectedTool);
@@ -314,5 +346,7 @@ export class BlockInteractionSystem {
     }
     this.gc.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
     this.gc.sound.playBreak();
+    // 重力ブロック（砂・砂利）の落下チェック
+    this.gc._checkGravityBlocks(hit.blockPos.x, hit.blockPos.y + 1, hit.blockPos.z);
   }
 }

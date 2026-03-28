@@ -94,7 +94,7 @@ export function StartScreen() {
       window.__aicraft?.eventBus?.emit('delete-save-clicked');
       setTimeout(() => _doStart(true), 100);
     } else {
-      _doStart(false);
+      _doStart(newGame);
     }
   };
 

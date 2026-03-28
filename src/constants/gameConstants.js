@@ -67,6 +67,7 @@ export const TOOL_ITEMS = new Set([
   BlockType.IRON_PICKAXE,  BlockType.IRON_AXE,  BlockType.IRON_SHOVEL,
   BlockType.DIAMOND_PICKAXE, BlockType.DIAMOND_AXE, BlockType.DIAMOND_SHOVEL,
   BlockType.BOW, BlockType.ARROW,
+  BlockType.SWORD, BlockType.STONE_SWORD, BlockType.IRON_SWORD, BlockType.DIAMOND_SWORD,
   BlockType.IRON_INGOT, BlockType.COAL, BlockType.GOLD_INGOT, BlockType.DIAMOND,
   BlockType.LEATHER, BlockType.BONE, BlockType.STRING,
   BlockType.AMETHYST, BlockType.WOOL, BlockType.FEATHER,

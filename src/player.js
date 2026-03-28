@@ -470,7 +470,7 @@ export class Player {
     // 防具による軽減（最大80%、1ポイント = 4%軽減）
     const reduction = Math.min(0.8, this.armorDefense * 0.04);
     const effectiveDamage = reduction > 0
-      ? Math.max(1, Math.ceil(damage * (1 - reduction)))
+      ? Math.max(1, Math.round(damage * (1 - reduction)))
       : damage;
 
     const prev = this.health;

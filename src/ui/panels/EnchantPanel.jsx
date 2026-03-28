@@ -3,6 +3,8 @@ import { useState, useCallback } from 'preact/hooks';
 import { useEnchantmentStore, ENCHANT_TYPES, getAvailableEnchants, getEnchantCost } from '../../stores/enchantmentStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { useXpStore } from '../../stores/xpStore.js';
+import { BLOCK_NAMES } from '../../blocks.js';
+import { ITEM_TO_TOOL_TYPE, TOOL_NAMES } from '../../tools.js';
 
 // ホットバー選択中アイテムのスロットキーを返す
 function getHotbarSlotKey() {
@@ -69,7 +71,12 @@ export function EnchantPanel() {
       ) : (
         <div class="enchant-item-info">
           <div class="enchant-current-item">
-            対象: <strong>{currentItem.name || 'アイテム'}</strong>
+            対象: <strong>{
+              (() => {
+                const toolType = ITEM_TO_TOOL_TYPE[currentItem.type];
+                return toolType ? TOOL_NAMES[toolType] : (BLOCK_NAMES[currentItem.type] ?? 'アイテム');
+              })()
+            }</strong>
           </div>
 
           {/* 現在のエンチャント */}

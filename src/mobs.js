@@ -166,6 +166,8 @@ class BaseMob {
     this.mesh = null;
     this._mats = {};
     this._origColors = {};
+    // ジャンプAI: 障害物を1ブロック乗り越えるためのクールダウン管理（秒単位）
+    this._jumpCooldown = 0;
   }
 
   // メッシュとマテリアルを初期化する（コンストラクタ末尾で呼ぶ）
@@ -234,11 +236,15 @@ class BaseMob {
 
   // ---------- updateループ用ヘルパー ----------
 
-  /** ヒットフラッシュタイマーを更新する */
+  /** ヒットフラッシュタイマーとジャンプクールダウンを更新する */
   _tickFlash(dt) {
     if (this._flashTimer > 0) {
       this._flashTimer -= dt;
       if (this._flashTimer <= 0) this._restoreColors();
+    }
+    if (this._jumpCooldown > 0) {
+      this._jumpCooldown -= dt;
+      if (this._jumpCooldown < 0) this._jumpCooldown = 0;
     }
   }
 
@@ -277,11 +283,27 @@ class BaseMob {
       const bx  = world.getBlock(Math.floor(this.position.x + dx + radius * Math.sign(dx)), bodyY, Math.floor(this.position.z));
       const bx2 = world.getBlock(Math.floor(this.position.x + dx + radius * Math.sign(dx)), bodyY + 1, Math.floor(this.position.z));
       if (isPassable(bx) && isPassable(bx2)) { this.position.x += dx; movedX = true; }
+      // 1ブロック障害物を乗り越えるジャンプ（クールダウン1.5秒、dt経由で管理）
+      else if (this._jumpCooldown <= 0) {
+        const bxAbove = world.getBlock(Math.floor(this.position.x + dx + radius * Math.sign(dx)), bodyY + 2, Math.floor(this.position.z));
+        if (isPassable(bxAbove) && !isPassable(bx)) {
+          this.position.y += 1.05;
+          this._jumpCooldown = 1.5;
+        }
+      }
     }
     if (dz !== 0) {
       const bz  = world.getBlock(Math.floor(this.position.x), bodyY, Math.floor(this.position.z + dz + radius * Math.sign(dz)));
       const bz2 = world.getBlock(Math.floor(this.position.x), bodyY + 1, Math.floor(this.position.z + dz + radius * Math.sign(dz)));
       if (isPassable(bz) && isPassable(bz2)) { this.position.z += dz; movedZ = true; }
+      // 1ブロック障害物を乗り越えるジャンプ（X移動がジャンプ済みの場合はスキップ）
+      else if (this._jumpCooldown <= 0) {
+        const bzAbove = world.getBlock(Math.floor(this.position.x), bodyY + 2, Math.floor(this.position.z + dz + radius * Math.sign(dz)));
+        if (isPassable(bzAbove) && !isPassable(bz)) {
+          this.position.y += 1.05;
+          this._jumpCooldown = 1.5;
+        }
+      }
     }
     return { movedX, movedZ };
   }
@@ -635,7 +657,8 @@ class Creeper extends BaseMob {
   }
 
   drops() {
-    return []; // クリーパーはドロップなし（爆発で消滅）
+    // クリーパーは火薬をドロップ（TNTクラフト素材）
+    return [{ type: BlockType.GUNPOWDER, count: 1 + (Math.random() < 0.4 ? 1 : 0) }];
   }
 
   update(dt, playerPos, world, isDay) {

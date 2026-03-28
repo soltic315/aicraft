@@ -47,9 +47,12 @@ const BLOCK_COLORS = {
 function getBlockColor(blockType, y) {
   const base = BLOCK_COLORS[blockType];
   if (!base) return null;
-  // 高さによる明暗
-  const brightness = 0.7 + (y / 120) * 0.5;
-  return base;
+  // 高さによる明暗（深部は暗く、高所は明るい）
+  const brightness = Math.max(0.45, Math.min(1.15, 0.55 + (y / 128) * 0.65));
+  const r = Math.round(parseInt(base.slice(1, 3), 16) * brightness);
+  const g = Math.round(parseInt(base.slice(3, 5), 16) * brightness);
+  const b = Math.round(parseInt(base.slice(5, 7), 16) * brightness);
+  return `rgb(${Math.min(255,r)},${Math.min(255,g)},${Math.min(255,b)})`;
 }
 
 // 地表ブロック検索（キャッシュ付き）
@@ -144,6 +147,25 @@ export function MiniMap() {
         ctx.lineTo(HALF + Math.sin(angle) * (HALF - 4), HALF + Math.cos(angle) * (HALF - 4));
         ctx.stroke();
         ctx.setLineDash([]);
+      }
+
+      // モブドット
+      const mobs = gc?.mobManager?.mobs;
+      if (mobs) {
+        for (const mob of mobs) {
+          if (!mob.isAlive) continue;
+          const mdx = mob.position.x - px;
+          const mdz = mob.position.z - pz;
+          if (Math.abs(mdx) > SAMPLE_RADIUS || Math.abs(mdz) > SAMPLE_RADIUS) continue;
+          const sx = (mdx + SAMPLE_RADIUS) * scale;
+          const sy = (mdz + SAMPLE_RADIUS) * scale;
+          // 敵モブ（ゾンビ・スケルトン・クリーパー・スパイダー）は赤、友好モブは黄
+          const hostile = mob.name === 'ゾンビ' || mob.name === 'スケルトン' || mob.name === 'クリーパー' || mob.name === 'スパイダー';
+          ctx.fillStyle = hostile ? '#ff3333' : '#ffcc44';
+          ctx.beginPath();
+          ctx.arc(sx, sy, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // プレイヤードット

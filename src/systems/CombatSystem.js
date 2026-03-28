@@ -10,12 +10,15 @@ import {
   KNOCKBACK_MOB_FORCE,
   MOB_XP_REWARDS,
 } from '../config.js';
+import { TOOL_DAMAGE } from '../tools.js';
 import { useInventoryStore } from '../stores/inventoryStore.js';
 import { useUIStore } from '../stores/uiStore.js';
 import { useToolStore } from '../stores/toolStore.js';
 import { useHungerStore } from '../stores/hungerStore.js';
 import { useXpStore } from '../stores/xpStore.js';
 import { useAchievementStore } from '../stores/achievementStore.js';
+import { useDurabilityStore } from '../stores/durabilityStore.js';
+import { TOOL_TYPE_TO_ITEM, TOOL_NAMES } from '../tools.js';
 
 export class CombatSystem {
   constructor(gc) {
@@ -49,12 +52,24 @@ export class CombatSystem {
       const dmg = Math.max(2, Math.round(5 * (1 - distance / BOW_RANGE)));
       mob.takeDamage(dmg);
       mob.flashHit();
-      if (!mob.isAlive && typeof mob.drops === 'function') {
-        for (const { type, count } of mob.drops()) {
-          this.gc.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
+      if (!mob.isAlive) {
+        // ドロップ
+        if (typeof mob.drops === 'function') {
+          for (const { type, count } of mob.drops()) {
+            this.gc.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
+          }
         }
         const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
-        useUIStore.getState().showFeedback(`弓で${name}を倒した！`, 1200);
+        // XP付与
+        const xpReward = MOB_XP_REWARDS[name] ?? 3;
+        const { levelUp, newLevel } = useXpStore.getState().addXp(xpReward);
+        if (levelUp) {
+          useUIStore.getState().showFeedback(`弓で${name}を倒した！ レベルアップ！ Lv.${newLevel} ✨ (+${xpReward} XP)`, 2000);
+          this.gc.sound.playPlace();
+        } else {
+          useUIStore.getState().showFeedback(`弓で${name}を倒した！ +${xpReward} XP`, 1200);
+        }
+        this.gc.sound.playMobDeath();
       } else {
         useUIStore.getState().showFeedback(`弓攻撃命中！ -${dmg} HP`, 700);
       }
@@ -104,28 +119,74 @@ export class CombatSystem {
     if (this.gc._attackCooldown > 0) return;
 
     const { selectedTool } = useToolStore.getState();
-    let damage = selectedTool != null ? PLAYER_ATTACK_DAMAGE_TOOL : PLAYER_ATTACK_DAMAGE_BASE;
+    const { selectedSlot } = useInventoryStore.getState();
+    const slotKey = `slot_${selectedSlot}`;
+
+    // 剣は専用ダメージ、それ以外は既定値
+    let damage = TOOL_DAMAGE[selectedTool] ?? (selectedTool != null ? PLAYER_ATTACK_DAMAGE_TOOL : PLAYER_ATTACK_DAMAGE_BASE);
+
     // エンチャント: 鋭さの補正
     if (this.gc._enchantmentStore) {
-      const slotKey = `slot_${useInventoryStore.getState().selectedSlot}`;
       const sharpLv = this.gc._enchantmentStore.getState().getEnchantLevel(slotKey, 'sharpness');
       if (sharpLv > 0) damage += sharpLv * 1.5;
+    }
+
+    // クリティカルヒット（落下中に攻撃: 1.5倍ダメージ）
+    const isFalling = this.gc.player.velocity.y < -2 && !this.gc.player.onGround;
+    if (isFalling) {
+      damage = Math.ceil(damage * 1.5);
+    }
+
+    // エンチャント: 火炎（火属性ダメージを追加）
+    let fireMsg = '';
+    if (this.gc._enchantmentStore) {
+      const fireLv = this.gc._enchantmentStore.getState().getEnchantLevel(slotKey, 'fire_aspect');
+      if (fireLv > 0) {
+        damage += fireLv * 2;
+        mob._onFireTimer = (mob._onFireTimer ?? 0) + fireLv * 3; // 炎エフェクト継続秒数を設定
+        fireMsg = ` 🔥`;
+      }
     }
 
     mob.takeDamage(damage);
     mob.flashHit();
     mob.applyKnockback(this.gc.player.position.x, this.gc.player.position.z, KNOCKBACK_MOB_FORCE);
 
+    // 剣の耐久消耗（攻撃1回で-1）
+    if (selectedTool && TOOL_DAMAGE[selectedTool] != null) {
+      const toolItem = TOOL_TYPE_TO_ITEM[selectedTool];
+      if (toolItem != null) {
+        const durStore = useDurabilityStore.getState();
+        const broke = durStore.damage(selectedTool);
+        if (broke) {
+          useInventoryStore.getState().consumeItem(toolItem, 1);
+          durStore.resetTool(selectedTool);
+          useUIStore.getState().showFeedback(`${TOOL_NAMES[selectedTool] ?? 'ツール'}が壊れました！`, 1500);
+        }
+      }
+    }
+
     this.gc._attackCooldown = PLAYER_ATTACK_COOLDOWN;
     this.gc.sound.playMeleeHit();
-    this.gc.sound.notifyCombat(); // 戦闘BGMに切り替え
+    this.gc.sound.notifyCombat();
+
+    if (isFalling) {
+      useUIStore.getState().showFeedback(`⚔ クリティカル！ -${damage}${fireMsg}`, 800);
+    }
 
     if (!mob.isAlive) {
       this.gc.sound.playMobDeath();
-      // ドロップアイテムをスポーン
+      // ドロップアイテムをスポーン（略奪エンチャント対応）
       if (typeof mob.drops === 'function') {
+        let lootingLv = 0;
+        if (this.gc._enchantmentStore) {
+          lootingLv = this.gc._enchantmentStore.getState().getEnchantLevel(slotKey, 'looting');
+        }
         for (const { type, count } of mob.drops()) {
-          this.gc.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count);
+          // 略奪: 1Lv につき 50% の確率で +1 ドロップ
+          let bonus = 0;
+          for (let bi = 0; bi < lootingLv; bi++) if (Math.random() < 0.5) bonus++;
+          this.gc.droppedItemManager.spawn(mob.position.x, mob.position.y, mob.position.z, type, count + bonus);
         }
       }
       const name = mob.name ?? (mob.isAnimal ? '動物' : 'モブ');
@@ -134,14 +195,12 @@ export class CombatSystem {
       const { levelUp, newLevel } = useXpStore.getState().addXp(xpReward);
       if (levelUp) {
         useUIStore.getState().showFeedback(`レベルアップ！ Lv.${newLevel} ✨ (+${xpReward} XP)`, 2000);
-        this.gc.sound.playPlace(); // レベルアップ音
-        // レベル実績チェック
+        this.gc.sound.playPlace();
         if (newLevel >= 5)  useAchievementStore.getState().unlock('reach_level5');
         if (newLevel >= 10) useAchievementStore.getState().unlock('reach_level10');
       } else {
         useUIStore.getState().showFeedback(`${name}を倒した！ +${xpReward} XP`, 1200);
       }
-      // 初討伐実績
       useAchievementStore.getState().unlock('first_kill');
     }
   }

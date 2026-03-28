@@ -27,7 +27,7 @@ export const useXpStore = create((set, get) => ({
   progress: 0, // 現在レベル内の進捗 0~1
 
   addXp(amount) {
-    const newXp = get().xp + amount;
+    const newXp = Math.max(0, get().xp + amount);
     const newLevel = calcLevel(newXp);
     const levelUp = newLevel > get().level;
     set({ xp: newXp, level: newLevel, progress: calcProgress(newXp) });

@@ -53,6 +53,8 @@ export class InputManager {
       if (e.code === 'KeyQ') this.eventBus.emit('drop-held-item');
       // Gキー: クリエイティブ/サバイバル切替
       if (e.code === 'KeyG') this.eventBus.emit('toggle-creative');
+      // Hキー: ヘルプオーバーレイ開閉
+      if (e.code === 'KeyH') this.eventBus.emit('toggle-help');
     });
 
     document.addEventListener('wheel', (e) => {

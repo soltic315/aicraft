@@ -23,6 +23,7 @@ export function Hotbar() {
   const panelOpen     = inventoryOpen || chestOpen;
 
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [hoverIdx, setHoverIdx] = useState(null);
 
   const handleDragOver = (e, i) => {
     if (!panelOpen) return;
@@ -111,6 +112,8 @@ export function Hotbar() {
             onDrop={(e) => handleDrop(e, i)}
             onDragLeave={handleDragLeave}
             onDragEnd={(e) => handleDragEnd(e, i)}
+            onMouseEnter={() => setHoverIdx(i)}
+            onMouseLeave={() => setHoverIdx(null)}
           >
             <span class="slot-num">{String(i + 1)}</span>
             {iconUrl && (
@@ -134,6 +137,10 @@ export function Hotbar() {
                 />
               </div>
             )}
+            {hoverIdx === i && type != null && (() => {
+              const tt = ITEM_TO_TOOL_TYPE[type] ? TOOL_NAMES[ITEM_TO_TOOL_TYPE[type]] : (BLOCK_NAMES[type] ?? null);
+              return tt ? <div class="slot-tooltip">{tt}</div> : null;
+            })()}
           </div>
         );
       })}

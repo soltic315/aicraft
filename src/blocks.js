@@ -112,6 +112,16 @@ export const BlockType = {
   TORCH:              82,
   // 燃料素材
   CHARCOAL:           83,
+  // 剣（武器）
+  SWORD:              84, // 木の剣
+  STONE_SWORD:        85, // 石の剣
+  IRON_SWORD:         86, // 鉄の剣
+  DIAMOND_SWORD:      87, // ダイヤモンドの剣
+  // 爆発物
+  TNT:                88, // TNT（右クリックで点火）
+  GUNPOWDER:          89, // 火薬（クリーパードロップ）
+  // 砂利（重力落下ブロック）
+  GRAVEL:             90,
 };
 
 export const BLOCK_NAMES = {
@@ -199,6 +209,13 @@ export const BLOCK_NAMES = {
   [BlockType.DIAMOND_BOOTS]:      'ダイヤのブーツ',
   [BlockType.TORCH]:              'たいまつ',
   [BlockType.CHARCOAL]:           '木炭',
+  [BlockType.SWORD]:              '剣（木）',
+  [BlockType.STONE_SWORD]:        '剣（石）',
+  [BlockType.IRON_SWORD]:         '剣（鉄）',
+  [BlockType.DIAMOND_SWORD]:      '剣（ダイヤモンド）',
+  [BlockType.TNT]:                'TNT',
+  [BlockType.GUNPOWDER]:          '火薬',
+  [BlockType.GRAVEL]:             '砂利',
 };
 
 // クロス（X字スプライト）形状で描画するブロックの一覧
@@ -230,6 +247,8 @@ export const BLOCK_BREAK_DURATIONS = {
   [BlockType.DIAMOND_ORE]: 3.0,
   [BlockType.SNOW]: 0.3,
   [BlockType.CACTUS]: 0.4,
+  [BlockType.TNT]: 0.3,
+  [BlockType.GRAVEL]: 0.45,
   [BlockType.TALL_GRASS]: 0.1,
   [BlockType.FLOWER]: 0.1,
   [BlockType.MUSHROOM]: 0.15,

@@ -25,7 +25,7 @@ export function getEnchantableCategory(blockType) {
   const PICKAXES = [BlockType.PICKAXE, BlockType.STONE_PICKAXE, BlockType.IRON_PICKAXE, BlockType.DIAMOND_PICKAXE];
   const AXES    = [BlockType.AXE, BlockType.STONE_AXE, BlockType.IRON_AXE, BlockType.DIAMOND_AXE];
   const SHOVELS = [BlockType.SHOVEL, BlockType.STONE_SHOVEL, BlockType.IRON_SHOVEL, BlockType.DIAMOND_SHOVEL];
-  const WEAPONS = [BlockType.BOW];
+  const WEAPONS = [BlockType.BOW, BlockType.SWORD, BlockType.STONE_SWORD, BlockType.IRON_SWORD, BlockType.DIAMOND_SWORD];
   const ARMORS  = [
     BlockType.LEATHER_HELMET, BlockType.LEATHER_CHESTPLATE, BlockType.LEATHER_LEGGINGS, BlockType.LEATHER_BOOTS,
     BlockType.IRON_HELMET,    BlockType.IRON_CHESTPLATE,    BlockType.IRON_LEGGINGS,    BlockType.IRON_BOOTS,

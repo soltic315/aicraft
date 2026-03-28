@@ -72,6 +72,35 @@ export const CRAFT_RECIPES = [
     consumes: { [BlockType.PLANK]: 2 },
     produces: { [BlockType.SHOVEL]: 1 },
   },
+  // 剣クラフト
+  {
+    id: 'sword_from_plank',
+    label: '板材 x3 -> 剣（木） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.PLANK]: 3 },
+    produces: { [BlockType.SWORD]: 1 },
+  },
+  {
+    id: 'stone_sword_from_cobblestone',
+    label: '丸石 x3 -> 剣（石） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.COBBLESTONE]: 3 },
+    produces: { [BlockType.STONE_SWORD]: 1 },
+  },
+  {
+    id: 'iron_sword_from_iron',
+    label: '鉄インゴット x3 -> 剣（鉄） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.IRON_INGOT]: 3 },
+    produces: { [BlockType.IRON_SWORD]: 1 },
+  },
+  {
+    id: 'diamond_sword_from_diamond',
+    label: 'ダイヤモンド x3 -> 剣（ダイヤモンド） x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.DIAMOND]: 3 },
+    produces: { [BlockType.DIAMOND_SWORD]: 1 },
+  },
   // 木ツール修理レシピ（板材 x1 消費で耐久値 +30）
   {
     id: 'repair_pickaxe',
@@ -230,6 +259,14 @@ export const CRAFT_RECIPES = [
     label: 'キノコ x2 -> きのこシチュー x1',
     consumes: { [BlockType.MUSHROOM]: 2 },
     produces: { [BlockType.MUSHROOM_STEW]: 1 },
+  },
+  // TNT（作業台: 砂 x5 + 火薬 x1 -> TNT x1）
+  {
+    id: 'tnt_from_sand_gunpowder',
+    label: '砂 x5 + 火薬 x1 -> TNT x1',
+    requiresCraftingTable: true,
+    consumes: { [BlockType.SAND]: 5, [BlockType.GUNPOWDER]: 1 },
+    produces: { [BlockType.TNT]: 1 },
   },
   // アカシア板材（アカシア木材 x1 -> 板材 x4）
   {

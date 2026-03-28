@@ -5,6 +5,7 @@ const BUTTONS = [
   { icon: '🎒', label: 'インベントリ', key: 'TAB', event: 'toggle-inventory' },
   { icon: '🔨', label: 'クラフト',     key: 'C',   event: 'toggle-craft' },
   { icon: '⚙',  label: 'オプション',  key: 'P',   event: 'toggle-settings' },
+  { icon: '❓', label: 'ヘルプ',       key: 'H',   event: 'toggle-help' },
 ];
 
 export function KeyHints() {

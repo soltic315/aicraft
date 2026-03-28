@@ -50,10 +50,17 @@ export function FurnacePanel() {
     }
     // 素材と燃料を消費（両方成功した場合のみ成果物を追加）
     const inputOk = inv.consumeItem(recipe.inputType, recipe.inputCount);
-    const fuelOk = inv.consumeItem(freshFuel.type, freshFuel.count);
-    if (!inputOk || !fuelOk) {
+    if (!inputOk) {
       window.__aicraft?.sound?.playError();
-      useUIStore.getState().showFeedback('精錬失敗: 素材または燃料が不足しています');
+      useUIStore.getState().showFeedback('精錬失敗: 素材が不足しています');
+      return;
+    }
+    const fuelOk = inv.consumeItem(freshFuel.type, freshFuel.count);
+    if (!fuelOk) {
+      // 素材を返却してから失敗メッセージ
+      inv.addItem(recipe.inputType, recipe.inputCount);
+      window.__aicraft?.sound?.playError();
+      useUIStore.getState().showFeedback('精錬失敗: 燃料が不足しています');
       return;
     }
     // 成果物追加

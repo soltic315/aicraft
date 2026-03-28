@@ -14,6 +14,19 @@ export const ToolType = {
   DIAMOND_AXE:      'diamond_axe',
   DIAMOND_SHOVEL:   'diamond_shovel',
   BOW:              'bow',
+  // 剣
+  SWORD:            'sword',
+  STONE_SWORD:      'stone_sword',
+  IRON_SWORD:       'iron_sword',
+  DIAMOND_SWORD:    'diamond_sword',
+};
+
+/** ツール種別ごとの基本攻撃ダメージ（剣は高め） */
+export const TOOL_DAMAGE = {
+  sword:            4,
+  stone_sword:      5,
+  iron_sword:       6,
+  diamond_sword:    7,
 };
 
 export const TOOL_ORDER = [
@@ -30,9 +43,17 @@ export const TOOL_ORDER = [
   ToolType.DIAMOND_AXE,
   ToolType.DIAMOND_SHOVEL,
   ToolType.BOW,
+  ToolType.SWORD,
+  ToolType.STONE_SWORD,
+  ToolType.IRON_SWORD,
+  ToolType.DIAMOND_SWORD,
 ];
 
 export const TOOL_NAMES = {
+  [ToolType.SWORD]:           '剣（木）',
+  [ToolType.STONE_SWORD]:     '剣（石）',
+  [ToolType.IRON_SWORD]:      '剣（鉄）',
+  [ToolType.DIAMOND_SWORD]:   '剣（ダイヤモンド）',
   [ToolType.PICKAXE]:         'ツルハシ（木）',
   [ToolType.AXE]:             '斧（木）',
   [ToolType.SHOVEL]:          'シャベル（木）',
@@ -63,6 +84,10 @@ export const ITEM_TO_TOOL_TYPE = {
   [BlockType.DIAMOND_AXE]:      ToolType.DIAMOND_AXE,
   [BlockType.DIAMOND_SHOVEL]:   ToolType.DIAMOND_SHOVEL,
   [BlockType.BOW]:              ToolType.BOW,
+  [BlockType.SWORD]:            ToolType.SWORD,
+  [BlockType.STONE_SWORD]:      ToolType.STONE_SWORD,
+  [BlockType.IRON_SWORD]:       ToolType.IRON_SWORD,
+  [BlockType.DIAMOND_SWORD]:    ToolType.DIAMOND_SWORD,
 };
 
 // ToolType → BlockType の逆引き（所持数チェックに使用）
@@ -80,6 +105,10 @@ export const TOOL_TYPE_TO_ITEM = {
   [ToolType.DIAMOND_AXE]:       BlockType.DIAMOND_AXE,
   [ToolType.DIAMOND_SHOVEL]:    BlockType.DIAMOND_SHOVEL,
   [ToolType.BOW]:               BlockType.BOW,
+  [ToolType.SWORD]:             BlockType.SWORD,
+  [ToolType.STONE_SWORD]:       BlockType.STONE_SWORD,
+  [ToolType.IRON_SWORD]:        BlockType.IRON_SWORD,
+  [ToolType.DIAMOND_SWORD]:     BlockType.DIAMOND_SWORD,
 };
 
 const TOOL_BREAK_MULTIPLIERS = {

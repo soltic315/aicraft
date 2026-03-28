@@ -7,6 +7,7 @@ export const useUIStore = create((set, get) => ({
   chestOpen: false,
   furnaceOpen: false,
   inventoryOpen: false,
+  helpOpen: false,
   resumeHintVisible: false,
   waterOverlay: false,
   hitFlashCount: 0,   // インクリメントするたびに被弾エフェクトが再生される
@@ -64,6 +65,10 @@ export const useUIStore = create((set, get) => ({
 
   setChestOpen(open) {
     set({ chestOpen: open });
+  },
+
+  toggleHelp() {
+    set((s) => ({ helpOpen: !s.helpOpen }));
   },
 
   setResumeHint(visible) {

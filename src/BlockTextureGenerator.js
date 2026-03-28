@@ -143,6 +143,20 @@ const BLOCK_COLORS = {
     topDetail: '#f07020',
     sideDetail: '#a02000',
   },
+  [BlockType.TNT]: {
+    top: '#f0f0f0',
+    side: '#c82020',
+    bottom: '#f0f0f0',
+    topDetail: '#202020',
+    sideDetail: '#f0f0f0',
+  },
+  [BlockType.GRAVEL]: {
+    top: '#908878',
+    side: '#908878',
+    bottom: '#908878',
+    topDetail: '#706858',
+    sideDetail: '#786858',
+  },
   [BlockType.SNOW]: {
     top: '#f4f4f8',
     side: '#e8e8f0',
@@ -739,6 +753,37 @@ function generateFaceTexture(color, detailColor, size, seed, pattern) {
     // 棒の中央を少し明るくして立体感を出す
     ctx.fillStyle = 'rgba(255,200,80,0.18)';
     ctx.fillRect(size * 0.3, flameH, size * 0.4, size - flameH);
+  } else if (pattern === 'tnt_top') {
+    // TNT上面: 白地に黒十字（見た目を明確に）
+    const cx = size / 2;
+    const p = size / 16;
+    // 十字（黒）
+    ctx.fillStyle = '#202020';
+    ctx.fillRect(0, cx - p * 1.5, size, p * 3);
+    ctx.fillRect(cx - p * 1.5, 0, p * 3, size);
+    // コーナーに小さな赤い三角
+    ctx.fillStyle = '#c82020';
+    ctx.fillRect(0, 0, p * 5, p * 5);
+    ctx.fillRect(size - p * 5, 0, p * 5, p * 5);
+    ctx.fillRect(0, size - p * 5, p * 5, p * 5);
+    ctx.fillRect(size - p * 5, size - p * 5, p * 5, p * 5);
+  } else if (pattern === 'tnt_side') {
+    // TNT側面: 赤地に白縦ストライプ＋"TNT"的なパターン
+    const p = size / 16;
+    // 縦のしましま（白い線）
+    for (let i = 1; i < 16; i += 4) {
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(i * p, 0, p, size);
+    }
+    // 中央に横帯（暗め）
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0, size * 0.38, size, size * 0.24);
+    // 「TNT」文字っぽい白いドット模様
+    const dots = [[4,7],[6,5],[6,9],[8,7],[10,5],[10,9],[12,7]];
+    ctx.fillStyle = '#ffffff';
+    for (const [x, y] of dots) {
+      ctx.fillRect(x * p, y * p, p * 1.5, p * 1.5);
+    }
   }
 
   return canvas;
@@ -1006,6 +1051,8 @@ export function generateTextures() {
     [BlockType.DEEPSLATE]: { top: 'deepslate', side: 'deepslate', bottom: 'deepslate' },
     [BlockType.AMETHYST_ORE]: { top: 'amethyst_ore', side: 'amethyst_ore', bottom: 'amethyst_ore' },
     [BlockType.TORCH]: { top: 'torch_top', side: 'torch_side', bottom: 'torch_side' },
+    [BlockType.TNT]:   { top: 'tnt_top',  side: 'tnt_side',   bottom: 'tnt_top' },
+    [BlockType.GRAVEL]:{ top: 'noise',    side: 'noise',      bottom: 'noise' },
   };
 
   for (const typeStr of Object.keys(BLOCK_COLORS)) {
@@ -1159,6 +1206,37 @@ function generateShovelIcon(headColor = '#B0BCC8') {
     ctx.fillRect(10, 18, 12, 8);
     ctx.beginPath();
     ctx.arc(16, 26, 6, 0, Math.PI);
+    ctx.fill();
+  });
+}
+
+// 剣アイコン
+function generateSwordIcon(bladeColor = '#B0BCC8') {
+  return makeIcon((ctx) => {
+    // 柄（茶色）
+    ctx.strokeStyle = '#7B4F2E';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(8, 24); ctx.lineTo(15, 17); ctx.stroke();
+    // 鍔（横）
+    ctx.fillStyle = '#8a6030';
+    ctx.fillRect(11, 14, 10, 3);
+    // 刃（細長い菱形）
+    ctx.fillStyle = bladeColor;
+    ctx.beginPath();
+    ctx.moveTo(16, 4);   // 先端
+    ctx.lineTo(19, 12);  // 右
+    ctx.lineTo(16, 14);  // 元
+    ctx.lineTo(13, 12);  // 左
+    ctx.closePath();
+    ctx.fill();
+    // 刃の光沢
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(16, 5);
+    ctx.lineTo(18, 11);
+    ctx.lineTo(16, 12);
+    ctx.closePath();
     ctx.fill();
   });
 }
@@ -1711,6 +1789,45 @@ export function generateBlockIcon(type) {
   if (type === BlockType.MUSHROOM_STEW) return generateMushroomStewIcon();
   if (type === BlockType.TORCH)         return generateTorchIcon();
   if (type === BlockType.CHARCOAL)      return generateCharcoalIcon();
+  if (type === BlockType.SWORD)         return generateSwordIcon('#c8a060');
+  if (type === BlockType.STONE_SWORD)   return generateSwordIcon('#909090');
+  if (type === BlockType.IRON_SWORD)    return generateSwordIcon('#d0d8e0');
+  if (type === BlockType.DIAMOND_SWORD) return generateSwordIcon('#44c8e0');
+  // TNT・火薬アイコン
+  if (type === BlockType.TNT) return (() => {
+    return makeIcon((ctx) => {
+      // 赤いブロック
+      ctx.fillStyle = '#c82020';
+      ctx.fillRect(4, 4, 24, 24);
+      // 上面（白）
+      ctx.fillStyle = '#f0f0f0';
+      ctx.fillRect(6, 4, 20, 6);
+      // 側面の暗い境界
+      ctx.fillStyle = '#901010';
+      ctx.fillRect(4, 4, 2, 24);
+      // 白いT・N・T文字風のドット
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(7, 14, 2, 2); ctx.fillRect(11, 14, 2, 2); ctx.fillRect(15, 14, 2, 2);
+      ctx.fillRect(9, 16, 2, 4); ctx.fillRect(13, 16, 2, 4);
+    });
+  })();
+  if (type === BlockType.GUNPOWDER) return (() => {
+    return makeIcon((ctx) => {
+      // 灰色の粒々
+      ctx.fillStyle = '#606060';
+      for (const [x, y] of [[8,8],[14,8],[10,14],[16,14],[6,14],[12,20],[18,20]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#888';
+      for (const [x, y] of [[10,10],[16,10],[8,18],[14,18]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  })();
   // 防具アイコン
   if (type === BlockType.LEATHER_HELMET)     return generateHelmetIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);
   if (type === BlockType.LEATHER_CHESTPLATE) return generateChestplateIcon(ARMOR_COLORS.leather.base, ARMOR_COLORS.leather.shine);

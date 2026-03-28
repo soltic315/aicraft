@@ -26,6 +26,7 @@ import { ResumeHint } from './overlays/ResumeHint.jsx';
 import { AchievementToast } from './overlays/AchievementToast.jsx';
 import { MiniMap } from './overlays/MiniMap.jsx';
 import { TutorialOverlay } from './overlays/TutorialOverlay.jsx';
+import { HelpOverlay } from './overlays/HelpOverlay.jsx';
 
 export function App() {
   const anyPanelOpen = useUIStore((s) =>
@@ -72,6 +73,7 @@ export function App() {
       <Hotbar />
       <AchievementToast />
       <TutorialOverlay />
+      <HelpOverlay />
       {gameStarted && isCreative && (
         <div id="creative-hud">✨ クリエイティブ</div>
       )}
