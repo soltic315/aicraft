@@ -85,7 +85,8 @@ export class World {
   }
 
   // 全チャンクを破棄してワールドを初期状態に戻す
-  reset() {
+  // seed を指定すると指定シードで地形を再生成する（省略時はランダム）
+  reset(seed) {
     // 全チャンクメッシュをシーンから除去
     for (const chunk of this.chunks.values()) {
       if (chunk.mesh) {
@@ -109,8 +110,9 @@ export class World {
     this._dimmedMaterialCache.clear();
 
     // 新しいシードで地形ノイズを再生成
-    this.seed = Math.floor(Math.random() * 100000);
-    this.terrain.reset(this.seed);
+    const newSeed = Number.isFinite(seed) ? seed : Math.floor(Math.random() * 100000);
+    this.seed = newSeed;
+    this.terrain.reset(newSeed);
     this._hasFrustum = false;
   }
 

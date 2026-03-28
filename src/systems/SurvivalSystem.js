@@ -41,6 +41,8 @@ export class SurvivalSystem {
 
   update(dt, world) {
     if (useGameStore.getState().isDead) return;
+    // クリエイティブモード中はサバイバルダメージを全スキップ
+    if (useGameStore.getState().isCreative) return;
 
     // --- 空腹 ---
     const difficulty = useGameStore.getState().difficulty;

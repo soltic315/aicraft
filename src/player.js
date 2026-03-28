@@ -44,6 +44,11 @@ export class Player {
     this._sprintByDoubleTap = false;
     this.mouseSensitivity = options.mouseSensitivity ?? DEFAULT_MOUSE_SENSITIVITY;
 
+    // クリエイティブモード・飛行
+    this.isCreative = false;
+    this.isFlying = false;
+    this._spaceLastPress = 0;
+
     this.maxHealth = options.maxHealth ?? DEFAULT_MAX_HEALTH;
     this.health = this.maxHealth;
     this.healthRegenCooldown = 0;
@@ -72,6 +77,15 @@ export class Player {
       }
       // 後退キーでスプリント解除
       if (e.code === 'KeyS') this._sprintByDoubleTap = false;
+      // クリエイティブ飛行: スペース2連打で飛行モード切替
+      if (e.code === 'Space' && this.isCreative) {
+        const now = performance.now();
+        if (now - this._spaceLastPress < 350) {
+          this.isFlying = !this.isFlying;
+          if (!this.isFlying) this.velocity.y = 0;
+        }
+        this._spaceLastPress = now;
+      }
     });
     document.addEventListener('keyup', (e) => {
       this.keys[e.code] = false;
@@ -132,62 +146,79 @@ export class Player {
 
     if (moveDir.length() > 0) moveDir.normalize();
 
-    // スプリント（CtrlまたはControl長押し）・スニーク（Shift長押し）
-    this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight'] || this._sprintByDoubleTap) && this.onGround && moveDir.length() > 0 && !this.isInWater;
-    this.isSneaking = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && !this.isSprinting;
-
-    let speed = MOVE_SPEED;
-    if (this.isSprinting) speed *= SPRINT_MULTIPLIER;
-    else if (this.isSneaking) speed *= SNEAK_MULTIPLIER;
-    if (this.isInWater) speed *= WATER_SPEED_MULTIPLIER;
-    else if (this.isInLava) speed *= WATER_SPEED_MULTIPLIER * 0.5; // 溶岩は水より遅い
-
-    // Horizontal velocity（氷上は慣性が大きく滑る）
-    const targetVelX = moveDir.x * speed;
-    const targetVelZ = moveDir.z * speed;
-    if (isOnIce) {
-      const iceAccel = 3.5; // 通常のsetより遅い変化
-      this.velocity.x += (targetVelX - this.velocity.x) * Math.min(1, iceAccel * dt);
-      this.velocity.z += (targetVelZ - this.velocity.z) * Math.min(1, iceAccel * dt);
-    } else {
-      this.velocity.x = targetVelX;
-      this.velocity.z = targetVelZ;
-    }
-
-    // ノックバック加算・減衰（1秒でほぼ消える）
-    if (this.knockbackVelocity.lengthSq() > 0.01) {
-      this.velocity.x += this.knockbackVelocity.x;
-      this.velocity.z += this.knockbackVelocity.z;
-      this.velocity.y = Math.max(this.velocity.y, this.knockbackVelocity.y);
-      this.knockbackVelocity.multiplyScalar(Math.pow(0.08, dt));
-      if (this.knockbackVelocity.lengthSq() < 0.01) this.knockbackVelocity.set(0, 0, 0);
-    }
-
-    if (this.isInWater) {
-      // 水中: Spaceで浮上、浮力で上昇減速
+    // クリエイティブ飛行中の処理
+    if (this.isCreative && this.isFlying) {
+      const flySpeed = MOVE_SPEED * 2.5;
+      this.velocity.x = moveDir.x * flySpeed;
+      this.velocity.z = moveDir.z * flySpeed;
+      // 上下移動: Space=上昇, Shift=下降
+      const flyVertSpeed = MOVE_SPEED * 2.0;
       if (this.keys['Space']) {
-        // 頭が水面から出ている（水面付近）は通常ジャンプ力で陸地に上がれる
-        this.velocity.y = this.isHeadInWater() ? SWIM_FORCE : JUMP_FORCE;
+        this.velocity.y = flyVertSpeed;
+      } else if (this.keys['ShiftLeft'] || this.keys['ShiftRight']) {
+        this.velocity.y = -flyVertSpeed;
+      } else {
+        // 急停止
+        this.velocity.y *= Math.pow(0.001, dt);
       }
-      // 水中重力（浮力で軽減）
-      this.velocity.y -= WATER_GRAVITY * dt;
-      // 水中では速度を減衰させる
-      this.velocity.y *= (1 - 2 * dt);
-    } else if (this.isInLava) {
-      // 溶岩中: 水中と同様だが浮力は弱め
-      if (this.keys['Space']) {
-        this.velocity.y = SWIM_FORCE * 0.55;
-      }
-      this.velocity.y -= WATER_GRAVITY * 1.4 * dt;
-      this.velocity.y *= (1 - 3 * dt);
     } else {
-      // 通常ジャンプ
-      if (this.keys['Space'] && this.onGround) {
-        this.velocity.y = JUMP_FORCE;
-        this.onGround = false;
+      // スプリント（CtrlまたはControl長押し）・スニーク（Shift長押し）
+      this.isSprinting = (this.keys['ControlLeft'] || this.keys['ControlRight'] || this._sprintByDoubleTap) && this.onGround && moveDir.length() > 0 && !this.isInWater;
+      this.isSneaking = (this.keys['ShiftLeft'] || this.keys['ShiftRight']) && !this.isSprinting;
+
+      let speed = MOVE_SPEED;
+      if (this.isSprinting) speed *= SPRINT_MULTIPLIER;
+      else if (this.isSneaking) speed *= SNEAK_MULTIPLIER;
+      if (this.isInWater) speed *= WATER_SPEED_MULTIPLIER;
+      else if (this.isInLava) speed *= WATER_SPEED_MULTIPLIER * 0.5; // 溶岩は水より遅い
+
+      // Horizontal velocity（氷上は慣性が大きく滑る）
+      const targetVelX = moveDir.x * speed;
+      const targetVelZ = moveDir.z * speed;
+      if (isOnIce) {
+        const iceAccel = 3.5; // 通常のsetより遅い変化
+        this.velocity.x += (targetVelX - this.velocity.x) * Math.min(1, iceAccel * dt);
+        this.velocity.z += (targetVelZ - this.velocity.z) * Math.min(1, iceAccel * dt);
+      } else {
+        this.velocity.x = targetVelX;
+        this.velocity.z = targetVelZ;
       }
-      // 重力
-      this.velocity.y -= GRAVITY * dt;
+
+      // ノックバック加算・減衰（1秒でほぼ消える）
+      if (this.knockbackVelocity.lengthSq() > 0.01) {
+        this.velocity.x += this.knockbackVelocity.x;
+        this.velocity.z += this.knockbackVelocity.z;
+        this.velocity.y = Math.max(this.velocity.y, this.knockbackVelocity.y);
+        this.knockbackVelocity.multiplyScalar(Math.pow(0.08, dt));
+        if (this.knockbackVelocity.lengthSq() < 0.01) this.knockbackVelocity.set(0, 0, 0);
+      }
+
+      if (this.isInWater) {
+        // 水中: Spaceで浮上、浮力で上昇減速
+        if (this.keys['Space']) {
+          // 頭が水面から出ている（水面付近）は通常ジャンプ力で陸地に上がれる
+          this.velocity.y = this.isHeadInWater() ? SWIM_FORCE : JUMP_FORCE;
+        }
+        // 水中重力（浮力で軽減）
+        this.velocity.y -= WATER_GRAVITY * dt;
+        // 水中では速度を減衰させる
+        this.velocity.y *= (1 - 2 * dt);
+      } else if (this.isInLava) {
+        // 溶岩中: 水中と同様だが浮力は弱め
+        if (this.keys['Space']) {
+          this.velocity.y = SWIM_FORCE * 0.55;
+        }
+        this.velocity.y -= WATER_GRAVITY * 1.4 * dt;
+        this.velocity.y *= (1 - 3 * dt);
+      } else {
+        // 通常ジャンプ
+        if (this.keys['Space'] && this.onGround) {
+          this.velocity.y = JUMP_FORCE;
+          this.onGround = false;
+        }
+        // 重力
+        this.velocity.y -= GRAVITY * dt;
+      }
     }
 
     // Move and collide

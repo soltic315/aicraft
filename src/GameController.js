@@ -88,6 +88,7 @@ import { SaveSystem } from './systems/SaveSystem.js';
 import { BlockInteractionSystem } from './systems/BlockInteractionSystem.js';
 import { CombatSystem } from './systems/CombatSystem.js';
 import { DayNightSystem } from './systems/DayNightSystem.js';
+import { WeatherSystem } from './systems/WeatherSystem.js';
 
 export class GameController {
   constructor(eventBus, sound, input) {
@@ -402,10 +403,11 @@ export class GameController {
     // セーブシステム
     this.saveSystem = new SaveSystem(this.player, this.world, () => this.worldSeed);
 
-    // ブロック操作・戦闘・昼夜サイクルシステム
+    // ブロック操作・戦闘・昼夜サイクル・天候システム
     this.blockInteraction = new BlockInteractionSystem(this);
     this.combat = new CombatSystem(this);
     this.dayNight = new DayNightSystem(this);
+    this.weatherSystem = new WeatherSystem(this.scene);
 
     // Game loop state
     this.gameStarted = false;
@@ -610,10 +612,17 @@ export class GameController {
       this._openChestAt(hit.blockPos);
     });
 
-    this.eventBus.on('start-clicked', async () => {
+    this.eventBus.on('start-clicked', async ({ seed, isCreative: startCreative, isNewGame } = {}) => {
       if (this.gameStarted) return;
       void this.sound.ensureStarted();
       useGameStore.getState().setLoading(true, 'ワールドを生成中...');
+
+      // 新規ゲームかつカスタムシードが指定されていれば適用
+      if (isNewGame && Number.isFinite(seed)) {
+        this.worldSeed = seed;
+        this.world.seed = seed;
+        this.world.terrain.reset(seed);
+      }
 
       // 1フレーム待機してローディング画面を確実に描画させてから重い処理を開始
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -651,6 +660,11 @@ export class GameController {
         if (this.savedGame?.difficulty) {
           useGameStore.getState().setDifficulty(this.savedGame.difficulty);
         }
+
+        // クリエイティブモードを設定（引数 → セーブデータ の優先順）
+        const creativeMode = startCreative ?? Boolean(this.savedGame?.isCreative) ?? false;
+        useGameStore.getState().setCreative(creativeMode);
+        this.player.isCreative = creativeMode;
 
         this.gameStarted = true;
         this._onSlotChanged(); // 初期スロットのツールを装備
@@ -696,6 +710,25 @@ export class GameController {
 
     this.eventBus.on('title-clicked', () => {
       this._returnToTitle();
+    });
+
+    // Gキー: クリエイティブ/サバイバルモード切替
+    this.eventBus.on('toggle-creative', () => {
+      if (!this.gameStarted) return;
+      const nowCreative = !useGameStore.getState().isCreative;
+      useGameStore.getState().setCreative(nowCreative);
+      this.player.isCreative = nowCreative;
+      if (!nowCreative) {
+        this.player.isFlying = false;
+        this.player.velocity.y = 0;
+        // サバイバルに戻ったらHP・空腹を満タンにリセット
+        this.player.restoreHealth();
+        useHungerStore.getState().reset();
+      }
+      const msg = nowCreative
+        ? 'クリエイティブモード ON　[Space×2]で飛行'
+        : 'サバイバルモードに戻りました';
+      useUIStore.getState().showFeedback(msg, 1800);
     });
 
     this.eventBus.on('respawn-clicked', () => {
@@ -906,7 +939,14 @@ export class GameController {
     this.mobManager.removeAll();
     this.droppedItemManager.removeAll();
     this.particleManager.dispose();
-    // ワールドのチャンク・地形データをリセット
+    // 天候をリセット
+    this.weatherSystem.forceWeather('clear');
+    useGameStore.getState().setWeather('clear');
+    // クリエイティブモードをリセット
+    useGameStore.getState().setCreative(false);
+    this.player.isCreative = false;
+    this.player.isFlying = false;
+    // ワールドのチャンク・地形データをリセット（新しいランダムシードで再生成）
     this.world.reset();
     // 全UIパネルを閉じる
     useUIStore.getState().closeInventoryPanels();
@@ -1236,7 +1276,11 @@ export class GameController {
 
   // ---- Day/Night ---- (DayNightSystem に委譲)
 
-  _updateDayNightCycle(elapsedSeconds)    { return this.dayNight.update(elapsedSeconds); }
+  _updateDayNightCycle(elapsedSeconds) {
+    const darkness = this.weatherSystem ? this.weatherSystem.getDarknessAmount() : 0;
+    const fogMult  = this.weatherSystem ? this.weatherSystem.getFogNearMultiplier() : 1.0;
+    return this.dayNight.update(elapsedSeconds, darkness, fogMult);
+  }
 
   // ---- Game Loop ----
 
@@ -1302,18 +1346,21 @@ export class GameController {
             );
           }
 
-          const damage = calculateFallDamage(fallingSpeedBeforeUpdate);
-          if (damage > 0) {
-            const actualDamage = this.player.applyDamage(damage);
+          // クリエイティブモードは落下ダメージなし
+          if (!this.player.isCreative) {
+            const damage = calculateFallDamage(fallingSpeedBeforeUpdate);
+            if (damage > 0) {
+              const actualDamage = this.player.applyDamage(damage);
 
-            if (actualDamage > 0) {
-              useUIStore.getState().showFeedback(`落下ダメージ: -${actualDamage} HP`, 1000);
-              this.sound.playError();
-            }
+              if (actualDamage > 0) {
+                useUIStore.getState().showFeedback(`落下ダメージ: -${actualDamage} HP`, 1000);
+                this.sound.playError();
+              }
 
-            if (this.player.health <= 0 && !useGameStore.getState().isDead) {
-              useGameStore.getState().setDead(true);
-              document.exitPointerLock();
+              if (this.player.health <= 0 && !useGameStore.getState().isDead) {
+                useGameStore.getState().setDead(true);
+                document.exitPointerLock();
+              }
             }
           }
         }
@@ -1439,6 +1486,12 @@ export class GameController {
       this._updateMobs(dt, dayNight.isDay);
       this._updateDroppedItems(dt);
       this.particleManager.update(dt);
+      // 天候更新
+      this.weatherSystem.update(dt, this.player.position);
+      const newWeather = this.weatherSystem.getState().weather;
+      if (useGameStore.getState().weatherType !== newWeather) {
+        useGameStore.getState().setWeather(newWeather);
+      }
     } else {
       // タイトル画面
       useDayNightStore.getState().update(dayNight.cycleRatio, dayNight.isDay);

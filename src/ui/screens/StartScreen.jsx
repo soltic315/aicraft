@@ -76,6 +76,9 @@ export function StartScreen() {
   const [selectedDifficulty, setSelectedDifficulty] = useState(DIFFICULTY.NORMAL);
   const [showControls, setShowControls] = useState(false);
   const [startAnim, setStartAnim] = useState(false);
+  const [isCreativeMode, setIsCreativeMode] = useState(false);
+  const [seedInput, setSeedInput] = useState('');
+  const [showSeedInput, setShowSeedInput] = useState(false);
   const canvasRef = useRef(null);
 
   useParticles(canvasRef);
@@ -89,13 +92,13 @@ export function StartScreen() {
     if (newGame && hasSave) {
       if (!confirm('セーブデータを削除して新しいゲームを始めますか？')) return;
       window.__aicraft?.eventBus?.emit('delete-save-clicked');
-      setTimeout(() => _doStart(), 100);
+      setTimeout(() => _doStart(true), 100);
     } else {
-      _doStart();
+      _doStart(false);
     }
   };
 
-  const _doStart = () => {
+  const _doStart = (isNewGame = false) => {
     setStartAnim(true);
     setTimeout(() => {
       if (document.documentElement.requestFullscreen) {
@@ -103,7 +106,13 @@ export function StartScreen() {
       }
       const { eventBus } = window.__aicraft;
       useGameStore.getState().setDifficulty(selectedDifficulty);
-      eventBus.emit('start-clicked');
+      const parsedSeed = seedInput.trim() !== '' ? Number(seedInput.trim()) : null;
+      const seed = parsedSeed != null && Number.isFinite(parsedSeed) ? Math.floor(parsedSeed) : null;
+      eventBus.emit('start-clicked', {
+        isNewGame,
+        seed,
+        isCreative: isNewGame ? isCreativeMode : undefined,
+      });
     }, 400);
   };
 
@@ -157,6 +166,53 @@ export function StartScreen() {
           </div>
         </div>
 
+        {/* ゲームモード選択（新規ゲーム時） */}
+        <div id="game-mode-section">
+          <div id="game-mode-label">ゲームモード</div>
+          <div id="game-mode-buttons">
+            <button
+              class={`mode-btn${!isCreativeMode ? ' active' : ''}`}
+              onClick={() => setIsCreativeMode(false)}
+            >
+              <span class="mode-icon">⚔️</span>
+              <span class="mode-name">サバイバル</span>
+              <span class="mode-desc">資源収集・戦闘・生存</span>
+            </button>
+            <button
+              class={`mode-btn${isCreativeMode ? ' active' : ''}`}
+              onClick={() => setIsCreativeMode(true)}
+            >
+              <span class="mode-icon">✨</span>
+              <span class="mode-name">クリエイティブ</span>
+              <span class="mode-desc">飛行・即破壊・ダメージなし</span>
+            </button>
+          </div>
+        </div>
+
+        {/* シード入力（折り畳み） */}
+        <div id="seed-section">
+          <button
+            id="seed-toggle"
+            onClick={() => setShowSeedInput(!showSeedInput)}
+          >
+            {showSeedInput ? 'シード設定を閉じる ▲' : 'ワールドシードを指定 ▼'}
+          </button>
+          {showSeedInput && (
+            <div id="seed-input-container">
+              <input
+                id="seed-input"
+                type="number"
+                placeholder="数値を入力（空白でランダム）"
+                value={seedInput}
+                onInput={(e) => setSeedInput(e.target.value)}
+              />
+              {seedInput.trim() !== '' && (
+                <span id="seed-preview">シード: {Math.floor(Number(seedInput.trim()) || 0)}</span>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* ゲーム開始ボタン */}
         <div id="start-buttons">
           {hasSave ? (
@@ -169,7 +225,7 @@ export function StartScreen() {
               </button>
             </>
           ) : (
-            <button class="start-btn primary-btn" onClick={() => handleStart(false)}>
+            <button class="start-btn primary-btn" onClick={() => handleStart(true)}>
               <span class="btn-icon">▶</span> ゲーム開始
             </button>
           )}
@@ -204,6 +260,8 @@ export function StartScreen() {
                 <div class="ctrl-row"><span class="ctrl-key">C</span><span class="ctrl-desc">クラフト</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">M</span><span class="ctrl-desc">ミニマップ切替</span></div>
                 <div class="ctrl-row"><span class="ctrl-key">P / ESC</span><span class="ctrl-desc">設定</span></div>
+                <div class="ctrl-row"><span class="ctrl-key">G</span><span class="ctrl-desc">クリエイティブ切替</span></div>
+                <div class="ctrl-row"><span class="ctrl-key">Space×2</span><span class="ctrl-desc">飛行モード切替</span></div>
               </div>
             </div>
           </div>

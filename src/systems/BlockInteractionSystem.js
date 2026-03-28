@@ -192,6 +192,13 @@ export class BlockInteractionSystem {
       return;
     }
 
+    // クリエイティブモードは即破壊
+    if (this.gc.player.isCreative) {
+      this._doBreakBlock(hit);
+      this.resetBreaking();
+      return;
+    }
+
     const selectedTool = useToolStore.getState().selectedTool;
     // ツールを持っていない場合は補正なし（素手扱い）
     const toolItemType = _TOOL_TYPE_TO_ITEM[selectedTool];
@@ -282,5 +289,30 @@ export class BlockInteractionSystem {
 
       this.resetBreaking();
     }
+  }
+
+  // クリエイティブモード即破壊用の共通処理
+  _doBreakBlock(hit) {
+    if (hit.blockType === BlockType.CHEST) {
+      const recovered = this.gc._recoverChestItems(hit.blockPos);
+      if (recovered > 0) {
+        useUIStore.getState().showFeedback(`チェスト回収: 中身 ${recovered} 個を取得`, 1200);
+      }
+    }
+
+    // クリエイティブではドロップしない（インベントリは無制限なので不要）
+    const breakMat = this.gc.blockMaterials[hit.blockType]?.top ?? this.gc.blockMaterials[1]?.top;
+    if (breakMat) {
+      this.gc.particleManager.spawnBreak(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
+      if (hit.blockType === BlockType.LEAVES) {
+        this.gc.particleManager.spawnLeafFall(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, breakMat.clone());
+      }
+    }
+
+    if (hit.blockType === BlockType.TORCH) {
+      this.removeTorchLight(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z);
+    }
+    this.gc.world.setBlockWithDiff(hit.blockPos.x, hit.blockPos.y, hit.blockPos.z, BlockType.AIR);
+    this.gc.sound.playBreak();
   }
 }

@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import { useUIStore } from '../stores/uiStore.js';
 import { useEnchantmentStore } from '../stores/enchantmentStore.js';
+import { useGameStore } from '../stores/gameStore.js';
 import { StartScreen } from './screens/StartScreen.jsx';
 import { LoadingScreen } from './screens/LoadingScreen.jsx';
 import { DeathScreen } from './screens/DeathScreen.jsx';
@@ -31,6 +32,11 @@ export function App() {
     s.inventoryOpen || s.craftOpen || s.settingsOpen || s.chestOpen || s.furnaceOpen
   );
   const enchantOpen = useEnchantmentStore(s => s.enchantPanelOpen);
+  const { isCreative, weatherType, gameStarted } = useGameStore((s) => ({
+    isCreative: s.isCreative,
+    weatherType: s.weatherType,
+    gameStarted: s.gameStarted,
+  }));
 
   const closeAll = () => {
     useUIStore.setState({ settingsOpen: false, inventoryOpen: false, craftOpen: false, chestOpen: false, furnaceOpen: false });
@@ -66,6 +72,14 @@ export function App() {
       <Hotbar />
       <AchievementToast />
       <TutorialOverlay />
+      {gameStarted && isCreative && (
+        <div id="creative-hud">✨ クリエイティブ</div>
+      )}
+      {gameStarted && weatherType !== 'clear' && (
+        <div id="weather-hud">
+          {weatherType === 'rain' ? '🌧 雨' : '❄ 雪'}
+        </div>
+      )}
     </>
   );
 }

@@ -215,6 +215,36 @@
       text-align: center;
     }
 
+    /* クリエイティブモード・天候 HUD */
+    #creative-hud {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(80,40,160,0.75);
+      color: #ddc8ff;
+      padding: 4px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      pointer-events: none;
+      border: 1px solid rgba(180,120,255,0.4);
+    }
+    #weather-hud {
+      position: fixed;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(20,50,80,0.65);
+      color: #aadeff;
+      padding: 3px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      letter-spacing: 1px;
+      pointer-events: none;
+    }
+
     #info {
       position: fixed;
       top: 10px; left: 10px;
@@ -818,6 +848,94 @@
       color: rgba(255,255,255,0.6);
       text-align: center;
       line-height: 1.4;
+    }
+
+    /* ゲームモード選択 */
+    #game-mode-section {
+      width: 100%;
+      margin-bottom: 16px;
+    }
+    #game-mode-label {
+      font-size: 12px;
+      color: rgba(180,210,255,0.55);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    #game-mode-buttons {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .mode-btn {
+      flex: 1;
+      max-width: 200px;
+      padding: 10px 14px;
+      border: 2px solid rgba(255,255,255,0.18);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.3);
+      color: #fff;
+      font-family: inherit;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    }
+    .mode-btn:hover { transform: translateY(-2px); }
+    .mode-btn.active {
+      border-color: #66aaff;
+      background: rgba(30,60,120,0.7);
+      box-shadow: 0 0 14px rgba(80,140,255,0.4);
+      transform: translateY(-2px);
+    }
+    .mode-icon { font-size: 20px; }
+    .mode-name { font-size: 14px; font-weight: 600; letter-spacing: 1px; }
+    .mode-desc { font-size: 10px; color: rgba(255,255,255,0.6); text-align: center; }
+
+    /* シード入力 */
+    #seed-section {
+      width: 100%;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+    #seed-toggle {
+      background: none;
+      border: none;
+      color: rgba(180,210,255,0.5);
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 1px;
+      padding: 4px 8px;
+    }
+    #seed-toggle:hover { color: rgba(180,210,255,0.85); }
+    #seed-input-container {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    #seed-input {
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(100,150,255,0.35);
+      border-radius: 6px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 14px;
+      padding: 8px 14px;
+      width: 220px;
+      text-align: center;
+      outline: none;
+    }
+    #seed-input:focus { border-color: rgba(100,180,255,0.7); }
+    #seed-preview {
+      font-size: 11px;
+      color: rgba(150,200,255,0.7);
+      letter-spacing: 1px;
     }
 
     /* スタートボタン */

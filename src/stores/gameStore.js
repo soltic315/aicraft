@@ -10,6 +10,8 @@ export const useGameStore = create((set) => ({
   isDead: false,
   paused: false,
   difficulty: DIFFICULTY.NORMAL, // 難易度（デフォルト: ノーマル）
+  isCreative: false,            // クリエイティブモード（飛行・即破壊・無限HP）
+  weatherType: 'clear',         // 天候: 'clear' | 'rain' | 'snow'
 
   startGame() {
     set({ gameStarted: true });
@@ -37,5 +39,13 @@ export const useGameStore = create((set) => ({
 
   setDifficulty(difficulty) {
     set({ difficulty });
+  },
+
+  setCreative(isCreative) {
+    set({ isCreative });
+  },
+
+  setWeather(weatherType) {
+    set({ weatherType });
   },
 }));
