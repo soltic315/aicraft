@@ -4,7 +4,8 @@ import { useDraggable } from '../hooks/useDraggable.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
-import { BLOCK_NAMES, generateBlockIcon } from '../../blocks.js';
+import { BLOCK_NAMES } from '../../blocks.js';
+import { generateBlockIcon } from '../../BlockTextureGenerator.js';
 import { TOOL_ITEMS, CHEST_STORAGE_LIMIT, parsePosKey } from '../../config.js';
 
 function getIconUrl(type) {

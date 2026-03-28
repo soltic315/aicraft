@@ -1,6 +1,7 @@
 import { h } from 'preact';
 import { memo, useMemo, useState } from 'preact/compat';
-import { generateBlockIcon, BLOCK_NAMES } from '../../blocks.js';
+import { BLOCK_NAMES } from '../../blocks.js';
+import { generateBlockIcon } from '../../BlockTextureGenerator.js';
 import { useInventoryStore } from '../../stores/inventoryStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { useChestStore } from '../../stores/chestStore.js';

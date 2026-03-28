@@ -55,9 +55,10 @@
     #crosshair::before, #crosshair::after {
       content: '';
       position: absolute;
-      background: rgba(255,255,255,0.92);
+      background: var(--ch-color, rgba(255,255,255,0.92));
       border-radius: 1px;
       filter: drop-shadow(0 0 2px rgba(0,0,0,0.8));
+      transition: background 0.12s ease;
     }
     #crosshair::before {
       width: 2px; height: 18px;
@@ -67,6 +68,9 @@
       width: 18px; height: 2px;
       top: -1px; left: -9px;
     }
+    /* ターゲット状態でクロスヘアの色を変化 */
+    #crosshair.target-block { --ch-color: rgba(255, 218, 50, 0.95); }
+    #crosshair.target-mob   { --ch-color: rgba(255, 75, 75, 0.95); }
     /* 中央のドット */
     #crosshair-dot {
       position: fixed;
@@ -77,7 +81,10 @@
       background: rgba(255,255,255,0.9);
       pointer-events: none;
       z-index: 10;
+      transition: background 0.12s ease;
     }
+    #crosshair-dot.target-block { background: rgba(255, 218, 50, 0.95); }
+    #crosshair-dot.target-mob   { background: rgba(255, 75, 75, 0.95); }
 
     #hud {
       position: fixed;

@@ -1,5 +1,5 @@
 // ブロックテクスチャ生成 - Canvas API を使ったプロシージャルテクスチャ生成
-import { BlockType } from './blocks.js';
+import { BlockType, CROSS_BLOCK_TYPES } from './blocks.js';
 
 // Color palettes for each block type (top, side, bottom)
 const BLOCK_COLORS = {

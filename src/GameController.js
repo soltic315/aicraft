@@ -10,9 +10,8 @@ import {
   BLOCK_BREAK_DURATIONS,
   BLOCK_DROP_OVERRIDES,
   CROSS_BLOCK_TYPES,
-  generateTextures,
-  generateBreakOverlayTextures,
 } from './blocks.js';
+import { generateTextures, generateBreakOverlayTextures } from './BlockTextureGenerator.js';
 import { World } from './world.js';
 import { Player } from './player.js';
 import {
@@ -418,6 +417,9 @@ export class GameController {
     this.fpsTime = 0;
     this.fps = 0;
     this._prevIsDay = null; // 未初期化を防ぐ（最初のフレームで不正なBGM変更を防止）
+    this._footstepTimer = 0;   // 足音インターバルタイマー
+    this._crosshairEl = null;  // クロスヘア要素（初回アクセス時にキャッシュ）
+    this._crosshairDotEl = null;
   }
 
   init() {
@@ -497,6 +499,18 @@ export class GameController {
         useGameStore.getState().setPaused(true);
         document.exitPointerLock();
         useUIStore.getState().setResumeHint(true);
+      }
+    });
+
+    // F11 でフルスクリーン切り替え
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F11') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
       }
     });
 
@@ -1304,6 +1318,28 @@ export class GameController {
           }
         }
         this.wasOnGround = this.player.onGround;
+
+        // 足音（地上歩行中にブロック種別に応じた音を再生）
+        if (this.player.onGround && !this.player.isInWater && !this.player.isInLava) {
+          const hs = Math.sqrt(this.player.velocity.x * this.player.velocity.x + this.player.velocity.z * this.player.velocity.z);
+          if (hs > 0.5) {
+            const interval = this.player.isSprinting ? 0.27 : 0.42;
+            this._footstepTimer -= dt;
+            if (this._footstepTimer <= 0) {
+              this._footstepTimer = interval;
+              const groundBlock = this.world.getBlock(
+                Math.floor(this.player.position.x),
+                Math.floor(this.player.position.y - 0.1),
+                Math.floor(this.player.position.z)
+              );
+              this.sound.playFootstep(this._getFootstepSurface(groundBlock));
+            }
+          } else {
+            this._footstepTimer = 0;
+          }
+        } else {
+          this._footstepTimer = 0;
+        }
       }
 
       this.world.update(this.player.position.x, this.player.position.z, this.camera);
@@ -1358,6 +1394,22 @@ export class GameController {
       } else {
         this.highlightMesh.visible = false;
         this._resetBreaking();
+      }
+
+      // クロスヘアの状態可視化（ターゲット種別で色を変更）
+      if (!this._crosshairEl) {
+        this._crosshairEl = document.getElementById('crosshair');
+        this._crosshairDotEl = document.getElementById('crosshair-dot');
+      }
+      if (this._crosshairEl) {
+        const hasBlock = this.player.locked && Boolean(blockHit && !targetMob);
+        const hasMob   = this.player.locked && Boolean(targetMob);
+        this._crosshairEl.classList.toggle('target-block', hasBlock);
+        this._crosshairEl.classList.toggle('target-mob', hasMob);
+        if (this._crosshairDotEl) {
+          this._crosshairDotEl.classList.toggle('target-block', hasBlock);
+          this._crosshairDotEl.classList.toggle('target-mob', hasMob);
+        }
       }
 
       // Sync stores for Preact UI
@@ -1434,6 +1486,42 @@ export class GameController {
     // スタート画面がcanvasを覆っているため描画は不要
     if (this.gameStarted) {
       this.composer.render();
+    }
+  }
+
+  // 足元ブロック種別から足音サーフェスカテゴリを判定
+  _getFootstepSurface(blockType) {
+    const BT = BlockType;
+    switch (blockType) {
+      case BT.STONE:
+      case BT.COBBLESTONE:
+      case BT.DEEPSLATE:
+      case BT.BEDROCK:
+      case BT.IRON_ORE:
+      case BT.GOLD_ORE:
+      case BT.DIAMOND_ORE:
+      case BT.COAL_ORE:
+      case BT.AMETHYST_ORE:
+      case BT.MOSSY_COBBLESTONE:
+      case BT.CRAFTING_TABLE:
+      case BT.REPAIR_TABLE:
+      case BT.CHEST:
+      case BT.FURNACE:
+        return 'stone';
+      case BT.WOOD:
+      case BT.PLANK:
+      case BT.JUNGLE_WOOD:
+      case BT.ACACIA_WOOD:
+      case BT.CHERRY_WOOD:
+        return 'wood';
+      case BT.SAND:
+      case BT.SANDSTONE:
+        return 'sand';
+      case BT.SNOW:
+      case BT.ICE:
+        return 'snow';
+      default:
+        return 'soft'; // grass, dirt, leaves 等
     }
   }
 }

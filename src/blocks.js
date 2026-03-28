@@ -258,5 +258,3 @@ export const BLOCK_DROP_OVERRIDES = {
   // 金鉱石はかまどで精錬が必要（鉱石自体をドロップ）
 };
 
-// テクスチャ生成関数は BlockTextureGenerator.js に分離
-export { generateTextures, generateBreakOverlayTextures, generateBlockIcon } from './BlockTextureGenerator.js';

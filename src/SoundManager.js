@@ -613,4 +613,37 @@ export class SoundManager {
       }, i * 80);
     });
   }
+
+  // ---- 足音 ----
+
+  playFootstep(surface = 'soft') {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    // ランダムなピッチバリエーション（単調にならないよう）
+    const p = 0.88 + Math.random() * 0.24;
+    switch (surface) {
+      case 'stone':
+        // 石・丸石: 硬くコツコツした音
+        this._playNoise({ duration: 0.03, volume: 0.038, filterFreq: 1400 + Math.random() * 400, filterQ: 3.5 });
+        this._playSweep({ from: 130 * p, to: 85 * p, duration: 0.05, type: 'square', volume: 0.030 });
+        break;
+      case 'wood':
+        // 木材・板材: 中空の木音
+        this._playSweep({ from: 210 * p, to: 140 * p, duration: 0.07, type: 'triangle', volume: 0.042 });
+        this._playNoise({ duration: 0.025, volume: 0.020, filterFreq: 750, filterQ: 2.0 });
+        break;
+      case 'sand':
+        // 砂・砂岩: ざらりとした摩擦音
+        this._playNoise({ duration: 0.07, volume: 0.038, filterFreq: 450 + Math.random() * 180, filterQ: 0.65 });
+        break;
+      case 'snow':
+        // 雪・氷: 細かく軋むクランチ音
+        this._playNoise({ duration: 0.04, volume: 0.032, filterFreq: 2800 + Math.random() * 600, filterQ: 4.5 });
+        this._playSweep({ from: 320 * p, to: 210 * p, duration: 0.04, type: 'sine', volume: 0.020 });
+        break;
+      default: // 'soft' — 草・土・葉
+        this._playNoise({ duration: 0.055, volume: 0.032, filterFreq: 280 + Math.random() * 130, filterQ: 0.75 });
+        this._playSweep({ from: 105 * p, to: 68 * p, duration: 0.06, type: 'triangle', volume: 0.026 });
+        break;
+    }
+  }
 }
